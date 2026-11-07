@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +11,7 @@ import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/search", label: "Search", icon: Search },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
