@@ -77,7 +77,21 @@ function OstrifyDirectory({ me, invite, pending, friendKeys }: { me: string; inv
 }
 
 function DirectoryResult({ person, invite, pending, isFriend }: { person: DirectoryPerson; invite: (pubkey: string) => void; pending: boolean; isFriend: boolean }) {
-  return <div className="flex items-center gap-3 rounded-xl bg-secondary/50 p-3 min-w-0"><div className="size-12 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center">{person.picture ? <img src={person.picture} alt="" loading="lazy" className="size-full object-cover" /> : <Users className="size-5 text-muted-foreground" />}</div><span className="min-w-0 flex-1 font-semibold truncate">{person.name}</span><Button size="sm" variant="outline" disabled={pending || isFriend} onClick={() => invite(person.pubkey)}>{isFriend ? 'Friends' : 'Invite'}</Button></div>;
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-secondary/50 p-3 min-w-0">
+      <Link
+        to={`/friends/${nip19.npubEncode(person.pubkey)}`}
+        aria-label={`View ${person.name}'s Ostrify profile`}
+        className="group flex flex-1 min-w-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        <div className="size-12 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center">
+          {person.picture ? <img src={person.picture} alt="" loading="lazy" className="size-full object-cover" /> : <Users className="size-5 text-muted-foreground" />}
+        </div>
+        <span className="min-w-0 font-semibold truncate group-hover:underline">{person.name}</span>
+      </Link>
+      <Button size="sm" variant="outline" disabled={pending || isFriend} onClick={() => invite(person.pubkey)}>{isFriend ? 'Friends' : 'Invite'}</Button>
+    </div>
+  );
 }
 
 function FriendsHome() {
