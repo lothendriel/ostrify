@@ -1,6 +1,6 @@
-# Nostr Tunes
+# Ostrify
 
-Nostr Tunes is a Spotify-style player for audio media published on Nostr. It does
+Ostrify is a Spotify-style player for audio media published on Nostr. It does
 not define any new event kinds — it aggregates and reuses existing NIPs.
 
 ## Event kinds consumed

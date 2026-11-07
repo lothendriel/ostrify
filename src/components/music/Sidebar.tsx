@@ -28,7 +28,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <div className="size-8 rounded-md bg-primary flex items-center justify-center">
           <Music className="size-5 text-primary-foreground" />
         </div>
-        <span className="font-bold text-lg tracking-tight">Nostr Tunes</span>
+        <span className="font-bold text-lg tracking-tight">Ostrify</span>
       </div>
 
       {/* Main nav */}

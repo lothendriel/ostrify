@@ -9,7 +9,7 @@ import { TrackList } from "@/components/music/TrackList";
 import { LoginArea } from "@/components/auth/LoginArea";
 
 const LikedSongs = () => {
-  useSeoMeta({ title: "Liked Songs — Nostr Tunes" });
+  useSeoMeta({ title: "Liked Songs — Ostrify" });
   const { user } = useCurrentUser();
   const { data: playlist } = usePlaylist(LIKED_SONGS_ID);
   const { data: tracks = [], isLoading } = useTracksByIds(playlist?.trackIds);

@@ -34,7 +34,7 @@ const PlaylistPage = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  useSeoMeta({ title: `${playlist?.title ?? "Playlist"} — Nostr Tunes` });
+  useSeoMeta({ title: `${playlist?.title ?? "Playlist"} — Ostrify` });
 
   const handleRemove = (track: Track) => {
     if (!playlist) return;

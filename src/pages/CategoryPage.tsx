@@ -12,7 +12,7 @@ const CategoryPage = () => {
   const category = CATEGORIES.find((c) => c.id === id);
   const { data: allTracks = [], isLoading } = useTracks({ limit: 200 });
 
-  useSeoMeta({ title: `${category?.label ?? "Category"} — Nostr Tunes` });
+  useSeoMeta({ title: `${category?.label ?? "Category"} — Ostrify` });
 
   const tracks = useMemo(
     () => (id ? tracksInCategory(allTracks, id) : []),

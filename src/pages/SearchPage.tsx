@@ -10,7 +10,7 @@ import { TrackList } from "@/components/music/TrackList";
 import type { Track } from "@/lib/music";
 
 const SearchPage = () => {
-  useSeoMeta({ title: "Search — Nostr Tunes" });
+  useSeoMeta({ title: "Search — Ostrify" });
   const [query, setQuery] = useState("");
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 200 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(60);

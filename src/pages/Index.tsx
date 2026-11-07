@@ -8,7 +8,7 @@ import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 
 const Index = () => {
   useSeoMeta({
-    title: "Nostr Tunes — Music & Podcasts on Nostr",
+    title: "Ostrify — Music & Podcasts on Nostr",
     description: "A Spotify-style player for music and podcasts published on the Nostr network.",
   });
 
