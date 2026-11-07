@@ -4,6 +4,7 @@ import { Mic } from "lucide-react";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
+import { NostrCollections } from "@/components/music/NostrCollections";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Track } from "@/lib/music";
 
@@ -54,6 +55,8 @@ const PodcastsPage = () => {
         </div>
       ) : (
         <>
+          <NostrCollections tracks={episodes} podcast />
+
           {/* Latest episodes */}
           <section className="space-y-3">
             <h2 className="text-2xl font-bold tracking-tight">Latest episodes</h2>
