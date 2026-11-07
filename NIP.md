@@ -48,7 +48,7 @@ Podcast episodes (kind `54`) use the NIP-F4 `audio` tag: `["audio", <url>, <mime
 ### Playlists & Liked Songs — NIP-51 bookmark sets (kind `30003`)
 
 Playlists are addressable bookmark sets authored by the logged-in user. Tracks are
-referenced by their event id using `e` tags, preserving insertion order.
+referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73 `i` URL tag, `https://wavlake.com/track/<uuid>`. Both types preserve insertion order; other clients may not understand these extensions.
 
 ```json
 {
@@ -73,9 +73,10 @@ referenced by their event id using `e` tags, preserving insertion order.
 
 ### Followed Artists — NIP-51 follow set (kind `30000`)
 
-Following an artist stores their pubkey as a `p` tag in a reserved follow set with
-`d` tag `ostrify-artists`. The list is replaceable and read filtered by the user's
-`authors` pubkey.
+Following a Nostr artist stores their pubkey as a `p` tag in the reserved follow set
+with `d` tag `ostrify-artists`. Wavlake artists use an `i` URL tag of the form
+`https://wavlake.com/artist/<uuid>`, an Ostrify extension. These lists are public.
+The list is replaceable and read filtered by the user's `authors` pubkey.
 
 ```json
 {
@@ -99,7 +100,7 @@ coordinate `30003:<pubkey>:<d>` and the latest event id.
 
 - **Wavlake catalog.** Ostrify offers browser-based search and paginated browsing
   using Wavlake's public catalog API. Catalog tracks are not Nostr events and
-  are not currently saved to Nostr playlists. The Nostr feed separately queries
+  are saved in Nostr playlists using external URL references. The Nostr feed separately queries
   Wavlake's public profile, without assuming that it publishes the full catalog.
 - **Podcasts.** Because genuine NIP-F4 (kind `54`) episodes are still rare, the
   Podcasts view also includes kind `1`/`1063` audio tagged with podcast-related

@@ -12,7 +12,8 @@ const LikedSongs = () => {
   useSeoMeta({ title: "Liked Songs — Ostrify" });
   const { user } = useCurrentUser();
   const { data: playlist } = usePlaylist(LIKED_SONGS_ID);
-  const { data: tracks = [], isLoading } = useTracksByIds(playlist?.trackIds);
+  const { data, isLoading } = useTracksByIds(playlist?.trackIds);
+  const tracks = data?.tracks ?? [];
 
   if (!user) {
     return (
@@ -20,7 +21,7 @@ const LikedSongs = () => {
         <Heart className="size-12 text-primary" />
         <h1 className="text-2xl font-bold">Your Liked Songs live here</h1>
         <p className="text-muted-foreground max-w-sm">
-          Log in with Nostr to like tracks and have them follow you across every client.
+          Log in with Nostr to save tracks to your public library across devices.
         </p>
         <LoginArea className="max-w-60" />
       </div>
@@ -38,6 +39,7 @@ const LikedSongs = () => {
         tracks={tracks}
       />
       <div className="px-3 sm:px-6">
+        {!!data?.unavailable && <p className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your library.</p>}
         <TrackList
           tracks={tracks}
           isLoading={isLoading}

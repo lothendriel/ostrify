@@ -4,6 +4,25 @@ import { sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function wavlakeTrackUrl(trackId: string): string | undefined {
+  const match = /^wavlake:([0-9a-f-]+)$/i.exec(trackId);
+  return match && UUID.test(match[1]) ? `https://wavlake.com/track/${match[1].toLowerCase()}` : undefined;
+}
+
+export function wavlakeTrackId(url: string): string | undefined {
+  const match = /^https:\/\/wavlake\.com\/track\/([0-9a-f-]+)$/i.exec(url);
+  return match && UUID.test(match[1]) ? `wavlake:${match[1].toLowerCase()}` : undefined;
+}
+
+export function wavlakeArtistUrl(artistId: string): string | undefined {
+  return UUID.test(artistId) ? `https://wavlake.com/artist/${artistId.toLowerCase()}` : undefined;
+}
+
+export function wavlakeArtistId(url: string): string | undefined {
+  const match = /^https:\/\/wavlake\.com\/artist\/([0-9a-f-]+)$/i.exec(url);
+  return match && UUID.test(match[1]) ? match[1].toLowerCase() : undefined;
+}
 const API = 'https://wavlake.com/api/v1/content/';
 
 type RecordValue = Record<string, unknown>;
@@ -27,6 +46,11 @@ async function fetchApi(path: string, params: Record<string, string>, signal: Ab
   }
   if (!response.ok) throw new Error(`Wavlake returned ${response.status}${response.status === 429 ? ' (rate limit)' : ''}`);
   return response.json() as Promise<unknown>;
+}
+
+export async function fetchWavlakeTrack(trackId: string, signal: AbortSignal): Promise<Track | null> {
+  if (!UUID.test(trackId)) return null;
+  return parseTrack(await fetchApi(`track/${trackId}`, {}, signal));
 }
 
 function parseTrack(value: unknown): Track | null {

@@ -19,8 +19,8 @@ export function FollowButton({ pubkey, className }: { pubkey: string; className?
     toggleFollow.mutate(
       { pubkey, follow: !following },
       {
-        onSuccess: () =>
-          toast({ title: following ? "Unfollowed" : "Following artist" }),
+        onSuccess: () => toast({ title: following ? "Unfollowed" : "Following artist" }),
+        onError: () => toast({ title: 'Could not update followed artists', description: 'Check your relay connections and try again.', variant: 'destructive' }),
       },
     );
   };

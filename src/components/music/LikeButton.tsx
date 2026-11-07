@@ -23,7 +23,7 @@ export function LikeButton({ trackId, className, size = 18 }: LikeButtonProps) {
       toast({ title: "Log in to like tracks", variant: "destructive" });
       return;
     }
-    toggleLike.mutate({ trackId, liked: !liked });
+    toggleLike.mutate({ trackId, liked: !liked }, { onError: () => toast({ title: 'Could not save your like', description: 'Please check your relay connections and try again.', variant: 'destructive' }) });
   };
 
   return (

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { useCurrentUser } from "./useCurrentUser";
 import { useNostrPublish } from "./useNostrPublish";
+import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 
 export const LIKED_SONGS_ID = "nostr-tunes-liked";
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
@@ -26,7 +27,11 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
     title: event.tags.find(([n]) => n === "title")?.[1] || (d === LIKED_SONGS_ID ? "Liked Songs" : "Untitled Playlist"),
     description: event.tags.find(([n]) => n === "description")?.[1],
     image: event.tags.find(([n]) => n === "image")?.[1],
-    trackIds: event.tags.filter(([n]) => n === "e").map((t) => t[1]).filter(Boolean),
+    trackIds: event.tags.flatMap(([name, value]) => {
+      if (name === "e" && value) return [value];
+      const external = name === "i" && value ? wavlakeTrackId(value) : undefined;
+      return external ? [external] : [];
+    }),
     event,
     isLiked: d === LIKED_SONGS_ID,
   };
@@ -73,11 +78,21 @@ export function usePlaylist(id: string | undefined) {
 function buildPlaylistEvent(
   playlist: Partial<Playlist> & { id: string; title: string; trackIds: string[] },
 ): { kind: number; content: string; tags: string[][] } {
-  const tags: string[][] = [["d", playlist.id], ["title", playlist.title]];
+  const existing = playlist.event;
+  const tags: string[][] = existing ? existing.tags.filter(([name, value]) =>
+    !['d', 'title', 'description', 'image'].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && !!wavlakeTrackId(value))
+  ).map((tag) => [...tag]) : [];
+  tags.unshift(["d", playlist.id], ["title", playlist.title]);
   if (playlist.description) tags.push(["description", playlist.description]);
   if (playlist.image) tags.push(["image", playlist.image]);
-  for (const id of playlist.trackIds) tags.push(["e", id]);
-  return { kind: PLAYLIST_KIND, content: "", tags };
+  for (const id of playlist.trackIds) {
+    const url = wavlakeTrackUrl(id);
+    const previous = existing?.tags.find(([name, value]) => url ? name === 'i' && value === url : name === 'e' && value === id);
+    if (previous) tags.push([...previous]);
+    else if (url) tags.push(['i', url]);
+    else if (/^[0-9a-f]{64}$/i.test(id)) tags.push(['e', id]);
+  }
+  return { kind: PLAYLIST_KIND, content: existing?.content ?? "", tags };
 }
 
 /** Mutations for creating / updating playlists and toggling likes. */
@@ -89,6 +104,14 @@ export function usePlaylistActions() {
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["playlists", user?.pubkey ?? ""] });
+
+  const publishPlaylist = async (template: { kind: number; content: string; tags: string[][] }) => {
+    const event = await publish(template);
+    const playlist = parsePlaylist(event);
+    if (playlist && user) queryClient.setQueryData<Playlist[]>(['playlists', user.pubkey], (current) => [
+      playlist, ...(current ?? []).filter((item) => item.id !== playlist.id),
+    ]);
+  };
 
   async function fetchExisting(id: string): Promise<Playlist | undefined> {
     if (!user) return undefined;
@@ -106,7 +129,7 @@ export function usePlaylistActions() {
   const createPlaylist = useMutation({
     mutationFn: async (input: { title: string; description?: string; image?: string; id?: string }) => {
       const id = input.id ?? `playlist-${crypto.randomUUID().slice(0, 8)}`;
-      await publish(
+      await publishPlaylist(
         buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds: [] }),
       );
       return id;
@@ -117,8 +140,9 @@ export function usePlaylistActions() {
   const updatePlaylist = useMutation({
     mutationFn: async (input: { id: string; title: string; description?: string; image?: string }) => {
       const existing = await fetchExisting(input.id);
-      await publish(
+      await publishPlaylist(
         buildPlaylistEvent({
+          event: existing?.event,
           id: input.id,
           title: input.title,
           description: input.description,
@@ -135,8 +159,9 @@ export function usePlaylistActions() {
       const existing = await fetchExisting(input.playlistId);
       const trackIds = existing?.trackIds ?? [];
       if (trackIds.includes(input.trackId)) return;
-      await publish(
+      await publishPlaylist(
         buildPlaylistEvent({
+          event: existing?.event,
           id: input.playlistId,
           title: existing?.title ?? "Untitled Playlist",
           description: existing?.description,
@@ -152,8 +177,9 @@ export function usePlaylistActions() {
     mutationFn: async (input: { playlistId: string; trackId: string }) => {
       const existing = await fetchExisting(input.playlistId);
       if (!existing) return;
-      await publish(
+      await publishPlaylist(
         buildPlaylistEvent({
+          event: existing?.event,
           id: input.playlistId,
           title: existing.title,
           description: existing.description,
@@ -174,8 +200,9 @@ export function usePlaylistActions() {
       if (input.liked && !has) next = [...trackIds, input.trackId];
       else if (!input.liked && has) next = trackIds.filter((t) => t !== input.trackId);
       else return;
-      await publish(
+      await publishPlaylist(
         buildPlaylistEvent({
+          event: existing?.event,
           id: LIKED_SONGS_ID,
           title: "Liked Songs",
           description: existing?.description ?? "Your favorite tracks on Nostr",

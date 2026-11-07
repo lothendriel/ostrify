@@ -73,9 +73,9 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
 
       {/* Actions + duration */}
       <div className="flex items-center gap-1 justify-end">
-        <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex items-center">
-          {track.event && <LikeButton trackId={track.id} />}
-          {track.event && <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />}
+        <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+          <LikeButton trackId={track.id} />
+          <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />
         </div>
         <span className="text-sm text-muted-foreground tabular-nums w-12 text-right">
           {formatDuration(track.duration)}

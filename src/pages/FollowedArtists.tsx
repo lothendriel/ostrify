@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
+import { useWavlakeRelease } from "@/hooks/useWavlake";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { LoginArea } from "@/components/auth/LoginArea";
 
@@ -38,6 +39,15 @@ function ArtistTile({ pubkey }: { pubkey: string }) {
   );
 }
 
+function WavlakeArtistTile({ artistId }: { artistId: string }) {
+  const { data, isLoading, isError } = useWavlakeRelease('artist', artistId);
+  const name = data?.title ?? (isLoading ? 'Loading artist…' : 'Wavlake artist unavailable');
+  return <Link to={`/wavlake/artist/${artistId}`} className="group flex flex-col items-center text-center p-4 rounded-lg bg-card hover:bg-accent/10 transition-colors">
+    <Avatar className="size-28 mb-3 shadow-lg"><AvatarImage src={data?.image} alt="" /><AvatarFallback className="text-2xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+    <div className="font-semibold truncate w-full">{name}</div><div className="text-xs text-muted-foreground mt-0.5">{isError ? 'Unavailable · Wavlake' : 'Wavlake artist'}</div>
+  </Link>;
+}
+
 const FollowedArtists = () => {
   useSeoMeta({ title: "Followed Artists — Ostrify" });
   const { user } = useCurrentUser();
@@ -49,8 +59,7 @@ const FollowedArtists = () => {
         <Users className="size-12 text-primary" />
         <h1 className="text-2xl font-bold">Follow your favorite artists</h1>
         <p className="text-muted-foreground max-w-sm">
-          Log in with Nostr, then tap Follow on any artist to keep them here — synced across
-          every Nostr client you use.
+          Log in with Nostr, then tap Follow on any artist to save them in your public Ostrify library.
         </p>
         <LoginArea className="max-w-60" />
       </div>
@@ -78,8 +87,10 @@ const FollowedArtists = () => {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
-          {artists.map((pubkey) => (
-            <ArtistTile key={pubkey} pubkey={pubkey} />
+          {artists.map((ref) => ref.startsWith('wavlake:') ? (
+            <WavlakeArtistTile key={ref} artistId={ref.slice(8)} />
+          ) : (
+            <ArtistTile key={ref} pubkey={ref} />
           ))}
         </div>
       )}

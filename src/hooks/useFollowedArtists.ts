@@ -2,6 +2,16 @@ import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "./useCurrentUser";
 import { useNostrPublish } from "./useNostrPublish";
+import type { NostrEvent } from "@nostrify/nostrify";
+import { wavlakeArtistId, wavlakeArtistUrl } from "./useWavlake";
+
+function artistRefs(event: NostrEvent | undefined): string[] {
+  return event?.tags.flatMap(([name, value]) => {
+    if (name === 'p' && value && /^[0-9a-f]{64}$/i.test(value)) return [value];
+    const artistId = name === 'i' && value ? wavlakeArtistId(value) : undefined;
+    return artistId ? [`wavlake:${artistId}`] : [];
+  }) ?? [];
+}
 
 /** d-tag for the Ostrify "followed artists" follow set (NIP-51 kind 30000). */
 export const FOLLOWED_ARTISTS_ID = "ostrify-artists";
@@ -28,12 +38,8 @@ export function useFollowedArtists() {
         ],
         { signal },
       );
-      const event = events[0];
-      if (!event) return [];
-      return event.tags
-        .filter(([n]) => n === "p")
-        .map(([, pubkey]) => pubkey)
-        .filter(Boolean);
+      const event = events.sort((a, b) => b.created_at - a.created_at)[0];
+      return artistRefs(event);
     },
     enabled: !!user,
   });
@@ -56,38 +62,41 @@ export function useFollowArtistActions() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["followed-artists", user?.pubkey ?? ""] });
 
-  async function fetchCurrent(): Promise<string[]> {
-    if (!user) return [];
-    const cached = queryClient.getQueryData<string[]>(["followed-artists", user.pubkey]);
-    if (cached) return cached;
+  async function fetchCurrent(): Promise<NostrEvent | undefined> {
+    if (!user) throw new Error('Log in to follow artists');
     const events = await nostr.query(
-      [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 1 }],
-      { signal: AbortSignal.timeout(4000) },
+      [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 10 }],
+      { signal: AbortSignal.timeout(5000) },
     );
-    return events[0]?.tags.filter(([n]) => n === "p").map(([, pk]) => pk).filter(Boolean) ?? [];
+    return events.sort((a, b) => b.created_at - a.created_at)[0];
   }
 
-  async function save(pubkeys: string[]) {
-    await publish({
-      kind: FOLLOW_SET_KIND,
-      content: "",
-      tags: [
-        ["d", FOLLOWED_ARTISTS_ID],
-        ["title", "Followed Artists"],
-        ...pubkeys.map((pk) => ["p", pk]),
-      ],
-    });
+  async function save(pubkeys: string[], existing?: NostrEvent) {
+    const tags = existing ? existing.tags.filter(([name, value]) =>
+      name !== 'd' && name !== 'title' && !(name === 'p' && value && /^[0-9a-f]{64}$/i.test(value)) && !(name === 'i' && value && wavlakeArtistId(value))
+    ).map(tag => [...tag]) : [];
+    tags.unshift(['d', FOLLOWED_ARTISTS_ID], ['title', 'Followed Artists']);
+    for (const ref of pubkeys) {
+      const url = ref.startsWith('wavlake:') ? wavlakeArtistUrl(ref.slice(8)) : undefined;
+      const previous = existing?.tags.find(([name, value]) => url ? name === 'i' && value === url : name === 'p' && value === ref);
+      if (previous) tags.push([...previous]);
+      else if (url) tags.push(['i', url]);
+      else if (/^[0-9a-f]{64}$/i.test(ref)) tags.push(['p', ref]);
+    }
+    const event = await publish({ kind: FOLLOW_SET_KIND, content: existing?.content ?? '', tags });
+    if (user) queryClient.setQueryData(['followed-artists', user.pubkey], artistRefs(event));
   }
 
   const toggleFollow = useMutation({
     mutationFn: async (input: { pubkey: string; follow: boolean }) => {
-      const current = await fetchCurrent();
+      const existing = await fetchCurrent();
+      const current = artistRefs(existing);
       const has = current.includes(input.pubkey);
       let next = current;
       if (input.follow && !has) next = [...current, input.pubkey];
       else if (!input.follow && has) next = current.filter((pk) => pk !== input.pubkey);
       else return;
-      await save(next);
+      await save(next, existing);
     },
     onSuccess: invalidate,
   });

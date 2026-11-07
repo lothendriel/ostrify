@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
+import { FollowButton } from '@/components/music/FollowButton';
 import { useWavlakeCatalog, useWavlakeRelease, useWavlakeSearch, type CatalogItem } from '@/hooks/useWavlake';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
@@ -46,7 +47,7 @@ function Discovery() {
   return <div className="p-4 sm:p-6 space-y-6">
     <div><p className="text-sm font-semibold text-primary uppercase tracking-wider">Explore music</p><h1 className="text-4xl font-bold tracking-tight mt-2">Wavlake catalog</h1><p className="text-muted-foreground mt-2">Browse independent music directly from Wavlake, alongside your Nostr discoveries.</p></div>
     <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" /><Input className="pl-11 h-12 rounded-full bg-secondary" aria-label="Search Wavlake" placeholder="Search artists, albums, and tracks" value={query} onChange={e => setQuery(e.target.value)} /></div>
-    <p className="text-sm text-muted-foreground">Wavlake catalog tracks can be played here. Nostr likes and playlists are currently available for Nostr tracks only.</p>
+    <p className="text-sm text-muted-foreground">Like tracks and follow artists in Ostrify. Your library is stored publicly on Nostr.</p>
     {query.trim().length >= 2 ? <section className="space-y-4"><h2 className="text-2xl font-bold">Search results</h2>
       {search.isFetching || debounced !== query.trim() ? <Skeleton className="h-24 w-full" /> : search.isError ? <p role="alert" className="text-destructive">Wavlake search is unavailable. <button className="underline" onClick={() => search.refetch()}>Try again</button></p> : <><CatalogLinks items={links} /><TrackList tracks={tracks} emptyMessage={links.length ? 'No playable tracks in these results.' : 'No matching Wavlake results.'} /></>}
     </section> : <CatalogTracks />}
@@ -60,6 +61,7 @@ function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }
   const { title, artist, image, albums, tracks } = release.data;
   return <div className="p-4 sm:p-6 space-y-8"><Link to="/wavlake" className="text-sm text-muted-foreground hover:underline">← Wavlake catalog</Link>
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
+    {type === 'artist' && itemId && <div className="space-y-2"><FollowButton pubkey={`wavlake:${itemId}`} /><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
     {albums.length > 0 && <section className="space-y-4"><h2 className="text-2xl font-bold">Albums</h2><CatalogLinks items={albums} /></section>}
     {type === 'album' ? <section className="space-y-4"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={tracks} /></section> : <CatalogTracks artistId={itemId} />}
   </div>;
