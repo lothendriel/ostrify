@@ -4,10 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { RelayListManager } from "@/components/RelayListManager";
 import { useTheme } from "@/hooks/useTheme";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useListeningSharing } from "@/hooks/useListeningSharing";
+import { Switch } from "@/components/ui/switch";
 
 const SettingsPage = () => {
   useSeoMeta({ title: "Settings — Ostrify" });
   const { theme, setTheme } = useTheme();
+  const { user } = useCurrentUser();
+  const sharing = useListeningSharing();
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
@@ -29,6 +34,11 @@ const SettingsPage = () => {
         <CardContent>
           <RelayListManager />
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Listening activity</CardTitle><CardDescription>When enabled, your current track is published publicly on Nostr—not just to friends. Relays may retain or copy it. Off by default; this preference is saved on this device. Pausing or turning it off sends a clearing status.</CardDescription></CardHeader>
+        <CardContent className="flex items-center gap-3"><Switch id="listening-sharing" checked={sharing.enabled} disabled={!user} onCheckedChange={sharing.setEnabled} /><label htmlFor="listening-sharing" className="text-sm font-medium">Share what I’m listening to</label>{!user && <span className="text-sm text-muted-foreground">Log in to enable</span>}</CardContent>
       </Card>
 
       <Card>

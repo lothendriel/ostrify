@@ -91,6 +91,20 @@ The list is replaceable and read filtered by the user's `authors` pubkey.
 }
 ```
 
+### Ostrify friends — NIP-17 private messages
+
+Ostrify friend requests use ordinary NIP-17 kind `14` plaintext messages inside
+NIP-59 gift wraps. An encrypted rumor tag `["ostrify-friends-v1", action, token]`
+marks a request, accept, decline, or remove action. A random 32-character hex token
+links an acceptance to the matching request. Friendships are derived from verified
+sender seals and reciprocal request/accept messages; they are independent of kind 3
+follows. Messages are sent only to the recipient's NIP-17 DM relays, with a separate
+copy to the sender's DM relays. DM relay availability and the latest 100 messages
+limit recovery; the list is not a public NIP-51 list.
+
+Listening status uses NIP-38 kind `30315` with `d=music` and an expiration. It is
+public, opt-in per device, and a cleared status is sent on pause or disable.
+
 ### Playlist deletion — NIP-09 (kind `5`)
 
 Deleting a playlist publishes a deletion request referencing the addressable

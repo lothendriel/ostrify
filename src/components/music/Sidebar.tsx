@@ -14,6 +14,7 @@ const navItems = [
   { to: "/music", label: "Nostr music", icon: Music2 },
   { to: "/podcasts", label: "Podcasts", icon: Mic },
   { to: "/wavlake", label: "Wavlake", icon: Music },
+  { to: "/friends", label: "Friends", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
