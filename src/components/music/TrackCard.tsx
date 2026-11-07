@@ -58,7 +58,7 @@ export function TrackCard({ track, queue }: TrackCardProps) {
       </div>
       <div className="font-semibold truncate">{track.title}</div>
       <div className="text-sm text-muted-foreground truncate mt-0.5">
-        <ArtistLink pubkey={track.pubkey} artistId={track.artistId} fallbackName={track.artist} />
+        <ArtistLink pubkey={track.pubkey} artistId={track.artistId} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
       </div>
     </div>
   );

@@ -7,6 +7,8 @@ import { genUserName } from "@/lib/sanitize";
 interface ArtistLinkProps {
   pubkey: string;
   artistId?: string;
+  /** A name in event metadata can describe someone other than the publisher. */
+  isUnverifiedArtist?: boolean;
   /** Preferred display name (e.g. the track's `artist` tag). */
   fallbackName?: string;
   className?: string;
@@ -15,8 +17,8 @@ interface ArtistLinkProps {
 }
 
 /** A clickable artist name that navigates to the artist's page. */
-export function ArtistLink({ pubkey, artistId, fallbackName, className, stopPropagation = true }: ArtistLinkProps) {
-  const author = useAuthor(pubkey || undefined);
+export function ArtistLink({ pubkey, artistId, fallbackName, isUnverifiedArtist, className, stopPropagation = true }: ArtistLinkProps) {
+  const author = useAuthor(fallbackName || artistId ? undefined : pubkey || undefined);
   const name =
     fallbackName ||
     author.data?.metadata?.name ||
@@ -27,6 +29,14 @@ export function ArtistLink({ pubkey, artistId, fallbackName, className, stopProp
     return <Link to={`/wavlake/artist/${artistId}`} onClick={(e) => { if (stopPropagation) e.stopPropagation(); }} className={cn("hover:underline hover:text-foreground focus-visible:underline", className)}>{name}</Link>;
   }
   if (!pubkey) return <span className={className}>{fallbackName || 'Unknown artist'}</span>;
+  if (isUnverifiedArtist) {
+    try {
+      const publisher = nip19.npubEncode(pubkey);
+      return <span className={className}>{name} <Link to={`/${publisher}`} onClick={(e) => { if (stopPropagation) e.stopPropagation(); }} className="text-xs hover:underline" title="Open the event publisher’s profile">· Publisher</Link></span>;
+    } catch {
+      return <span className={className}>{name}</span>;
+    }
+  }
 
   let npub: string;
   try {

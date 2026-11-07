@@ -35,7 +35,7 @@ export interface Track {
   createdAt: number;
 }
 
-export const AUDIO_EXT_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba|webm)(\?.*)?$/i;
+export const AUDIO_EXT_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba|webm)(?:[?#].*)?$/i;
 
 function tagValue(event: NostrEvent, name: string): string | undefined {
   return event.tags.find(([n]) => n === name)?.[1];
@@ -169,7 +169,7 @@ export function parseNoteTrack(event: NostrEvent): Track | null {
  */
 export function parsePodcastEpisodeTrack(event: NostrEvent): Track | null {
   // `audio` tag: ["audio", url, optional mime]
-  const audioTag = event.tags.find(([n]) => n === "audio");
+  const audioTag = event.tags.find(([n, value]) => n === "audio" && !!sanitizeUrl(value));
   const url = sanitizeUrl(audioTag?.[1]);
   if (!url) return null;
 
@@ -207,14 +207,12 @@ export function parsePodcastEpisodeTrack(event: NostrEvent): Track | null {
  * actually find a plausible audio URL.
  */
 export function parseAudioTrackEvent(event: NostrEvent): Track | null {
-  // 1. Look for a direct audio URL across the many tag conventions.
-  let url: string | undefined =
-    tagValue(event, "url") ||
-    tagValue(event, "stream_url") ||
-    tagValue(event, "enclosure") ||
-    tagValue(event, "media"); // zapstr: ["media", <url>, "http"]
-
+  // Collect all candidates: an image or broken first URL must not mask later audio.
   let mime: string | undefined = tagValue(event, "m") || tagValue(event, "mime") || tagValue(event, "type");
+  const candidates: { url?: string; mime?: string }[] = event.tags
+    .filter(([name]) => ['url', 'stream_url', 'enclosure', 'media', 'fallback'].includes(name))
+    .map((tag) => ({ url: tag[1], mime: tag[2]?.startsWith('audio/') ? tag[2] : mime }));
+  let url: string | undefined;
   let image = tagValue(event, "image") || tagValue(event, "cover") || tagValue(event, "thumb");
   let title = tagValue(event, "title") || tagValue(event, "subject") || tagValue(event, "name");
   let artist = tagValue(event, "artist") || tagValue(event, "creator") || tagValue(event, "author");
@@ -225,10 +223,8 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
   for (const tag of event.tags) {
     if (tag[0] !== "imeta") continue;
     const meta = parseImeta(tag);
-    if (!url && meta.url) url = meta.url;
-    if (meta.url === url) mime = mime || meta.mime;
+    if (meta.url) candidates.push({ url: meta.url, mime: meta.mime });
     image = image || meta.image;
-    if (url && mime) break;
   }
 
   // 3. Some kinds (e.g. legacy 32123, Wavlake NOM) put JSON metadata in content.
@@ -242,7 +238,8 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
         }
         return undefined;
       };
-      url = url || pick("enclosure", "url", "stream_url", "mediaUrl", "media");
+      const jsonUrl = pick("enclosure", "url", "stream_url", "mediaUrl", "media");
+      if (jsonUrl) candidates.push({ url: jsonUrl, mime: pick("type", "mimeType") });
       title = title || pick("title", "name");
       artist = artist || pick("creator", "artist", "author");
       album = album || pick("album", "release", "albumTitle");
@@ -254,10 +251,15 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     }
   }
 
+  const candidate = candidates.find((item) => {
+    const safe = sanitizeUrl(item.url);
+    return !!safe && isAudio(safe, item.mime || mime);
+  });
+  url = candidate?.url;
+  mime = candidate?.mime || mime;
   const safeUrl = sanitizeUrl(url);
-  // Require a plausible audio URL — this filters out the non-audio noise on
-  // shared kinds like 31337.
-  if (!safeUrl || !isAudio(safeUrl, mime)) return null;
+  // Shared kinds can contain non-audio data, so require audio evidence.
+  if (!safeUrl) return null;
 
   return {
     id: event.id,

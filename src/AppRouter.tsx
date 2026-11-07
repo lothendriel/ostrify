@@ -11,6 +11,7 @@ import LikedSongs from "./pages/LikedSongs";
 import SettingsPage from "./pages/SettingsPage";
 import PodcastsPage from "./pages/PodcastsPage";
 import WavlakePage from "./pages/WavlakePage";
+import MusicDiscovery from "./pages/MusicDiscovery";
 import FollowedArtists from "./pages/FollowedArtists";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
@@ -28,6 +29,7 @@ export function AppRouter() {
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/liked" element={<LikedSongs />} />
             <Route path="/podcasts" element={<PodcastsPage />} />
+            <Route path="/music" element={<MusicDiscovery />} />
             <Route path="/wavlake" element={<WavlakePage />} />
             <Route path="/wavlake/:type/:id" element={<WavlakePage />} />
             <Route path="/artists" element={<FollowedArtists />} />
