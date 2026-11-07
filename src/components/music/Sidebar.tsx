@@ -23,7 +23,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const regular = (playlists ?? []).filter((p) => !p.isLiked);
 
   return (
-    <nav className="flex flex-col h-full gap-2 w-64" aria-label="Primary">
+    <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
       {/* Logo */}
       <div className="flex items-center gap-2 px-5 pt-5 pb-2">
         <div className="size-8 rounded-md bg-primary flex items-center justify-center">
@@ -73,7 +73,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           )}
         </div>
 
-        <ScrollArea className="flex-1 px-2 pb-2">
+        <ScrollArea type="always" className="flex-1 min-h-0 px-2 pb-2">
           {!user ? (
             <p className="px-3 py-4 text-sm text-muted-foreground">
               Log in to create playlists and like songs.

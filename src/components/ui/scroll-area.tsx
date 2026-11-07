@@ -6,11 +6,13 @@ import { cn } from "@/lib/utils"
 function ScrollArea({
   className,
   children,
+  type,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
+      type={type}
       className={cn("relative", className)}
       {...props}
     >
@@ -47,7 +49,7 @@ function ScrollBar({
     >
       <ScrollAreaPrimitive.ScrollAreaThumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border"
+        className="relative flex-1 rounded-full bg-muted-foreground/40 hover:bg-muted-foreground/70 transition-colors"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   )

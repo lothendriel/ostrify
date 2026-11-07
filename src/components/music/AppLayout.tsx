@@ -14,7 +14,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
       <div className="flex-1 flex min-h-0 gap-0 md:gap-2 md:p-2">
         {/* Desktop sidebar */}
-        <aside className="hidden md:flex shrink-0">
+        <aside className="hidden md:flex shrink-0 h-full min-h-0">
           <Sidebar />
         </aside>
 
@@ -43,7 +43,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Scrollable page content */}
-          <ScrollArea className="flex-1">
+          <ScrollArea type="always" className="flex-1 min-h-0">
             <div className="pb-6">{children}</div>
           </ScrollArea>
         </div>
