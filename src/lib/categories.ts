@@ -2,22 +2,93 @@ import type { Track } from "./music";
 
 /** A curated set of genre/mood categories to surface on Home & Search. */
 export const CATEGORIES: { id: string; label: string; match: string[] }[] = [
-  { id: "rock", label: "Rock", match: ["rock", "metal", "punk", "grunge"] },
-  { id: "electronic", label: "Electronic", match: ["electronic", "edm", "techno", "house", "synth", "dnb"] },
-  { id: "hiphop", label: "Hip-Hop", match: ["hiphop", "hip-hop", "rap", "trap"] },
-  { id: "jazz", label: "Jazz & Blues", match: ["jazz", "blues", "soul", "funk"] },
-  { id: "classical", label: "Classical", match: ["classical", "orchestra", "piano", "instrumental"] },
-  { id: "folk", label: "Folk & Acoustic", match: ["folk", "acoustic", "country", "bluegrass"] },
-  { id: "pop", label: "Pop", match: ["pop", "indie", "dance"] },
-  { id: "ambient", label: "Ambient & Chill", match: ["ambient", "chill", "lofi", "lo-fi", "relax"] },
-  { id: "bitcoin", label: "Bitcoin & Nostr", match: ["bitcoin", "nostr", "value4value", "v4v"] },
+  {
+    id: "rock",
+    label: "Rock",
+    match: ["rock", "metal", "punk", "grunge", "guitar", "band", "alternative", "hardcore"],
+  },
+  {
+    id: "electronic",
+    label: "Electronic",
+    match: ["electronic", "electro", "edm", "techno", "house", "synth", "dnb", "trance", "dubstep", "beat", "beats", "remix"],
+  },
+  {
+    id: "hiphop",
+    label: "Hip-Hop",
+    match: ["hiphop", "hip-hop", "hip hop", "rap", "rapper", "trap", "freestyle", "bars"],
+  },
+  {
+    id: "jazz",
+    label: "Jazz & Blues",
+    match: ["jazz", "blues", "soul", "funk", "saxophone", "swing"],
+  },
+  {
+    id: "classical",
+    label: "Classical",
+    match: ["classical", "orchestra", "orchestral", "piano", "violin", "symphony", "cello", "instrumental"],
+  },
+  {
+    id: "folk",
+    label: "Folk & Acoustic",
+    match: ["folk", "acoustic", "country", "bluegrass", "singer-songwriter", "unplugged"],
+  },
+  {
+    id: "pop",
+    label: "Pop",
+    match: ["pop", "indie", "dance", "song", "single", "vocal", "cover"],
+  },
+  {
+    id: "ambient",
+    label: "Ambient & Chill",
+    match: ["ambient", "chill", "chillout", "lofi", "lo-fi", "relax", "meditation", "sleep", "soundscape", "nature"],
+  },
+  {
+    id: "bitcoin",
+    label: "Bitcoin & Nostr",
+    match: ["bitcoin", "btc", "nostr", "value4value", "v4v", "wavlake", "zap", "sats", "satoshi", "freedom"],
+  },
 ];
 
-/** Return the tracks that match any of the category's topic keywords. */
+/** Build searchable text for a track: title + artist + topics + note content. */
+function trackText(track: Track): string {
+  return [track.title, track.artist ?? "", track.topics.join(" "), track.event.content ?? ""]
+    .join(" ")
+    .toLowerCase();
+}
+
+/** True if any keyword appears as a whole word (or hashtag) in the text. */
+function matchesKeywords(text: string, keywords: string[]): boolean {
+  return keywords.some((kw) => {
+    // Escape regex special chars; allow an optional leading # and word boundaries.
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(^|[^a-z0-9])#?${escaped}([^a-z0-9]|$)`, "i");
+    return re.test(text);
+  });
+}
+
+/**
+ * Return the tracks that belong to a category. A track matches when any of the
+ * category's keywords appear in its topic tags, title, artist, or note content.
+ */
 export function tracksInCategory(tracks: Track[], categoryId: string): Track[] {
   const category = CATEGORIES.find((c) => c.id === categoryId);
   if (!category) return [];
-  return tracks.filter((t) => t.topics.some((topic) => category.match.includes(topic)));
+  return tracks.filter((t) => {
+    // Fast path: exact topic-tag match.
+    if (t.topics.some((topic) => category.match.includes(topic))) return true;
+    // Fallback: keyword search across all of the track's text.
+    return matchesKeywords(trackText(t), category.match);
+  });
+}
+
+/** Infer the best-fitting category id for a track, or undefined. */
+export function inferCategory(track: Track): string | undefined {
+  const text = trackText(track);
+  for (const category of CATEGORIES) {
+    if (track.topics.some((topic) => category.match.includes(topic))) return category.id;
+    if (matchesKeywords(text, category.match)) return category.id;
+  }
+  return undefined;
 }
 
 /** Gradient color for a category chip, derived from its id. */

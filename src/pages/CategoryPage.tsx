@@ -1,8 +1,7 @@
-import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { useTracks } from "@/hooks/useTracks";
-import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
+import { useCategoryTracks } from "@/hooks/useCategoryTracks";
+import { CATEGORIES, categoryColor } from "@/lib/categories";
 import { CollectionHeader } from "@/components/music/CollectionHeader";
 import { TrackList } from "@/components/music/TrackList";
 import { Music } from "lucide-react";
@@ -10,14 +9,9 @@ import { Music } from "lucide-react";
 const CategoryPage = () => {
   const { id } = useParams<{ id: string }>();
   const category = CATEGORIES.find((c) => c.id === id);
-  const { data: allTracks = [], isLoading } = useTracks({ limit: 200 });
+  const { data: tracks = [], isLoading } = useCategoryTracks(id);
 
   useSeoMeta({ title: `${category?.label ?? "Category"} — Ostrify` });
-
-  const tracks = useMemo(
-    () => (id ? tracksInCategory(allTracks, id) : []),
-    [allTracks, id],
-  );
 
   if (!category) {
     return (
@@ -38,7 +32,7 @@ const CategoryPage = () => {
         <TrackList
           tracks={tracks}
           isLoading={isLoading}
-          emptyMessage={`No ${category.label} tracks found right now. Artists tag their music with #${category.id} to appear here.`}
+          emptyMessage={`No ${category.label} tracks found right now. We look for the genre in each track's tags, title, and description — check back as more music is published to Nostr.`}
         />
       </div>
     </div>
