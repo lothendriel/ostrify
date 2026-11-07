@@ -91,6 +91,16 @@ The list is replaceable and read filtered by the user's `authors` pubkey.
 }
 ```
 
+### Ostrify directory — NIP-78 application data (kind `30078`)
+
+An optional public listing uses `d=ostrify-directory-v1`, `t=ostrify-directory-v1`
+for relay-level discovery, `status=active` or `status=inactive`, and an `alt` tag.
+An inactive replacement is a withdrawal, not a guarantee of deletion: relays may
+retain or serve older copies. A listing represents only its own event author and
+must not be used to assert another person's participation. Names and avatars come
+from the author's kind 0 profile. Results are limited to listings returned by the
+reader's relays and may be incomplete. No directory event is published by default.
+
 ### Ostrify friends — NIP-17 private messages
 
 Ostrify friend requests use ordinary NIP-17 kind `14` plaintext messages inside

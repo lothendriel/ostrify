@@ -16,6 +16,7 @@ import { useWavlakeRelease } from '@/hooks/useWavlake';
 import { TrackList } from '@/components/music/TrackList';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
+import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
   const { data } = useAuthor(pubkey);
@@ -49,6 +50,21 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
   </div>;
 }
 
+function OstrifyDirectory({ me, invite, pending, friendKeys }: { me: string; invite: (pubkey: string) => void; pending: boolean; friendKeys: string[] }) {
+  const directory = useOstrifyDirectory();
+  const [term, setTerm] = useState('');
+  const people = (directory.data ?? []).filter(person => person.pubkey !== me && person.name.toLocaleLowerCase().includes(term.trim().toLocaleLowerCase()));
+  return <section className="space-y-4">
+    <div><h2 className="text-2xl font-semibold">Find people on Ostrify</h2><p className="text-sm text-muted-foreground mt-1">People who opted into the public directory. Search covers the listings returned by your read relays, so it may be incomplete. <Link to="/settings" className="text-primary underline">Manage your visibility</Link>.</p></div>
+    <Input value={term} onChange={event => setTerm(event.target.value)} placeholder="Search by name" aria-label="Search Ostrify directory by name" maxLength={100} />
+    {!directory.hasReadRelays ? <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">Enable a read relay in Settings to search the directory.</div> : directory.isLoading ? <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : directory.isError ? <div role="alert" className="rounded-lg border border-border p-4 text-sm">Could not load the directory from your relays. <button type="button" className="text-primary underline" onClick={() => void directory.refetch()}>Try again</button></div> : people.length === 0 ? <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">{term.trim() ? 'No matching people in the listings loaded from your relays.' : 'No other discoverable Ostrify users found on your read relays yet.'}</div> : <div className="grid gap-3 sm:grid-cols-2">{people.map(person => <DirectoryResult key={person.pubkey} person={person} invite={invite} pending={pending} isFriend={friendKeys.includes(person.pubkey)} />)}</div>}
+  </section>;
+}
+
+function DirectoryResult({ person, invite, pending, isFriend }: { person: DirectoryPerson; invite: (pubkey: string) => void; pending: boolean; isFriend: boolean }) {
+  return <div className="flex items-center gap-3 rounded-xl bg-secondary/50 p-3 min-w-0"><div className="size-12 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center">{person.picture ? <img src={person.picture} alt="" loading="lazy" className="size-full object-cover" /> : <Users className="size-5 text-muted-foreground" />}</div><span className="min-w-0 flex-1 font-semibold truncate">{person.name}</span><Button size="sm" variant="outline" disabled={pending || isFriend} onClick={() => invite(person.pubkey)}>{isFriend ? 'Friends' : 'Invite'}</Button></div>;
+}
+
 function FriendsHome() {
   const { user } = useCurrentUser();
   const friends = useFriends(); const follows = useNostrFollows();
@@ -68,6 +84,7 @@ function FriendsHome() {
     <section className="space-y-3"><h2 className="text-2xl font-semibold">Invite a friend</h2><p className="text-sm text-muted-foreground">Invitations are encrypted Nostr messages. Both people need NIP-17 DM relays configured in a Nostr messaging client.</p><form onSubmit={submit} className="flex flex-wrap gap-2"><Input value={input} onChange={e => setInput(e.target.value)} placeholder="Paste an npub or nprofile" aria-label="Friend's npub" className="flex-1 min-w-48" /><Button disabled={friends.send.isPending}><UserPlus className="size-4" /> Send invitation</Button></form>
       {follows.data?.length ? <details className="rounded-lg border p-4"><summary className="cursor-pointer font-medium">Choose from your Nostr follows</summary><div className="space-y-2 max-h-80 overflow-y-auto mt-3">{follows.data.map(pk => <Person key={pk} pubkey={pk}><Button size="sm" variant="outline" disabled={friends.send.isPending || list.some(f => f.pubkey === pk)} onClick={() => invite(pk)}>Invite</Button></Person>)}</div></details> : <p className="text-sm text-muted-foreground">{follows.isLoading ? 'Loading follows…' : 'No Nostr follows found on your read relays.'}</p>}
     </section>
+    <OstrifyDirectory me={user.pubkey} invite={invite} pending={friends.send.isPending} friendKeys={list.map(friend => friend.pubkey)} />
     {friends.isLoading && <Skeleton className="h-32 w-full" />}
     {friends.isError && <div role="alert" className="rounded-lg border p-4 text-sm text-destructive">{friends.error.message} <button className="underline" onClick={() => void friends.refetch()}>Retry</button></div>}
     {!!friends.data?.incoming.length && <section className="space-y-3"><h2 className="text-2xl font-semibold">Friend requests</h2>{friends.data.incoming.map(req => <Person key={req.id} pubkey={req.from}><div className="flex gap-2"><Button size="sm" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: req.from, action: 'accept', token: req.token }, { onError: error => toast({ title: 'Could not accept', description: error.message, variant: 'destructive' }) })}>Accept</Button><Button size="sm" variant="outline" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: req.from, action: 'decline', token: req.token }, { onError: error => toast({ title: 'Could not decline', description: error.message, variant: 'destructive' }) })}>Decline</Button></div></Person>)}</section>}

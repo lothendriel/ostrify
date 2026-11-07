@@ -7,12 +7,16 @@ import { useTheme } from "@/hooks/useTheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useListeningSharing } from "@/hooks/useListeningSharing";
 import { Switch } from "@/components/ui/switch";
+import { useDirectoryEnrollment } from "@/hooks/useOstrifyDirectory";
+import { useToast } from "@/hooks/useToast";
 
 const SettingsPage = () => {
   useSeoMeta({ title: "Settings — Ostrify" });
   const { theme, setTheme } = useTheme();
   const { user } = useCurrentUser();
   const sharing = useListeningSharing();
+  const directory = useDirectoryEnrollment();
+  const { toast } = useToast();
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
@@ -33,6 +37,21 @@ const SettingsPage = () => {
         </CardHeader>
         <CardContent>
           <RelayListManager />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Ostrify directory</CardTitle>
+          <CardDescription>Opt in to a public Nostr listing so people can find your name and profile picture in Ostrify. This does not make anyone your friend or share your listening activity. Turning it off publishes a withdrawal; relays or clients may retain older copies.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3"><Switch id="directory-visibility" checked={directory.enabled} disabled={!user || !directory.hasReadRelays || directory.isLoading || directory.isError || directory.update.isPending} onCheckedChange={(active) => directory.update.mutate(active, { onSuccess: () => toast({ title: active ? 'Directory listing published' : 'Directory listing withdrawn', description: active ? 'Your profile is publicly discoverable on relays that received the listing.' : 'Your withdrawal was published. Other relays may retain older copies.' }), onError: (error) => toast({ title: 'Could not update directory visibility', description: error.message, variant: 'destructive' }) })} /><label htmlFor="directory-visibility" className="text-sm font-medium">Make my Ostrify profile discoverable</label></div>
+          {!user && <p className="text-sm text-muted-foreground">Log in to manage your listing.</p>}
+          {user && !directory.hasReadRelays && <p className="text-sm text-muted-foreground">Enable a read relay to check your listing.</p>}
+          {user && directory.hasReadRelays && directory.isLoading && <p className="text-sm text-muted-foreground">Checking your listing…</p>}
+          {directory.isError && <p role="alert" className="text-sm text-destructive">Could not check your current listing. <button type="button" className="underline" onClick={() => void directory.refetch()}>Try again</button></p>}
+          {directory.update.isPending && <p className="text-sm text-muted-foreground">Publishing…</p>}
         </CardContent>
       </Card>
 
