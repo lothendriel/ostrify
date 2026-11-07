@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
-import { Users, UserPlus, Radio, Disc3 } from 'lucide-react';
+import { Users, UserPlus, Radio, Disc3, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -106,8 +106,11 @@ function OstrifyDirectory({ me, invite, pending, friendKeys }: { me: string; inv
   const people = (directory.data ?? []).filter(person => person.pubkey !== me && person.name.toLocaleLowerCase().includes(term.trim().toLocaleLowerCase()));
   return <section className="space-y-4">
     <div><h2 className="text-2xl font-semibold">Find people on Ostrify</h2><p className="text-sm text-muted-foreground mt-1">People who opted into the public directory. Search covers the listings returned by your read relays, so it may be incomplete. <Link to="/settings" className="text-primary underline">Manage your visibility</Link>.</p></div>
-    <Input value={term} onChange={event => setTerm(event.target.value)} placeholder="Search by name" aria-label="Search Ostrify directory by name" maxLength={100} />
-    {!directory.hasReadRelays ? <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">Enable a read relay in Settings to search the directory.</div> : directory.isLoading ? <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : directory.isError ? <div role="alert" className="rounded-lg border border-border p-4 text-sm">Could not load the directory from your relays. <button type="button" className="text-primary underline" onClick={() => void directory.refetch()}>Try again</button></div> : people.length === 0 ? <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">{term.trim() ? 'No matching people in the listings loaded from your relays.' : 'No other discoverable Ostrify users found on your read relays yet.'}</div> : <div className="grid gap-3 sm:grid-cols-2">{people.map(person => <DirectoryResult key={person.pubkey} person={person} invite={invite} pending={pending} isFriend={friendKeys.includes(person.pubkey)} />)}</div>}
+    <div className="relative">
+      <Input value={term} onChange={event => setTerm(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setTerm(''); }} placeholder="Search by name" aria-label="Search Ostrify directory by name" maxLength={100} className="pr-10" />
+      {term && <button type="button" onClick={() => setTerm('')} aria-label="Clear people search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><X className="size-4" /></button>}
+    </div>
+    {!term.trim() ? <p className="text-sm text-muted-foreground">Enter a name to find people. Clear your search to hide the results.</p> : !directory.hasReadRelays ? <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">Enable a read relay in Settings to search the directory.</div> : directory.isLoading ? <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : directory.isError ? <div role="alert" className="rounded-lg border border-border p-4 text-sm">Could not load the directory from your relays. <button type="button" className="text-primary underline" onClick={() => void directory.refetch()}>Try again</button></div> : people.length === 0 ? <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">No matching people in the listings loaded from your relays.</div> : <div className="grid gap-3 sm:grid-cols-2">{people.map(person => <DirectoryResult key={person.pubkey} person={person} invite={invite} pending={pending} isFriend={friendKeys.includes(person.pubkey)} />)}</div>}
   </section>;
 }
 
@@ -117,12 +120,12 @@ function DirectoryResult({ person, invite, pending, isFriend }: { person: Direct
       <Link
         to={`/friends/${nip19.npubEncode(person.pubkey)}`}
         aria-label={`View ${person.name}'s Ostrify profile`}
-        className="group flex flex-1 min-w-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="group flex flex-1 min-w-0 items-center gap-3 rounded-md cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         <div className="size-12 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center">
           {person.picture ? <img src={person.picture} alt="" loading="lazy" className="size-full object-cover" /> : <Users className="size-5 text-muted-foreground" />}
         </div>
-        <span className="min-w-0 font-semibold truncate group-hover:underline">{person.name}</span>
+        <span className="min-w-0"><span className="block font-semibold truncate group-hover:underline">{person.name}</span><span className="block text-xs text-muted-foreground">View profile</span></span>
       </Link>
       <Button size="sm" variant="outline" disabled={pending || isFriend} onClick={() => invite(person.pubkey)}>{isFriend ? 'Friends' : 'Invite'}</Button>
     </div>
