@@ -1,10 +1,9 @@
 import { Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Track } from "@/lib/music";
-import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
-import { genUserName } from "@/lib/sanitize";
 import { TrackArtwork } from "./TrackArtwork";
+import { ArtistLink } from "./ArtistLink";
 
 interface TrackCardProps {
   track: Track;
@@ -13,15 +12,8 @@ interface TrackCardProps {
 
 export function TrackCard({ track, queue }: TrackCardProps) {
   const player = usePlayer();
-  const author = useAuthor(track.pubkey);
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
-
-  const artist =
-    track.artist ||
-    author.data?.metadata?.name ||
-    author.data?.metadata?.display_name ||
-    genUserName(track.pubkey);
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -61,7 +53,9 @@ export function TrackCard({ track, queue }: TrackCardProps) {
         </button>
       </div>
       <div className="font-semibold truncate">{track.title}</div>
-      <div className="text-sm text-muted-foreground truncate mt-0.5">{artist}</div>
+      <div className="text-sm text-muted-foreground truncate mt-0.5">
+        <ArtistLink pubkey={track.pubkey} fallbackName={track.artist} />
+      </div>
     </div>
   );
 }

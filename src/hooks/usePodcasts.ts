@@ -1,7 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
-import { parsePodcastEpisodeTrack, type Track } from "@/lib/music";
+import { eventToTrack, parsePodcastEpisodeTrack, type Track } from "@/lib/music";
 
 export interface PodcastShow {
   pubkey: string;
@@ -11,20 +11,49 @@ export interface PodcastShow {
   event: NostrEvent;
 }
 
-/** Fetch recent podcast episodes (NIP-F4 kind:54). */
-export function usePodcastEpisodes(limit = 60) {
+/** Hashtags that indicate an audio track is really a podcast episode. */
+const PODCAST_TOPICS = [
+  "podcast",
+  "podcasting",
+  "podcasting20",
+  "episode",
+  "nostrpodcast",
+  "pc20",
+];
+
+/**
+ * Fetch podcast episodes. Combines true NIP-F4 episodes (kind 54) with audio
+ * tracks/notes tagged as podcasts, since genuine kind-54 events are still rare
+ * on Nostr while plenty of podcast audio is published as kind 1 / 1063.
+ */
+export function usePodcastEpisodes(limit = 80) {
   const { nostr } = useNostr();
 
   return useQuery({
     queryKey: ["podcast-episodes", limit],
     queryFn: async (c) => {
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(6000)]);
-      const events = await nostr.query([{ kinds: [54], limit }], { signal });
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
+      const events = await nostr.query(
+        [
+          // True NIP-F4 podcast episodes.
+          { kinds: [54], limit },
+          // Audio tracks / notes explicitly tagged as podcasts.
+          { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit },
+        ],
+        { signal },
+      );
 
       const tracks: Track[] = [];
+      const seen = new Set<string>();
       for (const event of events) {
-        const track = parsePodcastEpisodeTrack(event);
-        if (track) tracks.push(track);
+        // kind 54 has a dedicated parser; others go through the generic one.
+        const track =
+          event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
+        if (!track) continue;
+        if (seen.has(track.url)) continue;
+        seen.add(track.url);
+        // Normalize everything shown here as a podcast.
+        tracks.push({ ...track, kind: "podcast" });
       }
       tracks.sort((a, b) => b.createdAt - a.createdAt);
       return tracks;

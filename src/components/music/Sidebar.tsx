@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Settings } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Settings, Mic, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +11,7 @@ import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/search", label: "Search", icon: Search },
+  { to: "/podcasts", label: "Podcasts", icon: Mic },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -99,6 +100,26 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   <div className="text-xs text-muted-foreground">
                     {liked ? `${liked.trackIds.length} songs` : "Playlist"}
                   </div>
+                </div>
+              </NavLink>
+
+              {/* Followed Artists pinned */}
+              <NavLink
+                to="/artists"
+                onClick={onNavigate}
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors",
+                    isActive && "bg-accent/10",
+                  )
+                }
+              >
+                <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0">
+                  <Users className="size-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">Followed Artists</div>
+                  <div className="text-xs text-muted-foreground">Artists</div>
                 </div>
               </NavLink>
 

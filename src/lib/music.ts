@@ -15,6 +15,8 @@ export interface Track {
   title: string;
   /** Artist / creator / podcast name (freeform). */
   artist?: string;
+  /** Album / release title, if the track belongs to one. */
+  album?: string;
   /** Cover art / episode image URL (https). */
   image?: string;
   /** Pubkey that published the event. */
@@ -212,6 +214,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
   let image = tagValue(event, "image") || tagValue(event, "cover") || tagValue(event, "thumb");
   let title = tagValue(event, "title") || tagValue(event, "subject") || tagValue(event, "name");
   let artist = tagValue(event, "artist") || tagValue(event, "creator") || tagValue(event, "author");
+  let album = tagValue(event, "album") || tagValue(event, "release");
   let duration = parseDuration(tagValue(event, "duration"));
 
   // 2. imeta attachment (NIP-92), if present.
@@ -242,6 +245,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
       url = url || pick("enclosure", "url", "stream_url", "mediaUrl", "media");
       title = title || pick("title", "name");
       artist = artist || pick("creator", "artist", "author");
+      album = album || pick("album", "release", "albumTitle");
       image = image || pick("image", "artwork", "cover", "artworkUrl");
       duration = duration ?? parseDuration(pick("duration"));
       if (!mime) mime = pick("type", "mimeType");
@@ -262,6 +266,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     mimeType: mime,
     title: title || "Untitled",
     artist,
+    album,
     image: sanitizeUrl(image),
     pubkey: event.pubkey,
     duration,

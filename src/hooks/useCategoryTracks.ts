@@ -2,6 +2,7 @@ import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { CATEGORIES, tracksInCategory } from "@/lib/categories";
+import { FEATURED_MUSIC_PUBKEYS } from "@/lib/sources";
 
 /**
  * Fetch tracks for a single category.
@@ -31,18 +32,20 @@ export function useCategoryTracks(categoryId: string | undefined) {
       const [tagged, general] = await Promise.all([
         nostr.query(
           [
-            { kinds: [...MUSIC_TRACK_KINDS], "#t": topicFilter, limit: 100 },
-            { kinds: [1063], "#t": topicFilter, limit: 100 },
-            { kinds: [1], "#t": topicFilter, limit: 100 },
+            { kinds: [...MUSIC_TRACK_KINDS], "#t": topicFilter, limit: 200 },
+            { kinds: [1063], "#t": topicFilter, limit: 200 },
+            { kinds: [1], "#t": topicFilter, limit: 200 },
           ],
           { signal },
         ),
-        // A general batch to keyword-match against (for untagged tracks).
+        // A general batch to keyword-match against (for untagged tracks), plus the
+        // featured catalogs so big publishers (Wavlake) are always represented.
         nostr.query(
           [
-            { kinds: [...MUSIC_TRACK_KINDS], limit: 150 },
-            { kinds: [1063], limit: 150 },
-            { kinds: [1], limit: 150 },
+            { kinds: [...MUSIC_TRACK_KINDS], limit: 250 },
+            { kinds: [1063], limit: 250 },
+            { kinds: [1], limit: 250 },
+            { kinds: [...MUSIC_TRACK_KINDS], authors: FEATURED_MUSIC_PUBKEYS, limit: 300 },
           ],
           { signal },
         ),

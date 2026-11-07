@@ -14,22 +14,14 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { usePlayer } from "@/hooks/usePlayer";
-import { useAuthor } from "@/hooks/useAuthor";
 import { formatDuration } from "@/lib/music";
-import { genUserName } from "@/lib/sanitize";
 import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
+import { ArtistLink } from "./ArtistLink";
 
 export function PlayerBar() {
   const player = usePlayer();
   const { current } = player;
-  const author = useAuthor(current?.pubkey);
-
-  const artist =
-    current?.artist ||
-    author.data?.metadata?.name ||
-    author.data?.metadata?.display_name ||
-    (current ? genUserName(current.pubkey) : "");
 
   const VolumeIcon = player.muted || player.volume === 0 ? VolumeX : player.volume < 0.5 ? Volume1 : Volume2;
 
@@ -42,7 +34,9 @@ export function PlayerBar() {
             <TrackArtwork track={current} className="w-14 h-14" />
             <div className="min-w-0 hidden sm:block">
               <div className="truncate font-medium text-sm">{current.title}</div>
-              <div className="truncate text-xs text-muted-foreground">{artist}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                <ArtistLink pubkey={current.pubkey} fallbackName={current.artist} />
+              </div>
             </div>
             <div className="hidden sm:block">
               <LikeButton trackId={current.id} size={16} />

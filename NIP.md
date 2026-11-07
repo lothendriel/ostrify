@@ -71,7 +71,39 @@ referenced by their event id using `e` tags, preserving insertion order.
 - Because these are addressable, replaceable events, all reads are filtered by the
   user's `authors` pubkey.
 
+### Followed Artists — NIP-51 follow set (kind `30000`)
+
+Following an artist stores their pubkey as a `p` tag in a reserved follow set with
+`d` tag `ostrify-artists`. The list is replaceable and read filtered by the user's
+`authors` pubkey.
+
+```json
+{
+  "kind": 30000,
+  "tags": [
+    ["d", "ostrify-artists"],
+    ["title", "Followed Artists"],
+    ["p", "<artist-pubkey>"],
+    ["p", "<artist-pubkey>"]
+  ],
+  "content": ""
+}
+```
+
 ### Playlist deletion — NIP-09 (kind `5`)
 
 Deleting a playlist publishes a deletion request referencing the addressable
 coordinate `30003:<pubkey>:<d>` and the latest event id.
+
+## Discovery notes
+
+- **Featured catalogs.** To ensure a solid base of music, the general feed also
+  queries well-known catalog publishers by `authors` — notably Wavlake's proxy
+  pubkey (`npub1yfg0d955c2jrj2080ew7pa4xrtj7x7s7umt28wh0zurwmxgpyj9shwv6vg`), which
+  re-publishes its catalog to Nostr.
+- **Podcasts.** Because genuine NIP-F4 (kind `54`) episodes are still rare, the
+  Podcasts view also includes kind `1`/`1063` audio tagged with podcast-related
+  hashtags (`podcast`, `episode`, `pc20`, etc.).
+- **Artists.** An artist is simply a `pubkey`. The artist page queries all audio
+  kinds filtered by that author and groups results into albums via the `album`/
+  `release` tag, with the remainder shown as singles.

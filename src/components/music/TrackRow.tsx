@@ -1,12 +1,11 @@
 import { Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, type Track } from "@/lib/music";
-import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
-import { genUserName } from "@/lib/sanitize";
 import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
+import { ArtistLink } from "./ArtistLink";
 
 interface TrackRowProps {
   track: Track;
@@ -19,15 +18,8 @@ interface TrackRowProps {
 
 export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: TrackRowProps) {
   const player = usePlayer();
-  const author = useAuthor(track.pubkey);
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
-
-  const artist =
-    track.artist ||
-    author.data?.metadata?.name ||
-    author.data?.metadata?.display_name ||
-    genUserName(track.pubkey);
 
   const handlePlay = () => {
     if (isCurrent) {
@@ -68,7 +60,9 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
         <TrackArtwork track={track} className="w-10 h-10" />
         <div className="min-w-0">
           <div className={cn("truncate font-medium", isCurrent && "text-primary")}>{track.title}</div>
-          <div className="truncate text-sm text-muted-foreground">{artist}</div>
+          <div className="truncate text-sm text-muted-foreground">
+            <ArtistLink pubkey={track.pubkey} fallbackName={track.artist} />
+          </div>
         </div>
       </div>
 
