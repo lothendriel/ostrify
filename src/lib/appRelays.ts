@@ -7,12 +7,22 @@ import type { RelayMetadata } from '@/contexts/AppContext';
  */
 export const APP_RELAYS: RelayMetadata = {
   relays: [
-    // Broad discovery: read from many high-volume relays so Ostrify aggregates
-    // as much music and as many podcasts as possible from across the network.
+    // --- Music-focused sources (read) ---
+    // Wavlake is the biggest source of artist-published music tracks.
+    { url: 'wss://relay.wavlake.com/', read: true, write: false },
+    // Fountain hosts podcasts and music.
+    { url: 'wss://relay.fountain.fm/', read: true, write: false },
+    // Aggregating/indexing relay — great for discovery across the network.
     { url: 'wss://relay.nostr.band/', read: true, write: false },
+    // Specializes in profiles/metadata — resolves artist names & avatars.
+    { url: 'wss://purplepag.es/', read: true, write: false },
+
+    // --- Broad, high-volume general relays (lots of audio notes & reposts) ---
     { url: 'wss://nos.lol/', read: true, write: true },
     { url: 'wss://relay.primal.net/', read: true, write: true },
     { url: 'wss://relay.damus.io/', read: true, write: true },
+    { url: 'wss://nostr.wine/', read: true, write: false },
+    { url: 'wss://relay.snort.social/', read: true, write: false },
     { url: 'wss://relay.ditto.pub/', read: true, write: true },
     { url: 'wss://relay.dreamith.to/', read: true, write: true },
   ],
