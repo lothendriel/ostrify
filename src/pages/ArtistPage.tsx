@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { useLocation } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { Play, Pause, BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,16 @@ export function ArtistPage({ pubkey }: { pubkey: string }) {
   useSeoMeta({ title: `${name} — Ostrify` });
 
   const { albums, singles } = useMemo(() => groupIntoAlbums(tracks), [tracks]);
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash || isLoading) return;
+    try {
+      const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      target?.scrollIntoView({ block: 'start' });
+    } catch {
+      // Ignore malformed fragments.
+    }
+  }, [hash, isLoading, albums]);
 
   const isThisPlaying =
     player.isPlaying && tracks.some((t) => t.id === player.current?.id);
@@ -116,7 +127,7 @@ export function ArtistPage({ pubkey }: { pubkey: string }) {
           <>
             {/* Albums */}
             {albums.map((album) => (
-              <section key={album.title} className="space-y-3">
+              <section key={album.title} id={`album-${album.title ?? ''}`} className="space-y-3 scroll-mt-4">
                 <h2 className="text-2xl font-bold tracking-tight">{album.title}</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
                   {album.tracks.map((track) => (

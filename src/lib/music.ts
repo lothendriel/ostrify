@@ -100,6 +100,7 @@ export function parseFileMetadataTrack(event: NostrEvent): Track | null {
     mimeType: mime,
     title,
     artist,
+    album: tagValue(event, "album") || tagValue(event, "release"),
     image,
     pubkey: event.pubkey,
     duration,

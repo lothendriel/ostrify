@@ -85,6 +85,40 @@ function parseTrack(value: unknown): Track | null {
 }
 
 export interface CatalogItem { id: string; type: 'artist' | 'album' | 'track'; title: string; artist?: string; image?: string; track?: Track }
+
+/** Wavlake's track rankings, ordered by sats earned during the last 30 days. */
+export function useWavlakeRankedReleases() {
+  return useQuery({
+    queryKey: ['wavlake', 'rankings', 'sats', 30],
+    queryFn: async ({ signal }) => {
+      const response = await fetchApi('rankings', { sort: 'sats', days: '30', limit: '100' }, signal);
+      if (!Array.isArray(response)) throw new Error('Invalid Wavlake rankings response');
+      const artists: CatalogItem[] = [];
+      const albums: CatalogItem[] = [];
+      const seenArtists = new Set<string>();
+      const seenAlbums = new Set<string>();
+      for (const entry of response) {
+        const item = object(entry);
+        if (!item) continue;
+        const artistId = id(item.artistId);
+        const albumId = id(item.albumId);
+        const artist = text(item.artist);
+        const album = text(item.albumTitle);
+        if (artistId && artist && !seenArtists.has(artistId)) {
+          seenArtists.add(artistId);
+          artists.push({ id: artistId, type: 'artist', title: artist, image: sanitizeUrl(text(item.artistArtUrl)) });
+        }
+        if (albumId && album && !seenAlbums.has(albumId)) {
+          seenAlbums.add(albumId);
+          albums.push({ id: albumId, type: 'album', title: album, artist, image: sanitizeUrl(text(item.albumArtUrl)) });
+        }
+      }
+      return { artists: artists.slice(0, 8), albums: albums.slice(0, 8) };
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
 function parseItem(value: unknown): CatalogItem | null {
   const item = object(value); if (!item) return null;
   const itemId = id(item.id); const title = text(item.title) || text(item.name);

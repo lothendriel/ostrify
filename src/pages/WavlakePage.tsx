@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
 import { FollowButton } from '@/components/music/FollowButton';
-import { useWavlakeCatalog, useWavlakeRelease, useWavlakeSearch, type CatalogItem } from '@/hooks/useWavlake';
+import { useWavlakeCatalog, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem } from '@/hooks/useWavlake';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
   if (!items.length) return null;
@@ -17,7 +17,7 @@ function CatalogLinks({ items }: { items: CatalogItem[] }) {
         {item.image ? <img src={item.image} alt="" loading="lazy" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
       </div>
       <div className="font-semibold truncate">{item.title}</div>
-      <div className="text-sm text-muted-foreground capitalize">{item.type}</div>
+      <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : item.type === 'artist' ? 'Artist' : 'Album'}</div>
     </Link>
   ))}</div>;
 }
@@ -36,6 +36,17 @@ function CatalogTracks({ artistId }: { artistId?: string }) {
   </section>;
 }
 
+function FeaturedRankings() {
+  const rankings = useWavlakeRankedReleases();
+  if (rankings.isLoading) return <section className="space-y-3"><h2 className="text-2xl font-bold">From Wavlake’s top tracks</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div></section>;
+  if (rankings.isError) return <p className="text-sm text-muted-foreground">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>;
+  if (!rankings.data?.artists.length && !rankings.data?.albums.length) return <p className="text-sm text-muted-foreground">No ranked artists or albums are available right now.</p>;
+  return <div className="space-y-8">
+    {rankings.data.artists.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div><CatalogLinks items={rankings.data.artists} /></section>}
+    {rankings.data.albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div><CatalogLinks items={rankings.data.albums} /></section>}
+  </div>;
+}
+
 function Discovery() {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -50,7 +61,7 @@ function Discovery() {
     <p className="text-sm text-muted-foreground">Like tracks and follow artists in Ostrify. Your library is stored publicly on Nostr.</p>
     {query.trim().length >= 2 ? <section className="space-y-4"><h2 className="text-2xl font-bold">Search results</h2>
       {search.isFetching || debounced !== query.trim() ? <Skeleton className="h-24 w-full" /> : search.isError ? <p role="alert" className="text-destructive">Wavlake search is unavailable. <button className="underline" onClick={() => search.refetch()}>Try again</button></p> : <><CatalogLinks items={links} /><TrackList tracks={tracks} emptyMessage={links.length ? 'No playable tracks in these results.' : 'No matching Wavlake results.'} /></>}
-    </section> : <CatalogTracks />}
+    </section> : <><FeaturedRankings /><CatalogTracks /></>}
   </div>;
 }
 
