@@ -1,0 +1,143 @@
+import { useState } from "react";
+import { useParams } from "react-router-dom";
+import { useSeoMeta } from "@unhead/react";
+import { Music, Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { usePlaylist, usePlaylistActions } from "@/hooks/usePlaylists";
+import { useTracksByIds } from "@/hooks/useTracksByIds";
+import { useNostrPublish } from "@/hooks/useNostrPublish";
+import { useToast } from "@/hooks/useToast";
+import { CollectionHeader } from "@/components/music/CollectionHeader";
+import { TrackList } from "@/components/music/TrackList";
+import { CreatePlaylistDialog } from "@/components/music/CreatePlaylistDialog";
+import { useNavigate } from "react-router-dom";
+import type { Track } from "@/lib/music";
+
+const PlaylistPage = () => {
+  const { id } = useParams<{ id: string }>();
+  const { data: playlist, isLoading: playlistLoading } = usePlaylist(id);
+  const { data: tracks = [], isLoading } = useTracksByIds(playlist?.trackIds);
+  const { removeFromPlaylist } = usePlaylistActions();
+  const { mutate: publish } = useNostrPublish();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  useSeoMeta({ title: `${playlist?.title ?? "Playlist"} — Nostr Tunes` });
+
+  const handleRemove = (track: Track) => {
+    if (!playlist) return;
+    removeFromPlaylist.mutate(
+      { playlistId: playlist.id, trackId: track.id },
+      { onSuccess: () => toast({ title: "Removed from playlist" }) },
+    );
+  };
+
+  const handleDelete = () => {
+    if (!playlist) return;
+    // NIP-09 deletion request for the addressable playlist event.
+    publish(
+      {
+        kind: 5,
+        content: "Deleted playlist",
+        tags: [
+          ["a", `30003:${playlist.event.pubkey}:${playlist.id}`],
+          ["e", playlist.event.id],
+        ],
+      },
+      {
+        onSuccess: () => {
+          toast({ title: "Playlist deleted" });
+          navigate("/");
+        },
+      },
+    );
+  };
+
+  if (!playlistLoading && !playlist) {
+    return (
+      <div className="py-24 text-center">
+        <p className="text-muted-foreground">Playlist not found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <CollectionHeader
+        subtitle="Playlist"
+        title={playlist?.title ?? "Playlist"}
+        description={playlist?.description}
+        image={playlist?.image}
+        icon={<Music className="size-16 text-white/70" />}
+        gradient="linear-gradient(to bottom, hsl(141 40% 28%), transparent)"
+        tracks={tracks}
+        actions={
+          playlist && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full text-muted-foreground hover:text-foreground"
+                onClick={() => setEditOpen(true)}
+                aria-label="Edit playlist"
+              >
+                <Pencil className="size-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+                aria-label="Delete playlist"
+              >
+                <Trash2 className="size-5" />
+              </Button>
+            </>
+          )
+        }
+      />
+      <div className="px-3 sm:px-6">
+        <TrackList
+          tracks={tracks}
+          isLoading={isLoading}
+          onRemove={handleRemove}
+          emptyMessage="This playlist is empty. Add songs from anywhere using the + menu."
+        />
+      </div>
+
+      {playlist && (
+        <CreatePlaylistDialog open={editOpen} onOpenChange={setEditOpen} editing={playlist} />
+      )}
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this playlist?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This sends a deletion request to the network. The playlist will be removed from
+              clients that honor deletions.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+};
+
+export default PlaylistPage;

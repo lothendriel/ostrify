@@ -1,7 +1,13 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ScrollToTop } from "./components/ScrollToTop";
+import { PlayerProvider } from "./components/PlayerProvider";
+import { AppLayout } from "./components/music/AppLayout";
 
 import Index from "./pages/Index";
+import SearchPage from "./pages/SearchPage";
+import CategoryPage from "./pages/CategoryPage";
+import PlaylistPage from "./pages/PlaylistPage";
+import LikedSongs from "./pages/LikedSongs";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
 
@@ -9,13 +15,21 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <ScrollToTop />
-      <Routes>
-        <Route path="/" element={<Index />} />
-        {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
-        <Route path="/:nip19" element={<NIP19Page />} />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <PlayerProvider>
+        <AppLayout>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/category/:id" element={<CategoryPage />} />
+            <Route path="/playlist/:id" element={<PlaylistPage />} />
+            <Route path="/liked" element={<LikedSongs />} />
+            {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
+            <Route path="/:nip19" element={<NIP19Page />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AppLayout>
+      </PlayerProvider>
     </BrowserRouter>
   );
 }

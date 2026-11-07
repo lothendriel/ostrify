@@ -1,23 +1,72 @@
-import { useSeoMeta } from '@unhead/react';
-
-// FIXME: Update this page (the content is just a fallback if you fail to update the page)
+import { useMemo } from "react";
+import { useSeoMeta } from "@unhead/react";
+import { Link } from "react-router-dom";
+import { useTracks } from "@/hooks/useTracks";
+import { usePodcastEpisodes } from "@/hooks/usePodcasts";
+import { Shelf } from "@/components/music/Shelf";
+import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 
 const Index = () => {
   useSeoMeta({
-    title: 'Welcome to Your Blank App',
-    description: 'A modern Nostr client application built with React, TailwindCSS, and Nostrify.',
+    title: "Nostr Tunes — Music & Podcasts on Nostr",
+    description: "A Spotify-style player for music and podcasts published on the Nostr network.",
   });
 
+  const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 150 });
+  const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
+
+  const fresh = useMemo(() => tracks.slice(0, 10), [tracks]);
+  const categoryShelves = useMemo(() => {
+    return CATEGORIES.map((c) => ({
+      category: c,
+      tracks: tracksInCategory(tracks, c.id).slice(0, 10),
+    })).filter((s) => s.tracks.length > 0);
+  }, [tracks]);
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  })();
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4 text-gray-900 dark:text-gray-100">
-          Welcome to Your Blank App
-        </h1>
-        <p className="text-xl text-gray-600 dark:text-gray-400">
-          Start building your amazing project here!
-        </p>
-      </div>
+    <div className="p-4 sm:p-6 space-y-8">
+      <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
+
+      {/* Browse categories */}
+      <section className="space-y-3">
+        <h2 className="text-2xl font-bold tracking-tight">Browse all</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {CATEGORIES.map((c) => (
+            <Link
+              key={c.id}
+              to={`/category/${c.id}`}
+              className="relative h-24 rounded-lg overflow-hidden p-4 flex items-end font-bold text-white text-lg shadow-md hover:scale-[1.02] transition-transform"
+              style={{ background: categoryColor(c.id) }}
+            >
+              {c.label}
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
+
+      <Shelf title="Podcasts" subtitle="Episodes from across the network" tracks={podcasts.slice(0, 10)} isLoading={podcastsLoading} />
+
+      {categoryShelves.map(({ category, tracks: catTracks }) => (
+        <Shelf key={category.id} title={category.label} tracks={catTracks} />
+      ))}
+
+      {!tracksLoading && tracks.length === 0 && !podcastsLoading && (
+        <div className="border border-dashed border-border rounded-lg py-16 px-8 text-center">
+          <p className="text-muted-foreground max-w-sm mx-auto">
+            No audio found yet. Try again in a moment, or check your relay connections — music and
+            podcasts load live from Nostr.
+          </p>
+        </div>
+      )}
     </div>
   );
 };
