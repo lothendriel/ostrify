@@ -50,7 +50,14 @@ async function fetchApi(path: string, params: Record<string, string>, signal: Ab
 
 export async function fetchWavlakeTrack(trackId: string, signal: AbortSignal): Promise<Track | null> {
   if (!UUID.test(trackId)) return null;
-  return parseTrack(await fetchApi(`track/${trackId}`, {}, signal));
+  const response = await fetchApi(`track/${trackId}`, {}, signal);
+  // The single-track endpoint can return an array, even for one ID.
+  const candidates = Array.isArray(response) ? response : [response];
+  for (const candidate of candidates) {
+    const track = parseTrack(candidate);
+    if (track && track.id.toLowerCase() === `wavlake:${trackId.toLowerCase()}`) return track;
+  }
+  return null;
 }
 
 function parseTrack(value: unknown): Track | null {

@@ -12,7 +12,7 @@ const LikedSongs = () => {
   useSeoMeta({ title: "Liked Songs — Ostrify" });
   const { user } = useCurrentUser();
   const { data: playlist } = usePlaylist(LIKED_SONGS_ID);
-  const { data, isLoading } = useTracksByIds(playlist?.trackIds);
+  const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
 
   if (!user) {
@@ -39,11 +39,11 @@ const LikedSongs = () => {
         tracks={tracks}
       />
       <div className="px-3 sm:px-6">
-        {!!data?.unavailable && <p className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your library.</p>}
+        {!!data?.unavailable && <p role="status" className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your library. <button type="button" className="text-primary underline disabled:opacity-50" disabled={isFetching} onClick={() => void refetch()}>{isFetching ? 'Retrying…' : 'Try again'}</button></p>}
         <TrackList
           tracks={tracks}
           isLoading={isLoading}
-          emptyMessage="Songs you like will show up here. Tap the heart on any track."
+          emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "Songs you like will show up here. Tap the heart on any track."}
         />
       </div>
     </div>

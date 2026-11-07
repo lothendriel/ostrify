@@ -26,7 +26,7 @@ import type { Track } from "@/lib/music";
 const PlaylistPage = () => {
   const { id } = useParams<{ id: string }>();
   const { data: playlist, isLoading: playlistLoading } = usePlaylist(id);
-  const { data, isLoading } = useTracksByIds(playlist?.trackIds);
+  const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
   const { removeFromPlaylist } = usePlaylistActions();
   const { mutate: publish } = useNostrPublish();
@@ -110,12 +110,12 @@ const PlaylistPage = () => {
         }
       />
       <div className="px-3 sm:px-6">
-        {!!data?.unavailable && <p className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your playlist.</p>}
+        {!!data?.unavailable && <p role="status" className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your playlist. <button type="button" className="text-primary underline disabled:opacity-50" disabled={isFetching} onClick={() => void refetch()}>{isFetching ? 'Retrying…' : 'Try again'}</button></p>}
         <TrackList
           tracks={tracks}
           isLoading={isLoading}
           onRemove={handleRemove}
-          emptyMessage="This playlist is empty. Add songs from anywhere using the + menu."
+          emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "This playlist is empty. Add songs from anywhere using the + menu."}
         />
       </div>
 
