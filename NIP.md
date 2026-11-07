@@ -67,7 +67,10 @@ referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73
 - The **Liked Songs** playlist is a reserved bookmark set with `d` tag
   `nostr-tunes-liked`. Liking/unliking a track adds/removes its `e` tag.
 - Regular playlists use a random `d` tag (`playlist-xxxxxxxx`) and may carry
-  optional `title`, `description`, and `image` tags.
+  optional `title`, `description`, and `image` tags. New and updated Ostrify
+  music lists carry `t=ostrify-music-playlist`; older Ostrify identifiers remain
+  recognized. Other bookmark sets are only shown on public music profiles when
+  a supported Wavlake reference or a resolvable audio event is found.
 - Because these are addressable, replaceable events, all reads are filtered by the
   user's `authors` pubkey.
 

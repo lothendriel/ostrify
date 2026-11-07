@@ -1,6 +1,8 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import { wavlakeTrackId, wavlakeArtistId } from '@/hooks/useWavlake';
+import { wavlakeTrackUrl, wavlakeArtistId } from '@/hooks/useWavlake';
+import { isOstrifyMusicPlaylist, playlistTrackRefs } from '@/lib/musicPlaylists';
+import { eventToTrack } from '@/lib/music';
 
 /** Public library content is always queried for the specific profile owner. */
 export function useFriendLibrary(pubkey: string | undefined) {
@@ -18,21 +20,37 @@ export function useFriendLibrary(pubkey: string | undefined) {
         const d = event.tags.find(([n]) => n === 'd')?.[1];
         if (d && (!byId.has(d) || byId.get(d)!.created_at < event.created_at)) byId.set(d, event);
       }
-      const playlists = [...byId.entries()].map(([id, event]) => ({
-        id, title: event.tags.find(([n]) => n === 'title')?.[1] || (id === 'nostr-tunes-liked' ? 'Liked Songs' : 'Playlist'),
-        tracks: event.tags.flatMap(([name, value]) => {
-          if (name === 'e' && /^[0-9a-f]{64}$/.test(value ?? '')) return [value];
-          const external = name === 'i' && value ? wavlakeTrackId(value) : undefined;
-          return external ? [external] : [];
-        }),
-      }));
+      const candidates = [...byId.entries()];
+      // Other apps also use bookmark sets for books and articles. Resolve only
+      // unmarked event references and include a foreign list only when at least
+      // one reference actually resolves to supported audio (or a Wavlake track).
+      const unknownIds = [...new Set(candidates.filter(([, event]) => !isOstrifyMusicPlaylist(event)).flatMap(([, event]) => playlistTrackRefs(event).filter(ref => /^[0-9a-f]{64}$/.test(ref))))];
+      let audioIds = new Set<string>();
+      let otherListsUnverified = false;
+      if (unknownIds.length) {
+        try {
+          const referenced = await nostr.query([{ ids: unknownIds }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+          audioIds = new Set(referenced.filter(event => !!eventToTrack(event)).map(event => event.id));
+          otherListsUnverified = unknownIds.some(id => !referenced.some(event => event.id === id));
+        } catch {
+          if (signal.aborted) throw signal.reason;
+          otherListsUnverified = true;
+        }
+      }
+      const playlists = candidates.flatMap(([id, event]) => {
+        const refs = playlistTrackRefs(event);
+        const known = isOstrifyMusicPlaylist(event);
+        const tracks = known ? refs : refs.filter(ref => !!wavlakeTrackUrl(ref) || audioIds.has(ref));
+        if (!known && !tracks.length) return [];
+        return [{ id, title: event.tags.find(([n]) => n === 'title')?.[1] || (id === 'nostr-tunes-liked' ? 'Liked Songs' : 'Playlist'), tracks }];
+      });
       const artistEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at)[0];
       const artists = (artistEvent?.tags ?? []).flatMap(([name, value]) => {
         if (name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '')) return [value];
         const artistId = name === 'i' && value ? wavlakeArtistId(value) : undefined;
         return artistId ? [`wavlake:${artistId}`] : [];
       });
-      return { playlists, artists };
+      return { playlists, artists, otherListsUnverified };
     },
   });
 }

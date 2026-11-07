@@ -1,6 +1,6 @@
 import { ChevronDown, LogOut, UserIcon, UserPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { nip19 } from 'nostr-tools';
+import { sanitizeUrl } from '@/lib/sanitize';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,7 +35,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         <button className='flex items-center gap-2 h-10 p-1 pr-2.5 rounded-full hover:bg-accent transition-all text-foreground'>
           <Avatar className='w-8 h-8'>
             <AvatarImage
-              src={currentUser.metadata.picture}
+              src={sanitizeUrl(currentUser.metadata.picture)}
               alt={isCurrentUserPending ? '' : getDisplayName(currentUser)}
             />
             <AvatarFallback>
@@ -51,10 +51,10 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
       </DropdownMenuTrigger>
       <DropdownMenuContent className='w-56 p-2 animate-scale-in'>
         <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-md'>
-          <Link to={`/${nip19.npubEncode(currentUser.pubkey)}`}>
+          <Link to="/my-profile">
             <Avatar className='w-8 h-8'>
               <AvatarImage
-                src={currentUser.metadata.picture}
+                src={sanitizeUrl(currentUser.metadata.picture)}
                 alt={isCurrentUserPending ? '' : getDisplayName(currentUser)}
               />
               <AvatarFallback>
@@ -69,7 +69,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
               {isCurrentUserPending ? (
                 <Skeleton className='h-4 w-24' />
               ) : (
-                <p className='text-sm font-medium'>{getDisplayName(currentUser)}</p>
+                <div><p className='text-sm font-medium truncate'>{getDisplayName(currentUser)}</p><p className='text-xs text-muted-foreground'>My profile</p></div>
               )}
             </div>
           </Link>
@@ -84,7 +84,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
             >
               <Avatar className='w-8 h-8'>
                 <AvatarImage
-                  src={user.metadata.picture}
+                  src={sanitizeUrl(user.metadata.picture)}
                   alt={isPending ? '' : getDisplayName(user)}
                 />
                 <AvatarFallback>

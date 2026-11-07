@@ -15,6 +15,7 @@ import WavlakePage from "./pages/WavlakePage";
 import MusicDiscovery from "./pages/MusicDiscovery";
 import FollowedArtists from "./pages/FollowedArtists";
 import FriendsPage from "./pages/FriendsPage";
+import MyProfile from "./pages/MyProfile";
 import { NIP19Page } from "./pages/NIP19Page";
 import NotFound from "./pages/NotFound";
 
@@ -37,6 +38,7 @@ export function AppRouter() {
             <Route path="/wavlake/:type/:id" element={<WavlakePage />} />
             <Route path="/artists" element={<FollowedArtists />} />
             <Route path="/friends" element={<FriendsPage />} />
+            <Route path="/my-profile" element={<MyProfile />} />
             <Route path="/friends/:nip19" element={<FriendsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}

@@ -4,8 +4,9 @@ import type { NostrEvent } from "@nostrify/nostrify";
 import { useCurrentUser } from "./useCurrentUser";
 import { useNostrPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
+import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER } from '@/lib/musicPlaylists';
 
-export const LIKED_SONGS_ID = "nostr-tunes-liked";
+export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
 
 export interface Playlist {
@@ -52,6 +53,7 @@ export function usePlaylists() {
         { signal },
       );
       const playlists = events
+        .filter(event => event.pubkey === user.pubkey && isOstrifyMusicPlaylist(event))
         .map(parsePlaylist)
         .filter((p): p is Playlist => p !== null);
       // Liked songs first, then newest.
@@ -83,6 +85,7 @@ function buildPlaylistEvent(
     !['d', 'title', 'description', 'image'].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && !!wavlakeTrackId(value))
   ).map((tag) => [...tag]) : [];
   tags.unshift(["d", playlist.id], ["title", playlist.title]);
+  if (!tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
   if (playlist.description) tags.push(["description", playlist.description]);
   if (playlist.image) tags.push(["image", playlist.image]);
   for (const id of playlist.trackIds) {
