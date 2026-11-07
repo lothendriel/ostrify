@@ -1,6 +1,6 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
-import { eventToTrack, type Track } from "@/lib/music";
+import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 
 interface UseTracksOptions {
   limit?: number;
@@ -29,7 +29,11 @@ export function useTracks(options: UseTracksOptions = {}) {
 
       const events = await nostr.query(
         [
+          // Dedicated music-track kinds (Wavlake, zapstr, lightning.fm, etc.)
+          { kinds: [...MUSIC_TRACK_KINDS], limit, ...base },
+          // NIP-94 audio file metadata
           { kinds: [1063], limit, ...base },
+          // Plain notes carrying audio attachments
           { kinds: [1], limit, ...base },
         ],
         { signal },

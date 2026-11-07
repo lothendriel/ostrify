@@ -1,6 +1,6 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
-import { eventToTrack, type Track } from "@/lib/music";
+import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { CATEGORIES, tracksInCategory } from "@/lib/categories";
 
 /**
@@ -31,6 +31,7 @@ export function useCategoryTracks(categoryId: string | undefined) {
       const [tagged, general] = await Promise.all([
         nostr.query(
           [
+            { kinds: [...MUSIC_TRACK_KINDS], "#t": topicFilter, limit: 100 },
             { kinds: [1063], "#t": topicFilter, limit: 100 },
             { kinds: [1], "#t": topicFilter, limit: 100 },
           ],
@@ -39,6 +40,7 @@ export function useCategoryTracks(categoryId: string | undefined) {
         // A general batch to keyword-match against (for untagged tracks).
         nostr.query(
           [
+            { kinds: [...MUSIC_TRACK_KINDS], limit: 150 },
             { kinds: [1063], limit: 150 },
             { kinds: [1], limit: 150 },
           ],

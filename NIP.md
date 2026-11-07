@@ -13,15 +13,33 @@ not define any new event kinds — it aggregates and reuses existing NIPs.
 | `1063`  | NIP-94 file metadata                     | Music tracks (`m` = `audio/*` or audio URL)     |
 | `10154` | NIP-F4 podcast metadata                  | Podcast show info                                |
 | `30003` | NIP-51 bookmark set                      | User playlists (incl. Liked Songs)              |
+| `30440` | Wavlake NOM track                        | Artist-published music tracks (`stream_url`)    |
+| `31337` | zapstr.live / lightning.fm audio track   | Artist-published music tracks (`media`/`url`)   |
+| `32123` | Legacy Wavlake track                     | Music tracks (JSON metadata in `content`)       |
+| `36787` | Common audio-track kind (multi-client)   | Music tracks (`url`, `title`, `artist`)         |
 
 ### Audio detection
 
-A kind `1063` or kind `1` event is treated as a playable **track** when it exposes
-an `https:` audio URL, detected via:
+An event is treated as a playable **track** when it exposes an `https:` audio URL.
+Because there is no single ratified NIP for music tracks yet, Ostrify supports the
+several addressable "audio track" kinds that circulate in the Nostr music
+ecosystem (Wavlake, zapstr.live, lightning.fm, Fountain, etc.) in addition to
+NIP-94 files and plain notes.
 
-- the NIP-94 `m` tag starting with `audio/`, or a NIP-92 `imeta` `m` field, or
-- a URL ending in a known audio extension (`.mp3`, `.m4a`, `.aac`, `.wav`, `.ogg`,
-  `.oga`, `.opus`, `.flac`, `.weba`, `.webm`).
+The audio URL is resolved, in order, from:
+
+- a direct tag: `url`, `stream_url`, `enclosure`, or `media` (zapstr), or
+- a NIP-92 `imeta` attachment, or
+- JSON metadata in `content` (legacy kinds like `32123`), or
+- an audio URL embedded in note `content`.
+
+A URL counts as audio when its MIME (`m`/`imeta m`) starts with `audio/` or it ends
+in a known audio extension (`.mp3`, `.m4a`, `.aac`, `.wav`, `.ogg`, `.oga`, `.opus`,
+`.flac`, `.weba`, `.webm`). **Kind `31337` is deliberately strict** here, because in
+practice that kind is shared with many non-audio apps (game scores, fitness data,
+etc.); events without a plausible audio URL are ignored.
+
+Genre/category is collected from `t`, `c` (zapstr category), and `genre` tags.
 
 Podcast episodes (kind `54`) use the NIP-F4 `audio` tag: `["audio", <url>, <mime?>]`.
 

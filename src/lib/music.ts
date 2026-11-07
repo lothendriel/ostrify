@@ -186,6 +186,99 @@ export function parsePodcastEpisodeTrack(event: NostrEvent): Track | null {
   };
 }
 
+/**
+ * Parse an addressable "audio track" event into a Track.
+ *
+ * Covers the several competing music-track kinds used across the Nostr music
+ * ecosystem (Wavlake, zapstr.live, lightning.fm, Fountain, etc.):
+ *   - 31337 — zapstr.live / lightning.fm (uses `media`/`url`/imeta, `subject`)
+ *   - 36787 — the most consistent in the wild (`url`, `title`, `artist`)
+ *   - 32123 — legacy Wavlake (JSON metadata in `content`)
+ *   - 30440 — Wavlake NOM spec (`stream_url`)
+ *
+ * NOTE: kind 31337 in particular is heavily polluted with non-audio app data
+ * (game scores, fitness trackers, etc.), so we only return a Track when we can
+ * actually find a plausible audio URL.
+ */
+export function parseAudioTrackEvent(event: NostrEvent): Track | null {
+  // 1. Look for a direct audio URL across the many tag conventions.
+  let url: string | undefined =
+    tagValue(event, "url") ||
+    tagValue(event, "stream_url") ||
+    tagValue(event, "enclosure") ||
+    tagValue(event, "media"); // zapstr: ["media", <url>, "http"]
+
+  let mime: string | undefined;
+  let image = tagValue(event, "image") || tagValue(event, "cover") || tagValue(event, "thumb");
+  let title = tagValue(event, "title") || tagValue(event, "subject") || tagValue(event, "name");
+  let artist = tagValue(event, "artist") || tagValue(event, "creator") || tagValue(event, "author");
+  let duration = parseDuration(tagValue(event, "duration"));
+
+  // 2. imeta attachment (NIP-92), if present.
+  if (!url) {
+    for (const tag of event.tags) {
+      if (tag[0] !== "imeta") continue;
+      const meta = parseImeta(tag);
+      if (meta.url) {
+        url = meta.url;
+        mime = meta.mime;
+        image = image || meta.image;
+        break;
+      }
+    }
+  }
+
+  // 3. Some kinds (e.g. legacy 32123, Wavlake NOM) put JSON metadata in content.
+  if ((!url || !title) && event.content.trim().startsWith("{")) {
+    try {
+      const json = JSON.parse(event.content) as Record<string, unknown>;
+      const pick = (...keys: string[]): string | undefined => {
+        for (const k of keys) {
+          const v = json[k];
+          if (typeof v === "string" && v) return v;
+        }
+        return undefined;
+      };
+      url = url || pick("enclosure", "url", "stream_url", "mediaUrl", "media");
+      title = title || pick("title", "name");
+      artist = artist || pick("creator", "artist", "author");
+      image = image || pick("image", "artwork", "cover", "artworkUrl");
+      duration = duration ?? parseDuration(pick("duration"));
+      if (!mime) mime = pick("type", "mimeType");
+    } catch {
+      // ignore malformed JSON
+    }
+  }
+
+  const safeUrl = sanitizeUrl(url);
+  // Require a plausible audio URL — this filters out the non-audio noise on
+  // shared kinds like 31337.
+  if (!safeUrl || !isAudio(safeUrl, mime)) return null;
+
+  return {
+    id: event.id,
+    event,
+    url: safeUrl,
+    mimeType: mime,
+    title: title || "Untitled",
+    artist,
+    image: sanitizeUrl(image),
+    pubkey: event.pubkey,
+    duration,
+    kind: "music",
+    // Genre can live in `t` tags or a `c` (category) tag (zapstr) or `genre`.
+    topics: [
+      ...allTagValues(event, "t"),
+      ...allTagValues(event, "c"),
+      ...allTagValues(event, "genre"),
+    ].map((t) => t.toLowerCase()),
+    createdAt: event.created_at,
+  };
+}
+
+/** Event kinds that carry addressable music-track metadata. */
+export const MUSIC_TRACK_KINDS = [31337, 36787, 32123, 30440] as const;
+
 /** Parse any supported event kind into a Track. */
 export function eventToTrack(event: NostrEvent): Track | null {
   switch (event.kind) {
@@ -195,6 +288,11 @@ export function eventToTrack(event: NostrEvent): Track | null {
       return parseFileMetadataTrack(event);
     case 1:
       return parseNoteTrack(event);
+    case 31337:
+    case 36787:
+    case 32123:
+    case 30440:
+      return parseAudioTrackEvent(event);
     default:
       return null;
   }
