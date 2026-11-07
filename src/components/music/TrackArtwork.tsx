@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Music, Mic } from "lucide-react";
+import { Music, Mic, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Track } from "@/lib/music";
 
@@ -23,7 +23,7 @@ interface TrackArtworkProps {
 export function TrackArtwork({ track, className, rounded = "rounded-md" }: TrackArtworkProps) {
   const [errored, setErrored] = useState(false);
   const showImage = track.image && !errored;
-  const Icon = track.kind === "podcast" ? Mic : Music;
+  const Icon = track.kind === "audiobook" ? BookOpen : track.kind === "podcast" ? Mic : Music;
 
   return (
     <div

@@ -127,9 +127,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playQueue = useCallback((tracks: Track[], startIndex = 0) => {
     if (tracks.length === 0) return;
+    const target = Math.max(0, Math.min(startIndex, tracks.length - 1));
+    if (current?.id === tracks[target].id && audioRef.current?.paused) {
+      void audioRef.current.play().catch(() => {});
+    }
     setQueue(tracks);
-    setIndex(Math.max(0, Math.min(startIndex, tracks.length - 1)));
-  }, []);
+    setIndex(target);
+  }, [current?.id]);
 
   const playTrack = useCallback((track: Track) => {
     setQueue([track]);

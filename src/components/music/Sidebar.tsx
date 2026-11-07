@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Music2, Settings, Mic, Users } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Music2, Settings, Mic, Users, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/search", label: "Search", icon: Search },
   { to: "/music", label: "Nostr music", icon: Music2 },
   { to: "/podcasts", label: "Podcasts", icon: Mic },
+  { to: "/audiobooks", label: "Audiobooks", icon: BookOpen },
   { to: "/wavlake", label: "Wavlake", icon: Music },
   { to: "/friends", label: "Friends", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },

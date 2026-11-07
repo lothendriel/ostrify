@@ -68,14 +68,14 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
 
       {/* Topic (desktop only) */}
       <div className="hidden md:block truncate text-sm text-muted-foreground">
-        {track.source === 'wavlake' ? 'Wavlake' : track.topics[0] ? `#${track.topics[0]}` : track.kind === "podcast" ? "Podcast" : ""}
+        {track.source === 'librivox' ? 'LibriVox' : track.source === 'wavlake' ? 'Wavlake' : track.topics[0] ? `#${track.topics[0]}` : track.kind === "podcast" ? "Podcast" : ""}
       </div>
 
       {/* Actions + duration */}
       <div className="flex items-center gap-1 justify-end">
         <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
-          <LikeButton trackId={track.id} />
-          <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />
+          {track.source !== 'librivox' && <LikeButton trackId={track.id} />}
+          {track.source !== 'librivox' && <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />}
         </div>
         <span className="text-sm text-muted-foreground tabular-nums w-12 text-right">
           {formatDuration(track.duration)}

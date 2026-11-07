@@ -8,7 +8,7 @@ export interface Track {
   /** The underlying Nostr event, when the track was published on Nostr. */
   event?: NostrEvent;
   /** External catalog tracks are not Nostr events. */
-  source?: "wavlake";
+  source?: "wavlake" | "librivox";
   artistId?: string;
   albumId?: string;
   /** Direct audio URL (https). */
@@ -28,7 +28,7 @@ export interface Track {
   /** Duration in seconds, if known. */
   duration?: number;
   /** High-level category used for Spotify-style sections. */
-  kind: "music" | "podcast";
+  kind: "music" | "podcast" | "audiobook";
   /** Topic tags (from `t` tags). */
   topics: string[];
   /** created_at timestamp. */

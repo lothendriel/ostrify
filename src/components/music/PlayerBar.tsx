@@ -39,7 +39,7 @@ export function PlayerBar() {
               </div>
             </div>
             <div className="hidden sm:block">
-              <LikeButton trackId={current.id} size={16} />
+              {current.source !== 'librivox' && <LikeButton trackId={current.id} size={16} />}
             </div>
           </>
         ) : (

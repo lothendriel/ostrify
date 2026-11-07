@@ -59,6 +59,7 @@ const SearchPage = () => {
         <section className="space-y-3">
           <h2 className="text-xl font-bold">Browse all</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            <Link to="/audiobooks" className="relative h-28 rounded-lg overflow-hidden p-4 flex items-end font-bold text-white text-lg shadow-md hover:scale-[1.02] transition-transform" style={{ background: categoryColor('audiobooks') }}>Audiobooks</Link>
             <Link to="/podcasts" className="relative h-28 rounded-lg overflow-hidden p-4 flex items-end font-bold text-white text-lg shadow-md hover:scale-[1.02] transition-transform" style={{ background: categoryColor('podcasts') }}>Podcasts</Link>
             {CATEGORIES.map((c) => (
               <Link
