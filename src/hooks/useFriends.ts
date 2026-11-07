@@ -52,6 +52,7 @@ function derive(messages: Message[], me: string) {
   const requests = new Map<string, Message>();
   const accepted = new Map<string, { pubkey: string; at: number }>();
   const incoming: Message[] = [];
+  const outgoing: Message[] = [];
   for (const message of sorted) {
     if (message.action === 'request') requests.set(message.token, message);
     else if (message.action === 'accept') {
@@ -70,7 +71,13 @@ function derive(messages: Message[], me: string) {
     const resolved = sorted.some(m => m.token === request.token && m.from === me && m.to === request.from && ['accept', 'decline'].includes(m.action));
     if (!resolved && !accepted.has(request.from)) incoming.push(request);
   }
-  return { friends: [...accepted.values()], incoming: incoming.reverse() };
+  for (const request of requests.values()) {
+    if (request.from !== me) continue;
+    const resolved = sorted.some(m => m.token === request.token && m.from === request.to && m.to === me && ['accept', 'decline'].includes(m.action));
+    const removed = sorted.some(m => m.action === 'remove' && ((m.from === me && m.to === request.to) || (m.to === me && m.from === request.to)) && m.created_at >= request.created_at);
+    if (!resolved && !removed && !accepted.has(request.to)) outgoing.push(request);
+  }
+  return { friends: [...accepted.values()], incoming: incoming.reverse(), outgoing: outgoing.reverse() };
 }
 
 export function useFriends() {

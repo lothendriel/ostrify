@@ -54,10 +54,29 @@ function InvitationOnProfile({ pubkey }: { pubkey: string }) {
   return <section className="rounded-xl border border-primary/30 bg-secondary/30 p-4 space-y-3"><h2 className="font-semibold">Ostrify friend request</h2><p className="text-sm text-muted-foreground">This request was found in your private Nostr messages. Choose whether to accept it.</p>{requests.map(request => <div key={request.id} className="flex flex-wrap gap-2"><Button type="button" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: request.from, action: 'accept', token: request.token }, { onSuccess: () => toast({ title: 'Friend request accepted' }), onError: error => toast({ title: 'Could not accept', description: error.message, variant: 'destructive' }) })}>Accept request</Button><Button type="button" variant="outline" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: request.from, action: 'decline', token: request.token }, { onSuccess: () => toast({ title: 'Friend request declined' }), onError: error => toast({ title: 'Could not decline', description: error.message, variant: 'destructive' }) })}>Decline</Button></div>)}</section>;
 }
 
+function ProfileFriendAction({ pubkey, invitationLink }: { pubkey: string; invitationLink: boolean }) {
+  const { user } = useCurrentUser();
+  const friends = useFriends();
+  const { toast } = useToast();
+
+  if (!user) return <div className="rounded-xl border border-border bg-secondary/30 p-4 space-y-3"><p className="text-sm text-muted-foreground">Log in to send or review an Ostrify friend request. Friendship requires the other person’s acceptance.</p><LoginArea className="max-w-60" /></div>;
+  if (user.pubkey === pubkey) return <p className="text-sm text-muted-foreground">This is your Ostrify profile.</p>;
+  if (friends.isLoading) return <div className="space-y-2" aria-label="Checking friendship"><Skeleton className="h-4 w-40" /><Skeleton className="h-10 w-40" /></div>;
+  if (friends.isError) return <div role="alert" className="rounded-xl border border-border p-4 text-sm">Could not check your Ostrify friends: {friends.error.message} <button type="button" className="text-primary underline" onClick={() => void friends.refetch()}>Try again</button></div>;
+  if (friends.data?.friends.some(friend => friend.pubkey === pubkey)) return <p className="text-sm font-semibold text-primary">You are Ostrify friends</p>;
+  const incoming = friends.data?.incoming.find(request => request.from === pubkey && request.to === user.pubkey);
+  if (incoming) return <InvitationOnProfile pubkey={pubkey} />;
+  if (friends.data?.outgoing.some(request => request.to === pubkey)) return <p className="text-sm text-muted-foreground">Friend request sent · Waiting for them to accept</p>;
+  return <div className="space-y-2"><Button type="button" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: pubkey, action: 'request' }, {
+    onSuccess: () => toast({ title: 'Friend invitation sent', description: 'They must accept your request in Ostrify.' }),
+    onError: error => toast({ title: 'Invitation not completed', description: error.message, variant: 'destructive' }),
+  })}><UserPlus className="size-4" /> {friends.send.isPending ? 'Sending invitation…' : 'Invite as friend'}</Button><p className="text-sm text-muted-foreground">{invitationLink ? 'No pending request from this profile was found. Check your Nostr account and DM relays, or refresh the Friends page. ' : ''}An encrypted Nostr message is sent; you become friends only if they accept. Both accounts need NIP-17 DM relays.</p></div>;
+}
+
 function FriendProfile({ pubkey }: { pubkey: string }) {
   const library = useFriendLibrary(pubkey);
   const [params] = useSearchParams();
-  return <div className="space-y-6"><Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link><Person pubkey={pubkey} />{params.has('invite') && <InvitationOnProfile pubkey={pubkey} />}<p className="text-sm text-muted-foreground">Public music library. Visibility and availability depend on the publisher and their relays.</p>
+  return <div className="space-y-6"><Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link><Person pubkey={pubkey} /><ProfileFriendAction pubkey={pubkey} invitationLink={params.has('invite')} /><p className="text-sm text-muted-foreground">Public music library. Visibility and availability depend on the publisher and their relays.</p>
     {library.isLoading ? <Skeleton className="h-40 w-full" /> : library.isError ? <p role="alert">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
       <section className="space-y-3"><h2 className="text-2xl font-bold">Public playlists & liked songs</h2>{library.data?.playlists.length ? library.data.playlists.map(p => <PublicPlaylist key={p.id} title={p.title} ids={p.tracks} />) : <p className="text-muted-foreground">No public playlists found.</p>}</section>
       <section className="space-y-3"><h2 className="text-2xl font-bold">Followed artists</h2>{library.data?.artists.length ? <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{library.data.artists.map(ref => <Artist key={ref} reference={ref} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>
