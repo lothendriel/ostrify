@@ -17,6 +17,7 @@ import { TrackList } from '@/components/music/TrackList';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
 import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
+import { useFollowedPeople } from '@/hooks/useFollowedPeople';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
   const { data } = useAuthor(pubkey);
@@ -73,10 +74,25 @@ function ProfileFriendAction({ pubkey, invitationLink }: { pubkey: string; invit
   })}><UserPlus className="size-4" /> {friends.send.isPending ? 'Sending invitation…' : 'Invite as friend'}</Button><p className="text-sm text-muted-foreground">{invitationLink ? 'No pending request from this profile was found. Check your Nostr account and DM relays, or refresh the Friends page. ' : ''}An encrypted Nostr message is sent; you become friends only if they accept. Both accounts need NIP-17 DM relays.</p></div>;
 }
 
+function ProfileFollowAction({ pubkey }: { pubkey: string }) {
+  const { user } = useCurrentUser();
+  const follows = useFollowedPeople();
+  const { toast } = useToast();
+  if (!user || user.pubkey === pubkey) return null;
+  if (!follows.hasReadRelays) return <p className="text-sm text-muted-foreground">Enable a read relay in Settings to use Ostrify follows.</p>;
+  if (follows.isLoading) return <Skeleton className="h-10 w-40" />;
+  if (follows.isError) return <p role="alert" className="text-sm text-destructive">Could not load your followed people. <button type="button" className="underline" onClick={() => void follows.refetch()}>Try again</button></p>;
+  const following = follows.people.includes(pubkey);
+  return <div className="space-y-2"><Button type="button" variant={following ? 'secondary' : 'outline'} aria-pressed={following} disabled={follows.toggle.isPending} onClick={() => follows.toggle.mutate({ pubkey, follow: !following }, {
+    onSuccess: () => toast({ title: following ? 'Unfollowed on Ostrify' : 'Following on Ostrify' }),
+    onError: error => toast({ title: 'Could not update your follow', description: error.message, variant: 'destructive' }),
+  })}>{follows.toggle.isPending ? 'Saving…' : following ? 'Following on Ostrify' : 'Follow on Ostrify'}</Button><p className="text-sm text-muted-foreground">One-way follow, separate from Nostr follows and friend requests. Your followed-people list is public on Nostr.</p></div>;
+}
+
 function FriendProfile({ pubkey }: { pubkey: string }) {
   const library = useFriendLibrary(pubkey);
   const [params] = useSearchParams();
-  return <div className="space-y-6"><Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link><Person pubkey={pubkey} /><ProfileFriendAction pubkey={pubkey} invitationLink={params.has('invite')} /><p className="text-sm text-muted-foreground">Public music library. Visibility and availability depend on the publisher and their relays.</p>
+  return <div className="space-y-6"><Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link><Person pubkey={pubkey} /><ProfileFollowAction pubkey={pubkey} /><ProfileFriendAction pubkey={pubkey} invitationLink={params.has('invite')} /><p className="text-sm text-muted-foreground">Public music library. Visibility and availability depend on the publisher and their relays.</p>
     {library.isLoading ? <Skeleton className="h-40 w-full" /> : library.isError ? <p role="alert">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
       <section className="space-y-3"><h2 className="text-2xl font-bold">Public playlists & liked songs</h2>{library.data?.playlists.length ? library.data.playlists.map(p => <PublicPlaylist key={p.id} title={p.title} ids={p.tracks} />) : <p className="text-muted-foreground">No public playlists found.</p>}</section>
       <section className="space-y-3"><h2 className="text-2xl font-bold">Followed artists</h2>{library.data?.artists.length ? <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{library.data.artists.map(ref => <Artist key={ref} reference={ref} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>
@@ -116,6 +132,7 @@ function DirectoryResult({ person, invite, pending, isFriend }: { person: Direct
 function FriendsHome() {
   const { user } = useCurrentUser();
   const friends = useFriends(); const follows = useNostrFollows();
+  const followedPeople = useFollowedPeople();
   const [input, setInput] = useState(''); const [params] = useSearchParams();
   const { toast } = useToast();
   const list = friends.data?.friends ?? [];
@@ -136,6 +153,7 @@ function FriendsHome() {
     {friends.isLoading && <Skeleton className="h-32 w-full" />}
     {friends.isError && <div role="alert" className="rounded-lg border p-4 text-sm text-destructive">{friends.error.message} <button className="underline" onClick={() => void friends.refetch()}>Retry</button></div>}
     {!!friends.data?.incoming.length && <section className="space-y-3"><h2 className="text-2xl font-semibold">Friend requests</h2>{friends.data.incoming.map(req => <Person key={req.id} pubkey={req.from}><div className="flex gap-2"><Button size="sm" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: req.from, action: 'accept', token: req.token }, { onError: error => toast({ title: 'Could not accept', description: error.message, variant: 'destructive' }) })}>Accept</Button><Button size="sm" variant="outline" disabled={friends.send.isPending} onClick={() => friends.send.mutate({ peer: req.from, action: 'decline', token: req.token }, { onError: error => toast({ title: 'Could not decline', description: error.message, variant: 'destructive' }) })}>Decline</Button></div></Person>)}</section>}
+    <section className="space-y-3"><h2 className="text-2xl font-semibold">People you follow on Ostrify</h2><p className="text-sm text-muted-foreground">A public, one-way list separate from your Nostr follows and friends.</p>{!followedPeople.hasReadRelays ? <p className="text-muted-foreground">Enable a read relay to load your follows.</p> : followedPeople.isLoading ? <Skeleton className="h-20 w-full" /> : followedPeople.isError ? <p role="alert" className="text-sm text-destructive">Could not load followed people. <button className="underline" onClick={() => void followedPeople.refetch()}>Try again</button></p> : followedPeople.people.length ? followedPeople.people.map(pubkey => <Person key={pubkey} pubkey={pubkey} />) : <p className="text-muted-foreground">You haven’t followed anyone on Ostrify yet.</p>}</section>
     <section className="space-y-3"><h2 className="text-2xl font-semibold">Your friends</h2>{list.length ? list.map(friend => <Person key={friend.pubkey} pubkey={friend.pubkey}><Button size="sm" variant="ghost" disabled={friends.send.isPending} onClick={() => { if (window.confirm('Remove this Ostrify friend?')) friends.send.mutate({ peer: friend.pubkey, action: 'remove' }, { onError: error => toast({ title: 'Could not remove friend', description: error.message, variant: 'destructive' }) }); }}>Remove</Button></Person>) : !friends.isLoading && <p className="text-muted-foreground">No confirmed friends yet. Send an invitation to get started.</p>}</section>
     <section className="space-y-3"><h2 className="text-2xl font-semibold flex items-center gap-2"><Radio className="size-5" /> Listening now</h2><p className="text-sm text-muted-foreground">Public music statuses shared by your friends. Sharing is optional.</p>{statuses.data?.length ? statuses.data.map(status => <div key={status.pubkey} className="space-y-1"><Person pubkey={status.pubkey} /><p className="ml-4 text-sm text-primary">{status.content}</p></div>) : <p className="text-muted-foreground">No friends are sharing a current listening status.</p>}</section>
   </div>;

@@ -91,6 +91,13 @@ The list is replaceable and read filtered by the user's `authors` pubkey.
 }
 ```
 
+### Followed people — NIP-51 follow set (kind `30000`)
+
+Ostrify-only one-way follows use a public follow set with `d=ostrify-people`
+and `p` tags identifying followed pubkeys. This list is independent of both
+NIP-02 kind `3` follows and mutual Ostrify friend requests. Reads constrain
+`authors` to the list owner; existing metadata and encrypted content are preserved.
+
 ### Ostrify directory — NIP-78 application data (kind `30078`)
 
 An optional public listing uses `d=ostrify-directory-v1`, `t=ostrify-directory-v1`
