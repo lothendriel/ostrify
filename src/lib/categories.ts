@@ -51,7 +51,7 @@ export const CATEGORIES: { id: string; label: string; match: string[] }[] = [
 
 /** Build searchable text for a track: title + artist + topics + note content. */
 function trackText(track: Track): string {
-  return [track.title, track.artist ?? "", track.topics.join(" "), track.event.content ?? ""]
+  return [track.title, track.artist ?? "", track.topics.join(" "), track.event?.content ?? ""]
     .join(" ")
     .toLowerCase();
 }

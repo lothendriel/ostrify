@@ -39,7 +39,7 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           handlePlay();
         }
@@ -61,21 +61,21 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
         <div className="min-w-0">
           <div className={cn("truncate font-medium", isCurrent && "text-primary")}>{track.title}</div>
           <div className="truncate text-sm text-muted-foreground">
-            <ArtistLink pubkey={track.pubkey} fallbackName={track.artist} />
+            <ArtistLink pubkey={track.pubkey} artistId={track.artistId} fallbackName={track.artist} />
           </div>
         </div>
       </div>
 
       {/* Topic (desktop only) */}
       <div className="hidden md:block truncate text-sm text-muted-foreground">
-        {track.topics[0] ? `#${track.topics[0]}` : track.kind === "podcast" ? "Podcast" : ""}
+        {track.source === 'wavlake' ? 'Wavlake' : track.topics[0] ? `#${track.topics[0]}` : track.kind === "podcast" ? "Podcast" : ""}
       </div>
 
       {/* Actions + duration */}
       <div className="flex items-center gap-1 justify-end">
         <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex items-center">
-          <LikeButton trackId={track.id} />
-          <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />
+          {track.event && <LikeButton trackId={track.id} />}
+          {track.event && <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />}
         </div>
         <span className="text-sm text-muted-foreground tabular-nums w-12 text-right">
           {formatDuration(track.duration)}

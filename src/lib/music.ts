@@ -5,8 +5,12 @@ import { sanitizeUrl } from "./sanitize";
 export interface Track {
   /** Stable id used by the player and playlists. */
   id: string;
-  /** The underlying Nostr event. */
-  event: NostrEvent;
+  /** The underlying Nostr event, when the track was published on Nostr. */
+  event?: NostrEvent;
+  /** External catalog tracks are not Nostr events. */
+  source?: "wavlake";
+  artistId?: string;
+  albumId?: string;
   /** Direct audio URL (https). */
   url: string;
   /** Audio MIME type, if known. */
@@ -210,7 +214,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     tagValue(event, "enclosure") ||
     tagValue(event, "media"); // zapstr: ["media", <url>, "http"]
 
-  let mime: string | undefined;
+  let mime: string | undefined = tagValue(event, "m") || tagValue(event, "mime") || tagValue(event, "type");
   let image = tagValue(event, "image") || tagValue(event, "cover") || tagValue(event, "thumb");
   let title = tagValue(event, "title") || tagValue(event, "subject") || tagValue(event, "name");
   let artist = tagValue(event, "artist") || tagValue(event, "creator") || tagValue(event, "author");
@@ -218,17 +222,13 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
   let duration = parseDuration(tagValue(event, "duration"));
 
   // 2. imeta attachment (NIP-92), if present.
-  if (!url) {
-    for (const tag of event.tags) {
-      if (tag[0] !== "imeta") continue;
-      const meta = parseImeta(tag);
-      if (meta.url) {
-        url = meta.url;
-        mime = meta.mime;
-        image = image || meta.image;
-        break;
-      }
-    }
+  for (const tag of event.tags) {
+    if (tag[0] !== "imeta") continue;
+    const meta = parseImeta(tag);
+    if (!url && meta.url) url = meta.url;
+    if (meta.url === url) mime = mime || meta.mime;
+    image = image || meta.image;
+    if (url && mime) break;
   }
 
   // 3. Some kinds (e.g. legacy 32123, Wavlake NOM) put JSON metadata in content.

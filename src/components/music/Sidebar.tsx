@@ -12,6 +12,7 @@ const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/search", label: "Search", icon: Search },
   { to: "/podcasts", label: "Podcasts", icon: Mic },
+  { to: "/wavlake", label: "Wavlake", icon: Music },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

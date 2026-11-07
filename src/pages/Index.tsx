@@ -51,6 +51,8 @@ const Index = () => {
         </div>
       </section>
 
+      <Link to="/wavlake" className="block rounded-lg bg-gradient-to-r from-emerald-900 to-teal-950 p-5 hover:brightness-110 transition-colors"><span className="block text-xs uppercase tracking-wider text-emerald-200 font-semibold">More music to discover</span><span className="block text-xl font-bold mt-1">Explore the Wavlake catalog →</span><span className="block text-sm text-emerald-100 mt-1">Search artists, explore albums and browse more tracks.</span></Link>
+
       <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
 
       <Shelf title="Podcasts" subtitle="Episodes from across the network" tracks={podcasts.slice(0, 10)} isLoading={podcastsLoading} />

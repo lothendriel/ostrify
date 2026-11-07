@@ -97,10 +97,10 @@ coordinate `30003:<pubkey>:<d>` and the latest event id.
 
 ## Discovery notes
 
-- **Featured catalogs.** To ensure a solid base of music, the general feed also
-  queries well-known catalog publishers by `authors` — notably Wavlake's proxy
-  pubkey (`npub1yfg0d955c2jrj2080ew7pa4xrtj7x7s7umt28wh0zurwmxgpyj9shwv6vg`), which
-  re-publishes its catalog to Nostr.
+- **Wavlake catalog.** Ostrify offers browser-based search and paginated browsing
+  using Wavlake's public catalog API. Catalog tracks are not Nostr events and
+  are not currently saved to Nostr playlists. The Nostr feed separately queries
+  Wavlake's public profile, without assuming that it publishes the full catalog.
 - **Podcasts.** Because genuine NIP-F4 (kind `54`) episodes are still rare, the
   Podcasts view also includes kind `1`/`1063` audio tagged with podcast-related
   hashtags (`podcast`, `episode`, `pc20`, etc.).

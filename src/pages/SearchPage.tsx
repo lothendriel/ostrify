@@ -48,6 +48,7 @@ const SearchPage = () => {
           <h2 className="text-xl font-bold">
             Results for "{query}"
           </h2>
+          <p className="text-sm text-muted-foreground">These results search recently loaded Nostr audio. For Wavlake’s full catalog, <Link to="/wavlake" className="text-primary underline">search Wavlake</Link>.</p>
           <TrackList
             tracks={results}
             isLoading={tracksLoading || podcastsLoading}

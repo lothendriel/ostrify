@@ -31,7 +31,11 @@ export function TrackCard({ track, queue }: TrackCardProps) {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === "Enter") handlePlay(e as unknown as React.MouseEvent);
+        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          if (isCurrent) player.togglePlay();
+          else player.playQueue(queue, queue.findIndex((t) => t.id === track.id));
+        }
       }}
     >
       <div className="relative mb-3">
@@ -54,7 +58,7 @@ export function TrackCard({ track, queue }: TrackCardProps) {
       </div>
       <div className="font-semibold truncate">{track.title}</div>
       <div className="text-sm text-muted-foreground truncate mt-0.5">
-        <ArtistLink pubkey={track.pubkey} fallbackName={track.artist} />
+        <ArtistLink pubkey={track.pubkey} artistId={track.artistId} fallbackName={track.artist} />
       </div>
     </div>
   );

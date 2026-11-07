@@ -35,11 +35,11 @@ export function PlayerBar() {
             <div className="min-w-0 hidden sm:block">
               <div className="truncate font-medium text-sm">{current.title}</div>
               <div className="truncate text-xs text-muted-foreground">
-                <ArtistLink pubkey={current.pubkey} fallbackName={current.artist} />
+                <ArtistLink pubkey={current.pubkey} artistId={current.artistId} fallbackName={current.artist} />
               </div>
             </div>
             <div className="hidden sm:block">
-              <LikeButton trackId={current.id} size={16} />
+              {current.event && <LikeButton trackId={current.id} size={16} />}
             </div>
           </>
         ) : (
