@@ -19,6 +19,7 @@ import MyProfile from "./pages/MyProfile";
 import AudiobooksPage from "./pages/AudiobooksPage";
 import AudiobookLibraryPage from "./pages/AudiobookLibraryPage";
 import { NIP19Page } from "./pages/NIP19Page";
+import { ArtistPage } from "./pages/ArtistPage";
 import NotFound from "./pages/NotFound";
 
 export function AppRouter() {
@@ -45,6 +46,7 @@ export function AppRouter() {
             <Route path="/artists" element={<FollowedArtists />} />
             <Route path="/friends" element={<FriendsPage />} />
             <Route path="/my-profile" element={<MyProfile />} />
+            <Route path="/artist/:nip19" element={<ArtistPage />} />
             <Route path="/friends/:nip19" element={<FriendsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}

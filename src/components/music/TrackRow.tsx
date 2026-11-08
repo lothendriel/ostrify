@@ -61,7 +61,7 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
         <div className="min-w-0">
           <div className={cn("truncate font-medium", isCurrent && "text-primary")}>{track.title}</div>
           <div className="truncate text-sm text-muted-foreground">
-            <ArtistLink pubkey={track.pubkey} artistId={track.artistId} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
+            <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
           </div>
         </div>
       </div>

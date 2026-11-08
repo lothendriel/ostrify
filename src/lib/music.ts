@@ -1,4 +1,5 @@
 import type { NostrEvent } from "@nostrify/nostrify";
+import { nip19 } from "nostr-tools";
 import { sanitizeUrl } from "./sanitize";
 
 /** A universal playable audio item (music track or podcast episode). */
@@ -10,6 +11,8 @@ export interface Track {
   /** External catalog tracks are not Nostr events. */
   source?: "wavlake" | "librivox" | "tunestr" | "fountain";
   artistId?: string;
+  /** Explicit Nostr identity for the artist, distinct from the event publisher. */
+  artistPubkey?: string;
   albumId?: string;
   /** Stable catalog or Nostr coordinate of the parent podcast show. */
   showId?: string;
@@ -51,6 +54,52 @@ function parseDuration(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const n = Number(value);
   if (Number.isFinite(n) && n > 0) return n;
+  return undefined;
+}
+
+function decodeArtistPubkey(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (/^[0-9a-f]{64}$/i.test(value)) return value.toLowerCase();
+  try {
+    const decoded = nip19.decode(value);
+    if (decoded.type === "npub") return decoded.data;
+    if (decoded.type === "nprofile") return decoded.data.pubkey;
+  } catch {
+    // Artist display names and non-Nostr identifiers aren't account references.
+  }
+  return undefined;
+}
+
+/** Read only explicitly typed artist identities, never infer from the publisher. */
+function artistPubkey(event: NostrEvent, json?: Record<string, unknown>): string | undefined {
+  const explicitTags = event.tags.filter(([name]) =>
+    ["artist_pubkey", "artist-pubkey", "artist_npub", "artist-npub", "artistNpub"].includes(name),
+  );
+  for (const tag of explicitTags) {
+    const decoded = decodeArtistPubkey(tag[1]);
+    if (decoded) return decoded;
+  }
+
+  const artistTags = event.tags.filter(([name]) => name === "artist");
+  for (const tag of artistTags) {
+    const decoded = decodeArtistPubkey(tag[1]);
+    if (decoded) return decoded;
+  }
+
+  const markedPubkey = event.tags.find((tag) =>
+    tag[0] === "p" && !!decodeArtistPubkey(tag[1]) && tag.slice(3).some((marker) => ["artist", "performer"].includes(marker)),
+  );
+  const markedKey = decodeArtistPubkey(markedPubkey?.[1]);
+  if (markedKey) return markedKey;
+
+  if (!json) return undefined;
+  for (const key of ["artistPubkey", "artist_pubkey", "artistNpub", "artist_npub"]) {
+    const value = json[key];
+    if (typeof value === "string") {
+      const decoded = decodeArtistPubkey(value);
+      if (decoded) return decoded;
+    }
+  }
   return undefined;
 }
 
@@ -102,6 +151,7 @@ export function parseFileMetadataTrack(event: NostrEvent): Track | null {
     mimeType: mime,
     title,
     artist,
+    artistPubkey: artistPubkey(event),
     album: tagValue(event, "album") || tagValue(event, "release"),
     image,
     pubkey: event.pubkey,
@@ -264,6 +314,16 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
   // Shared kinds can contain non-audio data, so require audio evidence.
   if (!safeUrl) return null;
 
+  let jsonMetadata: Record<string, unknown> | undefined;
+  if (event.content.trim().startsWith("{")) {
+    try {
+      const parsed: unknown = JSON.parse(event.content);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) jsonMetadata = parsed as Record<string, unknown>;
+    } catch {
+      // Ignore malformed optional metadata.
+    }
+  }
+
   return {
     id: event.id,
     event,
@@ -271,6 +331,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     mimeType: mime,
     title: title || "Untitled",
     artist,
+    artistPubkey: artistPubkey(event, jsonMetadata),
     album,
     image: sanitizeUrl(image),
     pubkey: event.pubkey,

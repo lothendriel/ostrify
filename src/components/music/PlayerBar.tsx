@@ -35,7 +35,7 @@ export function PlayerBar() {
             <div className="min-w-0 hidden sm:block">
               <div className="truncate font-medium text-sm">{current.title}</div>
               <div className="truncate text-xs text-muted-foreground">
-                <ArtistLink pubkey={current.pubkey} artistId={current.artistId} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />
+                <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />
               </div>
             </div>
             <div className="hidden sm:block">
