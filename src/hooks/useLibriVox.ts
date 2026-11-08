@@ -9,9 +9,10 @@ interface LibriVoxBook {
   title: string;
   author: string;
   language?: string;
-  cover?: string;
+  covers: string[];
   duration?: number;
   chapters: Track[];
+  unavailableChapterTitles: string[];
   sectionCount: number;
 }
 
@@ -30,19 +31,27 @@ function parseBook(value: unknown): LibriVoxBook | null {
     const a = record(author);
     return [text(a?.first_name), text(a?.last_name)].filter(Boolean).join(' ');
   }).filter(Boolean).join(', ') || 'Unknown author' : 'Unknown author';
-  const cover = sanitizeUrl(text(book.coverart_thumbnail)) || sanitizeUrl(text(book.coverart_jpg));
+  const coverUrls = [book.coverart_thumbnail, book.coverart_jpg]
+    .map(value => sanitizeUrl(text(value)))
+    .filter((url): url is string => !!url);
   const chapters: Track[] = [];
+  const unavailableChapterTitles: string[] = [];
   if (Array.isArray(book.sections)) {
     for (const value of book.sections) {
       const section = record(value);
       const sectionId = numericId(section?.id);
+      if (!sectionId) continue;
+      const chapterTitle = text(section?.title) || `Chapter ${text(section?.section_number) || chapters.length + unavailableChapterTitles.length + 1}`;
       const url = sanitizeUrl(text(section?.listen_url));
-      if (!sectionId || !url) continue;
-      const chapterTitle = text(section?.title) || `Chapter ${text(section?.section_number) || chapters.length + 1}`;
-      chapters.push({ id: `librivox:${bookId}:${sectionId}`, source: 'librivox', kind: 'audiobook', title: chapterTitle, artist: author, album: title, image: cover, url, pubkey: '', duration: seconds(section?.playtime), topics: [], createdAt: 0 });
+      if (!url) {
+        unavailableChapterTitles.push(chapterTitle);
+        continue;
+      }
+      chapters.push({ id: `librivox:${bookId}:${sectionId}`, source: 'librivox', kind: 'audiobook', title: chapterTitle, artist: author, album: title, image: coverUrls[0], url, pubkey: '', duration: seconds(section?.playtime), topics: [], createdAt: 0 });
     }
   }
-  return { id: bookId, title, author, cover, language: text(book.language), duration: seconds(book.totaltimesecs), sectionCount: Number(book.num_sections) || chapters.length, chapters };
+  const sectionCount = Number(book.num_sections);
+  return { id: bookId, title, author, covers: coverUrls, language: text(book.language), duration: seconds(book.totaltimesecs), sectionCount: Number.isFinite(sectionCount) && sectionCount > 0 ? sectionCount : chapters.length + unavailableChapterTitles.length, chapters, unavailableChapterTitles };
 }
 
 async function fetchBooks(params: Record<string, string>, signal: AbortSignal): Promise<LibriVoxBook[]> {
@@ -85,7 +94,7 @@ export function useLibriVoxBook(id: string | undefined) {
     queryKey: ['librivox-book', id], enabled: !!id && /^\d{1,12}$/.test(id), retry: 1, staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }) => {
       if (!id || !/^\d{1,12}$/.test(id)) throw new Error('Invalid audiobook ID.');
-      const books = await fetchBooks({ id, extended: '1' }, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
+      const books = await fetchBooks({ id, extended: '1', coverart: '1' }, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
       return books.find(book => book.id === id) ?? null;
     },
   });
