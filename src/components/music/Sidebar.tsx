@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Music2, Settings, Mic, Users, BookOpen } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Music2, Settings, Mic, Users, BookOpen, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePlaylists } from "@/hooks/usePlaylists";
+import { useAudiobookLibrary } from "@/hooks/useAudiobookLibrary";
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 
 const navItems = [
@@ -14,6 +15,7 @@ const navItems = [
   { to: "/music", label: "Nostr music", icon: Music2 },
   { to: "/podcasts", label: "Podcasts", icon: Mic },
   { to: "/audiobooks", label: "Audiobooks", icon: BookOpen },
+  { to: "/audiobook-library", label: "Saved Audiobooks", icon: Bookmark },
   { to: "/wavlake", label: "Wavlake", icon: Music },
   { to: "/friends", label: "Friends", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
@@ -22,6 +24,7 @@ const navItems = [
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
   const { data: playlists, isLoading } = usePlaylists();
+  const audiobookLibrary = useAudiobookLibrary();
   const [createOpen, setCreateOpen] = useState(false);
 
   const liked = playlists?.find((p) => p.isLiked);
@@ -104,6 +107,23 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   <div className="text-xs text-muted-foreground">
                     {liked ? `${liked.trackIds.length} songs` : "Playlist"}
                   </div>
+                </div>
+              </NavLink>
+
+              <NavLink
+                to="/audiobook-library"
+                onClick={onNavigate}
+                className={({ isActive }) => cn(
+                  "flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors",
+                  isActive && "bg-accent/10",
+                )}
+              >
+                <div className="size-11 rounded-md bg-gradient-to-br from-rose-500 to-violet-700 flex items-center justify-center shrink-0">
+                  <BookOpen className="size-5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-medium text-sm truncate">Saved Audiobooks</div>
+                  <div className="text-xs text-muted-foreground">{`${audiobookLibrary.favoriteBooks.length} favorites · ${audiobookLibrary.collections.length} collections`}</div>
                 </div>
               </NavLink>
 
