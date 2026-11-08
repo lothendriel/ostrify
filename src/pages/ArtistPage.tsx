@@ -57,6 +57,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
     queryFn: async ({ signal }) => {
       const events = await nostr.query([
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#p": [pubkey], limit: 200 },
+        { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist": [nip19.npubEncode(pubkey)], limit: 200 },
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist_pubkey": [pubkey], limit: 200 },
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist_npub": [nip19.npubEncode(pubkey)], limit: 200 },
       ], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
