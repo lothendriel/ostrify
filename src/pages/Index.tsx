@@ -56,7 +56,7 @@ const Index = () => {
       <Link to="/music" className="block rounded-lg bg-gradient-to-r from-emerald-900 to-teal-950 p-5 hover:brightness-110 transition-colors"><span className="block text-xs uppercase tracking-wider text-emerald-200 font-semibold">More music to discover</span><span className="block text-xl font-bold mt-1">Explore Nostr & Wavlake music →</span><span className="block text-sm text-emerald-100 mt-1">Find relay-published tracks or browse artists, albums, and more.</span></Link>
       <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
 
-      <Shelf title="Podcasts" subtitle="Episodes from across the network" tracks={podcasts.slice(0, 10)} isLoading={podcastsLoading} />
+      <Shelf title="Podcasts" subtitle="Nostr episodes and Fountain-linked shows" tracks={podcasts.slice(0, 10)} isLoading={podcastsLoading} />
 
       {categoryShelves.map(({ category, tracks: catTracks }) => (
         <Shelf key={category.id} title={category.label} tracks={catTracks} />
