@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
-import { Users, UserPlus, Radio, Disc3, X } from 'lucide-react';
+import { Users, UserPlus, Radio, Disc3, X, Heart, Music2, Library } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,7 @@ import { useFriendLibrary, useFriendStatuses } from '@/hooks/useFriendLibrary';
 import { useTracksByIds } from '@/hooks/useTracksByIds';
 import { useWavlakeRelease } from '@/hooks/useWavlake';
 import { TrackList } from '@/components/music/TrackList';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
 import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
@@ -23,7 +24,7 @@ function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNo
   const { data } = useAuthor(pubkey);
   const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(pubkey);
   const image = sanitizeUrl(data?.metadata?.picture);
-  return <div className="flex items-center gap-3 rounded-xl bg-secondary/50 p-3 min-w-0"><div className="size-11 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Users className="size-5 text-muted-foreground" />}</div><div className="min-w-0 flex-1"><Link to={`/friends/${nip19.npubEncode(pubkey)}`} className="font-semibold truncate block hover:underline">{name}</Link><p className="text-xs text-muted-foreground truncate">{nip19.npubEncode(pubkey).slice(0, 18)}…</p></div>{children}</div>;
+  return <div className="flex items-center gap-3 rounded-xl bg-secondary/50 p-3 min-w-0"><div className="size-11 rounded-full bg-muted overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Users className="size-5 text-muted-foreground" />}</div><div className="min-w-0 flex-1"><Link to={`/${nip19.npubEncode(pubkey)}`} className="font-semibold truncate block hover:underline">{name}</Link><p className="text-xs text-muted-foreground truncate">{nip19.npubEncode(pubkey).slice(0, 18)}…</p></div>{children}</div>;
 }
 
 function Artist({ reference }: { reference: string }) {
@@ -91,11 +92,27 @@ function ProfileFollowAction({ pubkey }: { pubkey: string }) {
 
 function FriendProfile({ pubkey }: { pubkey: string }) {
   const library = useFriendLibrary(pubkey);
+  const author = useAuthor(pubkey);
   const [params] = useSearchParams();
-  return <div className="space-y-6"><Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link><Person pubkey={pubkey} /><ProfileFollowAction pubkey={pubkey} /><ProfileFriendAction pubkey={pubkey} invitationLink={params.has('invite')} /><p className="text-sm text-muted-foreground">Public music library. Visibility and availability depend on the publisher and their relays.</p>
-    {library.isLoading ? <Skeleton className="h-40 w-full" /> : library.isError ? <p role="alert">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
-      <section className="space-y-3"><h2 className="text-2xl font-bold">Public playlists & liked songs</h2>{library.data?.playlists.length ? library.data.playlists.map(p => <PublicPlaylist key={p.id} title={p.title} ids={p.tracks} />) : <p className="text-muted-foreground">No public music playlists found.</p>}{library.data?.otherListsUnverified && <p className="text-sm text-muted-foreground">Some other bookmark collections could not be checked because their events weren’t available on your relays.</p>}</section>
-      <section className="space-y-3"><h2 className="text-2xl font-bold">Followed artists</h2>{library.data?.artists.length ? <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{library.data.artists.map(ref => <Artist key={ref} reference={ref} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>
+  const metadata = author.data?.metadata;
+  const name = metadata?.display_name || metadata?.name || genUserName(pubkey);
+  const picture = sanitizeUrl(metadata?.picture);
+  const liked = library.data?.playlists.find(item => item.id === 'nostr-tunes-liked');
+  const playlists = library.data?.playlists ?? [];
+  const regular = (library.data?.playlists ?? []).filter(item => item.id !== 'nostr-tunes-liked');
+  const likedTracks = useTracksByIds(liked?.tracks);
+  return <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6">
+    <Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link>
+    <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-emerald-900/70 via-teal-950 to-card p-6 sm:flex-row sm:items-center sm:p-8">
+      <Avatar className="size-24 shrink-0 shadow-lg sm:size-32"><AvatarImage src={picture} alt={name} /><AvatarFallback className="text-3xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Ostrify profile</p><h1 className="mt-2 break-words text-4xl font-bold tracking-tight">{name}</h1><p className="mt-2 text-sm text-muted-foreground">Public Ostrify music library</p>{metadata?.about && <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">{metadata.about}</p>}</div>
+    </header>
+    <div className="flex flex-wrap items-center gap-3"><ProfileFollowAction pubkey={pubkey} /><ProfileFriendAction pubkey={pubkey} invitationLink={params.has('invite')} /></div>
+    {author.isLoading ? <Skeleton className="h-24 w-full" /> : null}
+    {library.isLoading ? <div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div> : library.isError ? <p role="alert" className="text-sm text-destructive">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
+      <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Heart className="size-5 text-primary" /> Liked songs</h2><TrackList tracks={likedTracks.data?.tracks ?? []} isLoading={likedTracks.isLoading} emptyMessage={liked ? 'No playable liked songs were found.' : 'This person has no public liked songs.'} />{!!likedTracks.data?.unavailable && <p className="text-sm text-muted-foreground">{likedTracks.data.unavailable} saved track(s) weren’t available from your relays.</p>}</section>
+      <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Music2 className="size-5 text-primary" /> Followed artists</h2>{library.data?.artists.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.data.artists.map(reference => <Artist key={reference} reference={reference} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>
+      <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Library className="size-5 text-primary" /> Playlists</h2>{regular.length ? <div className="grid gap-3 sm:grid-cols-2">{regular.map(playlist => <PublicPlaylist key={playlist.id} title={playlist.title} ids={playlist.tracks} />)}</div> : <p className="text-muted-foreground">No public playlists found.</p>}{library.data?.otherListsUnverified && <p className="text-sm text-muted-foreground">Some public lists couldn’t be checked because their referenced events weren’t available on your relays.</p>}</section>
     </>}
   </div>;
 }
@@ -162,10 +179,10 @@ function FriendsHome() {
   </div>;
 }
 
-export default function FriendsPage() {
+export default function FriendsPage({ profilePubkey }: { profilePubkey?: string }) {
   useSeoMeta({ title: 'Friends — Ostrify' });
   const { nip19: identifier } = useParams<{ nip19: string }>();
-  let pubkey: string | undefined;
-  if (identifier) { try { const d = nip19.decode(identifier); if (d.type === 'npub') pubkey = d.data; else if (d.type === 'nprofile') pubkey = d.data.pubkey; } catch { /* invalid */ } }
-  return <div className="p-4 sm:p-6 max-w-4xl mx-auto">{identifier ? pubkey ? <FriendProfile pubkey={pubkey} /> : <p>Profile not found.</p> : <FriendsHome />}</div>;
+  let pubkey: string | undefined = profilePubkey;
+  if (!pubkey && identifier) { try { const d = nip19.decode(identifier); if (d.type === 'npub') pubkey = d.data; else if (d.type === 'nprofile') pubkey = d.data.pubkey; } catch { /* invalid */ } }
+  return <div className={pubkey ? '' : 'p-4 sm:p-6 max-w-4xl mx-auto'}>{pubkey ? <FriendProfile pubkey={pubkey} /> : identifier ? <p>Profile not found.</p> : <FriendsHome />}</div>;
 }

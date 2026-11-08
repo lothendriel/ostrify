@@ -25,7 +25,7 @@ describe('Ostrify people search', () => {
     expect(screen.queryByRole('link', { name: "View Matt's Ostrify profile" })).not.toBeInTheDocument();
     fireEvent.change(search, { target: { value: 'matt' } });
     const link = screen.getByRole('link', { name: "View Matt's Ostrify profile" });
-    expect(link).toHaveAttribute('href', `/friends/${nip19.npubEncode(matt)}`);
+    expect(link).toHaveAttribute('href', `/${nip19.npubEncode(matt)}`);
     expect(link.querySelector('img')).toHaveAttribute('src', 'https://example.com/matt.jpg');
     fireEvent.click(screen.getByRole('button', { name: 'Clear people search' }));
     expect(screen.queryByRole('link', { name: "View Matt's Ostrify profile" })).not.toBeInTheDocument();

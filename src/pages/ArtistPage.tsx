@@ -13,8 +13,16 @@ import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
+import FriendsPage from "./FriendsPage";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 export function ArtistPage({ pubkey }: { pubkey: string }) {
+  const { user } = useCurrentUser();
+  if (user?.pubkey !== pubkey) return <FriendsPage profilePubkey={pubkey} />;
+  return <OwnArtistPage pubkey={pubkey} />;
+}
+
+function OwnArtistPage({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
   const { data: tracks = [], isLoading } = useArtistTracks(pubkey);
   const player = usePlayer();

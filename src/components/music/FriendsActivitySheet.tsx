@@ -19,7 +19,7 @@ function FriendActivity({ pubkey, status, close }: { pubkey: string; status?: st
   return <article className="rounded-xl border border-border/70 bg-card p-3">
     <div className="flex items-center gap-3">
       <div className="size-11 shrink-0 overflow-hidden rounded-full bg-secondary flex items-center justify-center text-sm font-semibold">{avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}</div>
-      <div className="min-w-0 flex-1"><Link to={`/friends/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate font-semibold hover:underline">{name}</Link><p className="truncate text-xs text-muted-foreground">Ostrify friend</p></div>
+      <div className="min-w-0 flex-1"><Link to={`/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate font-semibold hover:underline">{name}</Link><p className="truncate text-xs text-muted-foreground">Ostrify friend</p></div>
     </div>
     <div className="mt-3 flex items-start gap-2 rounded-lg bg-secondary/60 p-3 text-sm">
       <Headphones className="mt-0.5 size-4 shrink-0 text-primary" />

@@ -1,10 +1,13 @@
 import { nip19 } from 'nostr-tools';
 import { useParams } from 'react-router-dom';
 import { ArtistPage } from './ArtistPage';
+import FriendsPage from './FriendsPage';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import NotFound from './NotFound';
 
 export function NIP19Page() {
   const { nip19: identifier } = useParams<{ nip19: string }>();
+  const { user } = useCurrentUser();
 
   if (!identifier) {
     return <NotFound />;
@@ -19,10 +22,10 @@ export function NIP19Page() {
 
   switch (decoded.type) {
     case 'npub':
-      return <ArtistPage pubkey={decoded.data} />;
+      return user?.pubkey === decoded.data ? <ArtistPage pubkey={decoded.data} /> : <FriendsPage profilePubkey={decoded.data} />;
 
     case 'nprofile':
-      return <ArtistPage pubkey={decoded.data.pubkey} />;
+      return user?.pubkey === decoded.data.pubkey ? <ArtistPage pubkey={decoded.data.pubkey} /> : <FriendsPage profilePubkey={decoded.data.pubkey} />;
 
     case 'note':
       // Could resolve a single track in the future.
