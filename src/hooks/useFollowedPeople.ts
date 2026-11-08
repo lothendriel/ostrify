@@ -51,7 +51,11 @@ export function useFollowedPeople() {
       const fromRelays = newest(events, user.pubkey);
       const cached = client.getQueryData<NostrEvent | null>(key);
       const existing = fromRelays && cached ? newest([fromRelays, cached], user.pubkey) : fromRelays ?? cached ?? null;
-      const tags: string[][] = existing ? existing.tags.filter(([name, value]) => !(name === HIDDEN_TAG && value === section)).map(tag => [...tag]) : [['d', ID], ['title', 'Ostrify followed people']];
+      const tags: string[][] = existing ? existing.tags.filter(([name, value]) => !(name === HIDDEN_TAG && value === section) && !(name === 'p' && HEX.test(value ?? ''))).map(tag => [...tag]) : [['d', ID], ['title', 'Ostrify followed people']];
+      if (existing) {
+        const people = [...new Set(existing.tags.filter(([name, value]) => name === 'p' && HEX.test(value ?? '') && value !== user.pubkey).map(([, value]) => value))];
+        tags.push(...people.map(pubkey => ['p', pubkey]));
+      }
       if (!visible) tags.push([HIDDEN_TAG, section]);
       const now = Math.floor(Date.now() / 1000);
       if (existing && existing.created_at >= now) throw new Error('Please wait a moment before updating profile privacy again.');

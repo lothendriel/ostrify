@@ -10,8 +10,11 @@ export const APP_RELAYS: RelayMetadata = {
     // --- Music-focused sources (read) ---
     // Wavlake is the biggest source of artist-published music tracks.
     { url: 'wss://relay.wavlake.com/', read: true, write: false },
-    // Fountain hosts podcasts and music.
+    // Fountain hosts podcasts, music, and NIP-53 streams.
     { url: 'wss://relay.fountain.fm/', read: true, write: false },
+    // TuneStr's community uses Lightning Relay and nostr.land for live music events.
+    { url: 'wss://lightningrelay.com/', read: true, write: false },
+    { url: 'wss://nostr.land/', read: true, write: false },
     // Aggregating/indexing relay — great for discovery across the network.
     { url: 'wss://relay.nostr.band/', read: true, write: false },
     // Specializes in profiles/metadata — resolves artist names & avatars.

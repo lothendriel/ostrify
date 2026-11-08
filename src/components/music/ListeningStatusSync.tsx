@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePlayer } from '@/hooks/usePlayer';
-import { useListeningSharing, setListeningSharingForCurrentUser } from '@/hooks/useListeningSharing';
+import { useListeningSharing } from '@/hooks/useListeningSharing';
 
 /** Publish explicitly enabled public NIP-38 music statuses, clearing on pause/disable. */
 export function ListeningStatusSync() {
@@ -12,6 +12,20 @@ export function ListeningStatusSync() {
   const { enabled } = useListeningSharing();
   const last = useRef('');
   const sequence = useRef(0);
+
+  useEffect(() => {
+    const clearStatus = async () => {
+      if (!user) return;
+      const sequenceAtStart = ++sequence.current;
+      try {
+        const event = await user.signer.signEvent({ kind: 30315, content: '', tags: [['d', 'music']], created_at: Math.floor(Date.now() / 1000) });
+        if (sequenceAtStart !== sequence.current) return;
+        await nostr.event(event, { signal: AbortSignal.timeout(5000) });
+      } catch (error) { console.warn('Could not clear listening status after privacy change', error); }
+    };
+    window.addEventListener('ostrify:clear-listening-status', clearStatus);
+    return () => window.removeEventListener('ostrify:clear-listening-status', clearStatus);
+  }, [user, nostr]);
 
   useEffect(() => {
     if (!user) { last.current = ''; return; }
@@ -35,7 +49,6 @@ export function ListeningStatusSync() {
         const signed = await user.signer.signEvent({ kind: 30315, content, tags, created_at: Math.floor(Date.now() / 1000) });
         if (seq !== sequence.current) return;
         if (playing && !enabled) return;
-        if (!playing && !enabled) setListeningSharingForCurrentUser(false);
         await nostr.event(signed, { signal: AbortSignal.timeout(5000) });
       } catch (error) { console.warn('Could not update listening status', error); }
     };

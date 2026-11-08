@@ -8,7 +8,7 @@ export interface Track {
   /** The underlying Nostr event, when the track was published on Nostr. */
   event?: NostrEvent;
   /** External catalog tracks are not Nostr events. */
-  source?: "wavlake" | "librivox";
+  source?: "wavlake" | "librivox" | "tunestr";
   artistId?: string;
   albumId?: string;
   /** Direct audio URL (https). */

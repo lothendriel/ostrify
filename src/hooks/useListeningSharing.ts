@@ -3,11 +3,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const eventName = 'ostrify-listening-sharing';
 const keyFor = (pubkey: string) => `ostrify:listening-sharing:${pubkey}`;
-let latestSetter: ((value: boolean) => void) | null = null;
-export function setListeningSharingForCurrentUser(value: boolean): void {
-  latestSetter?.(value);
-}
-
+const CLEAR_EVENT = 'ostrify:clear-listening-status';
 function subscribe(listener: () => void) {
   const onStorage = (event: StorageEvent) => {
     if (event.key?.startsWith('ostrify:listening-sharing:') || event.key === null) listener();
@@ -35,14 +31,14 @@ export function useListeningSharing() {
 
   function setEnabled(value: boolean): void {
     if (!key) return;
-    try {
-      localStorage.setItem(key, String(value));
-    } catch {
-      throw new Error('Could not save listening activity privacy in this browser.');
+    if (!value) {
+      try { localStorage.setItem(key, 'false'); } catch { throw new Error('Could not save listening activity privacy in this browser.'); }
+      window.dispatchEvent(new Event(CLEAR_EVENT));
+    } else {
+      try { localStorage.setItem(key, 'true'); } catch { throw new Error('Could not save listening activity privacy in this browser.'); }
     }
     window.dispatchEvent(new Event(eventName));
   }
 
-  latestSetter = setEnabled;
   return { enabled, setEnabled };
 }

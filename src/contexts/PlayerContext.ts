@@ -10,6 +10,7 @@ export interface PlayerState {
   index: number;
   /** The currently loaded track, if any. */
   current: Track | undefined;
+  playbackError?: string | null;
   isPlaying: boolean;
   /** Current playback position in seconds. */
   progress: number;

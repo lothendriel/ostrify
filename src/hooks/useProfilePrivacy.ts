@@ -23,9 +23,9 @@ export function useProfilePrivacy(pubkey?: string) {
     },
   });
   const sections = isOwner ? followedPeople.hiddenSections : remote.data;
-  const isLoading = isOwner ? followedPeople.isLoading : remote.isLoading;
+  const isLoading = isOwner ? followedPeople.isLoading : remote.isLoading || !remote.isFetched;
   const isError = isOwner ? followedPeople.isError : remote.isError;
-  const privacyUnknown = !isOwner && remote.isError && !remote.data;
+  const privacyUnknown = !isOwner && (remote.isError || !remote.isFetched);
 
   return {
     isOwner,
