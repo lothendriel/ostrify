@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Music2, Mic, Users, BookOpen, Bookmark } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,11 +12,10 @@ import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/search", label: "Search", icon: Search },
-  { to: "/music", label: "Nostr music", icon: Music2 },
+  { to: "/music", label: "Music", icon: Music },
   { to: "/podcasts", label: "Podcasts", icon: Mic },
   { to: "/audiobooks", label: "Audiobooks", icon: BookOpen },
   { to: "/audiobook-library", label: "Saved Audiobooks", icon: Bookmark },
-  { to: "/wavlake", label: "Wavlake", icon: Music },
   { to: "/friends", label: "Friends", icon: Users },
 ];
 

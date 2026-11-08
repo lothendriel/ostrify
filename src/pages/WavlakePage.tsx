@@ -47,7 +47,7 @@ function FeaturedRankings() {
   </div>;
 }
 
-function Discovery() {
+export function WavlakeDiscovery() {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   useEffect(() => { const timer = setTimeout(() => setDebounced(query.trim()), 400); return () => clearTimeout(timer); }, [query]);
@@ -82,5 +82,5 @@ export default function WavlakePage() {
   const { type, id } = useParams<{ type: string; id: string }>();
   useSeoMeta({ title: 'Wavlake catalog — Ostrify' });
   if (type === 'artist' || type === 'album') return <Release type={type} itemId={id} />;
-  return <Discovery />;
+  return <WavlakeDiscovery />;
 }

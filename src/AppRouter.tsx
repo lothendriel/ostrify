@@ -40,7 +40,7 @@ export function AppRouter() {
             <Route path="/audiobooks" element={<AudiobooksPage />} />
             <Route path="/audiobooks/:id" element={<AudiobooksPage />} />
             <Route path="/music" element={<MusicDiscovery />} />
-            <Route path="/wavlake" element={<WavlakePage />} />
+            <Route path="/wavlake" element={<MusicDiscovery />} />
             <Route path="/wavlake/:type/:id" element={<WavlakePage />} />
             <Route path="/artists" element={<FollowedArtists />} />
             <Route path="/friends" element={<FriendsPage />} />
