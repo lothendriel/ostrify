@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Hls from "hls.js";
 import type { Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const [playbackError, setPlaybackError] = useState<string | null>(null);
   if (audioRef.current === null && typeof Audio !== "undefined") {
     audioRef.current = new Audio();
   }
@@ -23,13 +20,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const current = index >= 0 ? queue[index] : undefined;
 
-  // Load direct audio URLs and HLS livestream playlists into the same player.
+  // Load the current audio track whenever it changes. Video streams are handled
+  // by their inline video player rather than the audio queue.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    setPlaybackError(null);
     if (!current) {
       audio.pause();
       audio.removeAttribute("src");
@@ -37,41 +32,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setDuration(0);
       return;
     }
-    let playAfterHlsManifest = false;
-    if (/\.m3u8(?:$|[?#])/i.test(current.url)) {
-      if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-        audio.src = current.url;
-        audio.load();
-      } else if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true });
-        hlsRef.current = hls;
-        hls.attachMedia(audio);
-        hls.loadSource(current.url);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (audioRef.current !== audio || hlsRef.current !== hls) return;
-          audio.play().then(() => { setPlaybackError(null); setIsPlaying(true); }).catch(() => setIsPlaying(false));
-        });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            setPlaybackError('This live audio stream is currently unavailable.');
-            setIsPlaying(false);
-          }
-        });
-        playAfterHlsManifest = true;
-      } else {
-        setPlaybackError('This browser does not support HLS live streams.');
-        setIsPlaying(false);
-        return;
-      }
-    } else {
+    if (audio.src !== current.url) {
       audio.src = current.url;
       audio.load();
     }
-    if (!playAfterHlsManifest) audio.play().then(() => { setPlaybackError(null); setIsPlaying(true); }).catch(() => { setIsPlaying(false); });
+    audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
-
-  useEffect(() => () => { hlsRef.current?.destroy(); }, []);
 
   // Sync volume / mute.
   useEffect(() => {
@@ -129,10 +96,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const onDuration = () => setDuration(audio.duration || 0);
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
-    const onError = () => {
-      setPlaybackError('Could not play this stream. It may have ended or the host may have disabled playback.');
-      setIsPlaying(false);
-    };
     const onEnded = () => {
       if (repeat === "one") {
         audio.currentTime = 0;
@@ -152,7 +115,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audio.addEventListener("durationchange", onDuration);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
-    audio.addEventListener("error", onError);
     audio.addEventListener("ended", onEnded);
     return () => {
       audio.removeEventListener("timeupdate", onTime);
@@ -160,7 +122,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("durationchange", onDuration);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
-      audio.removeEventListener("error", onError);
       audio.removeEventListener("ended", onEnded);
     };
   }, [index, repeat, pickNextIndex]);
@@ -221,7 +182,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       queue,
       index,
       current,
-      playbackError,
       isPlaying,
       progress,
       duration,
@@ -245,7 +205,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       queue,
       index,
       current,
-      playbackError,
       isPlaying,
       progress,
       duration,

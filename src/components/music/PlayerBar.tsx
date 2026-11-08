@@ -39,13 +39,12 @@ export function PlayerBar() {
               </div>
             </div>
             <div className="hidden sm:block">
-              {current.source !== 'librivox' && current.source !== 'tunestr' && <LikeButton trackId={current.id} size={16} />}
+              {current.source !== 'librivox' && <LikeButton trackId={current.id} size={16} />}
             </div>
           </>
         ) : (
           <div className="text-sm text-muted-foreground hidden sm:block">Nothing playing</div>
         )}
-        {player.playbackError && <span role="status" className="hidden md:block max-w-40 truncate text-xs text-destructive" title={player.playbackError}>{player.playbackError}</span>}
       </div>
 
       {/* Controls */}

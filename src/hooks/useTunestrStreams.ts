@@ -13,11 +13,24 @@ export interface TunestrStream {
   title: string;
   summary?: string;
   image?: string;
+  thumbnailSourceUrl?: string;
   url: string;
+  externalUrl: string;
   createdAt: number;
-    status: string;
-    isLive: boolean;
-    track: Track;
+  status: string;
+  isLive: boolean;
+  track: Track;
+}
+
+function cloudflarePlaybackUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.endsWith('.cloudflarestream.com')) return url;
+    const match = parsed.pathname.match(/^\/([a-f0-9]{32})\/(?:manifest\/video\.m3u8|watch)$/i);
+    return match ? `https://${parsed.hostname}/${match[1]}/iframe` : url;
+  } catch {
+    return url;
+  }
 }
 
 function tagValue(event: { tags: string[][] }, name: string): string | undefined {
@@ -30,15 +43,21 @@ function parseStream(event: { id: string; pubkey: string; created_at: number; ki
   const isTuneStr = STREAM_PUBKEYS.includes(event.pubkey) || client?.includes('tunestr');
   if (!isTuneStr) return null;
   const d = tagValue(event, 'd');
-  const url = sanitizeUrl(tagValue(event, 'recording')) || sanitizeUrl(tagValue(event, 'streaming'));
-  const status = tagValue(event, 'status') ?? 'unknown';
+  const streamingUrl = sanitizeUrl(tagValue(event, 'streaming'));
+  const recordingUrl = sanitizeUrl(tagValue(event, 'recording'));
+  const eventStatus = tagValue(event, 'status') ?? 'unknown';
   const title = tagValue(event, 'title')?.trim();
-  if (!d || !url || !title || status === 'planned' || !['live', 'ended'].includes(status)) return null;
+  if (!d || !title || eventStatus === 'planned' || !['live', 'ended'].includes(eventStatus)) return null;
+  const isLive = eventStatus === 'live' && Date.now() / 1000 - event.created_at <= 6 * 60 * 60;
+  const sourceUrl = isLive ? streamingUrl || recordingUrl : recordingUrl || streamingUrl;
+  const url = sourceUrl ? cloudflarePlaybackUrl(sourceUrl) : undefined;
+  if (!url) return null;
   const summary = tagValue(event, 'summary');
   const image = sanitizeUrl(tagValue(event, 'image'));
+  const thumbnailSourceUrl = streamingUrl ?? recordingUrl;
   const durationTag = tagValue(event, 'duration') ?? tagValue(event, 'duration_seconds');
   const duration = durationTag ? Number(durationTag) : undefined;
-  const isLive = status === 'live';
+  const status = isLive ? 'live' : 'ended';
   const track: Track = {
     id: `tunestr:${event.pubkey}:${d}`,
     event: event as Track['event'],
@@ -47,13 +66,14 @@ function parseStream(event: { id: string; pubkey: string; created_at: number; ki
     title,
     artist: 'TuneStr live stream',
     image,
+    mimeType: 'video/mp4',
     pubkey: event.pubkey,
     duration: duration && Number.isFinite(duration) && duration > 0 ? duration : undefined,
     kind: 'music',
     topics: event.tags.filter(([name]) => name === 't').map(([, value]) => value.toLowerCase()),
     createdAt: event.created_at,
   };
-  return { id: event.id, title, summary, image, url, createdAt: event.created_at, status, isLive, track };
+  return { id: event.id, title, summary, image, thumbnailSourceUrl, url, externalUrl: sourceUrl ?? url, createdAt: event.created_at, status, isLive, track };
 }
 
 export function useTunestrStreams() {
@@ -69,6 +89,7 @@ export function useTunestrStreams() {
     retry: false,
     staleTime: 30_000,
     refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     queryFn: async ({ pageParam, signal }) => {
       const until = pageParam;
       const failed: string[] = [];
