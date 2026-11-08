@@ -113,7 +113,7 @@ export function useWavlakeRankedReleases() {
           albums.push({ id: albumId, type: 'album', title: album, artist, image: sanitizeUrl(text(item.albumArtUrl)) });
         }
       }
-      return { artists: artists.slice(0, 8), albums: albums.slice(0, 8) };
+      return { artists, albums };
     },
     staleTime: 5 * 60 * 1000,
     retry: 1,

@@ -38,12 +38,16 @@ function CatalogTracks({ artistId }: { artistId?: string }) {
 
 function FeaturedRankings() {
   const rankings = useWavlakeRankedReleases();
+  const [showAllArtists, setShowAllArtists] = useState(false);
+  const [showAllAlbums, setShowAllAlbums] = useState(false);
   if (rankings.isLoading) return <section className="space-y-3"><h2 className="text-2xl font-bold">From Wavlake’s top tracks</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div></section>;
   if (rankings.isError) return <p className="text-sm text-muted-foreground">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>;
   if (!rankings.data?.artists.length && !rankings.data?.albums.length) return <p className="text-sm text-muted-foreground">No ranked artists or albums are available right now.</p>;
+  const artists = showAllArtists ? rankings.data.artists : rankings.data.artists.slice(0, 8);
+  const albums = showAllAlbums ? rankings.data.albums : rankings.data.albums.slice(0, 8);
   return <div className="space-y-8">
-    {rankings.data.artists.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div><CatalogLinks items={rankings.data.artists} /></section>}
-    {rankings.data.albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div><CatalogLinks items={rankings.data.albums} /></section>}
+    {rankings.data.artists.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div><CatalogLinks items={artists} />{rankings.data.artists.length > 8 && <Button variant="link" className="px-0" onClick={() => setShowAllArtists(value => !value)}>{showAllArtists ? 'Show less' : 'See all'}</Button>}</section>}
+    {rankings.data.albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div><CatalogLinks items={albums} />{rankings.data.albums.length > 8 && <Button variant="link" className="px-0" onClick={() => setShowAllAlbums(value => !value)}>{showAllAlbums ? 'Show less' : 'See all'}</Button>}</section>}
   </div>;
 }
 
