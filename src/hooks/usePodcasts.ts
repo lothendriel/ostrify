@@ -1,15 +1,21 @@
 import { useNostr } from "@nostrify/react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { eventToTrack, parsePodcastEpisodeTrack, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 
 export interface PodcastShow {
-  pubkey: string;
+  id: string;
   title: string;
   image?: string;
   description?: string;
-  event: NostrEvent;
+  publisher?: string;
+  /** Nostr author pubkey; Fountain shows are external catalog entries. */
+  pubkey?: string;
+  source: "nostr" | "fountain";
+  episodeCount?: number;
+  feedGuid?: string;
+  event?: NostrEvent;
 }
 
 /** Hashtags that indicate an audio track is really a podcast episode. */
@@ -22,8 +28,13 @@ const PODCAST_TOPICS = [
   "pc20",
 ];
 
-const FOUNTAIN_API = import.meta.env.VITE_FOUNTAIN_API_URL?.replace(/\/$/, "") ?? "/api/fountain";
+const FOUNTAIN_API = (import.meta.env.VITE_FOUNTAIN_API_URL ?? "/api/fountain").replace(/\/$/, "");
 const EPISODE_GUID_RE = /^[^\s]{1,512}$/;
+const NOSTR_SHOW_PAGE_SIZE = 120;
+const FOUNTAIN_SHOWS_PER_LOOKUP_BATCH = 5;
+const FOUNTAIN_MAX_REFERENCE_BATCH = 16;
+const NOSTR_NOTE_KIND = 1;
+const FOUNTAIN_REFERENCE_SCAN_PAGE = 120;
 
 interface FountainEpisodeHit {
   _id?: unknown;
@@ -57,6 +68,7 @@ function createFountainTrack(
   title: string,
   duration: number | undefined,
   publishedAt: number,
+  showId?: string,
 ): Track {
   return {
     id: `fountain:${id}`,
@@ -70,6 +82,7 @@ function createFountainTrack(
     kind: "podcast",
     topics: ["podcast", "fountain"],
     createdAt: Number.isFinite(publishedAt) ? Math.floor(publishedAt / 1000) : 0,
+    ...(showId ? { showId } : {}),
   };
 }
 
@@ -148,7 +161,9 @@ async function lookupFountainEpisode(
     ? info.duration
     : undefined;
 
-  return createFountainTrack(text(hit._id) ?? itemGuid, info, url, title, duration, publishedAt);
+  const contentId = text(hit._id);
+  if (!contentId || !/^\S{20}$/.test(contentId)) return null;
+  return createFountainTrack(`episode:id:${contentId}`, info, url, title, duration, publishedAt);
 }
 
 /**
@@ -178,18 +193,22 @@ export function usePodcastEpisodes(limit = 80) {
       const tracks: Track[] = [];
       const seen = new Set<string>();
       for (const event of events) {
-        const track = event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
+        const isFountainReference = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
+        const track = isFountainReference && (event.kind === 1 || event.kind === 1063) ? null : event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
         if (!track || seen.has(track.url)) continue;
         seen.add(track.url);
         tracks.push({ ...track, kind: "podcast" });
       }
 
       const fountainReferences = new Map<string, string | undefined>();
+      const relatedEvents = new Map<string, NostrEvent>();
       for (const event of events) {
-        if (event.kind !== 1) continue;
+        if (event.kind !== NOSTR_NOTE_KIND) continue;
         const itemReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:item:guid:"))?.[1];
         const itemGuid = itemReference?.slice("podcast:item:guid:".length);
-        if (!itemGuid || !EPISODE_GUID_RE.test(itemGuid) || fountainReferences.has(itemGuid)) continue;
+        if (!itemGuid || !EPISODE_GUID_RE.test(itemGuid)) continue;
+        relatedEvents.set(itemGuid, event);
+        if (fountainReferences.has(itemGuid)) continue;
         const feedReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
         const feedGuid = feedReference?.slice("podcast:guid:".length);
         fountainReferences.set(itemGuid, feedGuid && EPISODE_GUID_RE.test(feedGuid) ? feedGuid : undefined);
@@ -198,10 +217,11 @@ export function usePodcastEpisodes(limit = 80) {
       const resolvedFountain: (Track | null)[] = [];
       const referencesToResolve = [...fountainReferences.entries()].slice(0, Math.min(limit, 10));
       const referenceBatches = Array.from(
-        { length: Math.ceil(referencesToResolve.length / 5) },
-        (_, index) => referencesToResolve.slice(index * 5, index * 5 + 5),
+        { length: Math.ceil(referencesToResolve.length / FOUNTAIN_SHOWS_PER_LOOKUP_BATCH) },
+        (_, index) => referencesToResolve.slice(index * FOUNTAIN_SHOWS_PER_LOOKUP_BATCH, (index + 1) * FOUNTAIN_SHOWS_PER_LOOKUP_BATCH),
       );
       for (const batch of referenceBatches) {
+        if (signal.aborted) throw signal.reason;
         resolvedFountain.push(...await Promise.all(batch.map(([itemGuid, feedGuid]) =>
           lookupFountainEpisode(itemGuid, feedGuid, signal).catch((error: unknown) => {
             if (signal.aborted) throw error;
@@ -212,7 +232,11 @@ export function usePodcastEpisodes(limit = 80) {
       for (const track of resolvedFountain) {
         if (!track || seen.has(track.url)) continue;
         seen.add(track.url);
-        tracks.push(track);
+        const itemGuid = track.id.slice("fountain:episode:id:".length);
+        const reference = relatedEvents.get(itemGuid);
+        const feedReference = reference?.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
+        const feedGuid = feedReference?.slice("podcast:guid:".length);
+        tracks.push(feedGuid ? { ...track, showId: `fountain:show:id:${feedGuid}` } : track);
       }
 
       tracks.sort((a, b) => b.createdAt - a.createdAt);
@@ -221,29 +245,193 @@ export function usePodcastEpisodes(limit = 80) {
   });
 }
 
-/** Fetch podcast show metadata (NIP-F4 kind:10154) for a set of pubkeys. */
-export function usePodcastShows() {
+function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): PodcastShow | null {
+  if (hit._type !== "SHOW" || typeof hit._id !== "string" || !isRecord(hit.info)) return null;
+  const title = text(hit.info.title);
+  if (!title) return null;
+  const rawId = hit._id;
+  if (rawId.length !== 20) return null;
+  return {
+    id: `fountain:show:id:${rawId}`,
+    title,
+    image: sanitizeUrl(text(hit.info.image)),
+    description: text(hit.info.description),
+    publisher: text(hit.info.publisher),
+    source: "fountain",
+    feedGuid: text(hit._guid) ?? feedGuid,
+  };
+}
+
+/** Fetch podcast show metadata (NIP-F4 kind:10154) for set of pubkeys. */
+export function useNostrPodcastShows() {
   const { nostr } = useNostr();
-
-  return useQuery({
-    queryKey: ["podcast-shows"],
-    queryFn: async (c) => {
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(6000)]);
-      const events = await nostr.query([{ kinds: [10154], limit: 60 }], { signal });
-
-      const shows: PodcastShow[] = [];
+  const query = useInfiniteQuery({
+    queryKey: ["podcast-shows", "nostr"],
+    initialPageParam: undefined as number | undefined,
+    retry: 1,
+    queryFn: async ({ pageParam, signal: querySignal }) => {
+      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(12000)]);
+      const until = pageParam;
+      const events = await nostr.query(
+        [
+          { kinds: [10154, 54], limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+          { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+        ],
+        { signal },
+      );
+      const episodesByAuthor = new Map<string, NostrEvent[]>();
       for (const event of events) {
-        const title = event.tags.find(([n]) => n === "title")?.[1];
+        const isNativePodcastEpisode = event.kind === 54 && !!parsePodcastEpisodeTrack(event);
+        const hasPodcastTopic = event.tags.some(([name, value]) => name === "t" && value && PODCAST_TOPICS.includes(value.toLowerCase()));
+        const referencesFountain = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
+        const isPodcastFileMetadata = event.kind === 1063 && hasPodcastTopic && !!eventToTrack(event);
+        const isPodcastNoteAudio = event.kind === 1 && hasPodcastTopic && !referencesFountain && !!eventToTrack(event);
+        const isTaggedAudioEpisode = isPodcastFileMetadata || isPodcastNoteAudio;
+        if (!isNativePodcastEpisode && !isTaggedAudioEpisode) continue;
+        const list = episodesByAuthor.get(event.pubkey) ?? [];
+        list.push(event);
+        episodesByAuthor.set(event.pubkey, list);
+      }
+
+      const shows = new Map<string, PodcastShow>();
+      for (const event of events) {
+        if (event.kind !== 10154) continue;
+        const title = event.tags.find(([name]) => name === "title")?.[1];
         if (!title) continue;
-        shows.push({
-          pubkey: event.pubkey,
+        const authorPubkeys = event.tags.filter(([name]) => name === "p").map(([, value]) => value).filter(Boolean);
+        const pubkey = episodesByAuthor.has(event.pubkey) ? event.pubkey : authorPubkeys.find((key) => episodesByAuthor.has(key));
+        if (!pubkey) continue;
+        const relatedEpisodes = episodesByAuthor.get(pubkey) ?? [];
+        if (!relatedEpisodes.length) continue;
+        shows.set(pubkey, {
+          id: `nostr:${pubkey}`,
+          pubkey,
           title,
-          image: event.tags.find(([n]) => n === "image")?.[1],
-          description: event.tags.find(([n]) => n === "description")?.[1],
+          image: sanitizeUrl(event.tags.find(([name]) => name === "image")?.[1]),
+          description: event.tags.find(([name]) => name === "description")?.[1],
+          source: "nostr",
+          episodeCount: relatedEpisodes.length,
           event,
         });
       }
-      return shows;
+      for (const [pubkey, episodes] of episodesByAuthor) {
+        if (shows.has(pubkey)) continue;
+        const author = episodes[0];
+        const title = author.tags.find(([name]) => name === "podcast")?.[1] ?? "Podcast";
+        shows.set(pubkey, {
+          id: `nostr:${pubkey}`,
+          pubkey,
+          title,
+          image: sanitizeUrl(author.tags.find(([name]) => name === "image")?.[1]),
+          source: "nostr",
+          episodeCount: episodes.length,
+          event: author,
+        });
+      }
+      const pageShows = [...shows.values()].sort((a, b) => (b.episodeCount ?? 0) - (a.episodeCount ?? 0) || a.title.localeCompare(b.title));
+      const nextUntil = events.length >= NOSTR_SHOW_PAGE_SIZE * 2 ? Math.min(...events.map((event) => event.created_at)) - 1 : undefined;
+      return { shows: pageShows, nextUntil, hasMore: nextUntil !== undefined };
     },
+    getNextPageParam: (lastPage) => lastPage.nextUntil,
+    staleTime: 5 * 60 * 1000,
   });
+  const data = query.data?.pages.flatMap((page) => page.shows) ?? [];
+  return { ...query, data, hasNextPage: query.data?.pages.at(-1)?.hasMore ?? false };
 }
+
+/** Resolve a NIP-73 podcast feed GUID to its Fountain show metadata. */
+async function lookupFountainShow(feedGuid: string, signal: AbortSignal): Promise<PodcastShow | null> {
+  if (!EPISODE_GUID_RE.test(feedGuid)) return null;
+  const response = await fetch(`${FOUNTAIN_API}/lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: `podcast:guid:${feedGuid}` }),
+    signal,
+  });
+  if (!response.ok) throw new Error(`Fountain returned ${response.status}`);
+  const data: unknown = await response.json();
+  if (!isRecord(data) || !Array.isArray(data.hits)) return null;
+  for (const value of data.hits) {
+    if (!isRecord(value)) continue;
+    const show = fountainShowFromHit(value, feedGuid);
+    if (show) {
+      return show;
+    }
+  }
+  return null;
+}
+
+/** NIP-73 show GUIDs discovered in Nostr notes, resolved to Fountain records. */
+export function useFountainPodcastShows() {
+  const { nostr } = useNostr();
+  const query = useInfiniteQuery({
+    queryKey: ["podcast-shows", "fountain"],
+    initialPageParam: undefined as number | undefined,
+    retry: 1,
+    queryFn: async ({ pageParam, signal: querySignal }) => {
+      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(20000)]);
+      const until = pageParam;
+      const events = await nostr.query(
+        [
+          { kinds: [NOSTR_NOTE_KIND], "#k": ["podcast:guid"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(until ? { until } : {}) },
+          { kinds: [NOSTR_NOTE_KIND], "#k": ["podcast:item:guid"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(until ? { until } : {}) },
+          { kinds: [NOSTR_NOTE_KIND], "#t": ["podcast"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(until ? { until } : {}) },
+        ],
+        { signal },
+      );
+      const guidsInRelayOrder: string[] = [];
+      for (const event of events) {
+        for (const [name, value] of event.tags) {
+          if (name !== "i" || !value?.startsWith("podcast:guid:")) continue;
+          const guid = value.slice("podcast:guid:".length);
+          if (EPISODE_GUID_RE.test(guid)) {
+            guidsInRelayOrder.push(guid);
+          }
+        }
+      }
+      const uniqueGuids = [...new Set(guidsInRelayOrder)];
+      const guids = uniqueGuids.slice(0, FOUNTAIN_MAX_REFERENCE_BATCH);
+      const shows: PodcastShow[] = [];
+      const episodeCounts = new Map<string, number>();
+      for (const event of events) {
+        const itemReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:item:guid:"))?.[1];
+        const feedReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
+        const itemGuid = itemReference?.slice("podcast:item:guid:".length);
+        const feedGuid = feedReference?.slice("podcast:guid:".length);
+        if (itemGuid && feedGuid && EPISODE_GUID_RE.test(itemGuid) && EPISODE_GUID_RE.test(feedGuid)) {
+          episodeCounts.set(feedGuid, (episodeCounts.get(feedGuid) ?? 0) + 1);
+        }
+      }
+      for (let offset = 0; offset < guids.length; offset += FOUNTAIN_SHOWS_PER_LOOKUP_BATCH) {
+        if (signal.aborted) throw signal.reason;
+        const batch = guids.slice(offset, offset + FOUNTAIN_SHOWS_PER_LOOKUP_BATCH);
+        const resolved = await Promise.all(batch.map((guid) => lookupFountainShow(guid, signal).catch((error: unknown) => {
+          if (signal.aborted) throw error;
+          return null;
+        })));
+        for (const show of resolved) {
+          if (!show) continue;
+          shows.push({ ...show, episodeCount: episodeCounts.get(show.feedGuid ?? "") ?? 0 });
+        }
+      }
+      const deduped = new Map(shows.map((show) => [show.id, show]));
+      const pageShows = [...deduped.values()].sort((a, b) => a.title.localeCompare(b.title));
+      const hasMore = uniqueGuids.length > guids.length || events.length >= FOUNTAIN_REFERENCE_SCAN_PAGE * 3;
+      const nextUntil = uniqueGuids.length > guids.length
+        ? Math.min(...events.map((event) => event.created_at))
+        : events.length >= FOUNTAIN_REFERENCE_SCAN_PAGE * 3
+          ? Math.min(...events.map((event) => event.created_at)) - 1
+          : undefined;
+      return { shows: pageShows, nextUntil, hasMore, needsMoreScan: uniqueGuids.length > guids.length };
+    },
+    getNextPageParam: (lastPage) => lastPage.nextUntil,
+    staleTime: 5 * 60 * 1000,
+  });
+  const showMap = new Map<string, PodcastShow>();
+  for (const page of query.data?.pages ?? []) for (const show of page.shows) showMap.set(show.id, show);
+  const data = [...showMap.values()].sort((a, b) => a.title.localeCompare(b.title));
+  const lastPage = query.data?.pages.at(-1);
+  return { ...query, data, hasNextPage: lastPage?.hasMore ?? false, needsMoreScan: lastPage?.needsMoreScan ?? false };
+}
+
+

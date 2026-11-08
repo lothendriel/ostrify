@@ -2,7 +2,7 @@ import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, type Track } from "@/lib/music";
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
-import { fetchFountainTrack, fountainTrackUrl } from "./usePodcasts";
+import { fetchFountainTrack } from "./usePodcasts";
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
 export function useTracksByIds(ids: string[] | undefined) {
@@ -15,7 +15,7 @@ export function useTracksByIds(ids: string[] | undefined) {
       if (!ids?.length) return { tracks: [] as Track[], unavailable: 0 };
       const eventIds = ids.filter((id) => /^[0-9a-f]{64}$/i.test(id));
       const catalogIds = [...new Set(ids.filter((id) => !!wavlakeTrackUrl(id)))];
-      const fountainIds = [...new Set(ids.filter((id) => !!fountainTrackUrl(id)))];
+      const fountainIds = [...new Set(ids.filter((id) => id.startsWith("fountain:episode:id:")))];
       const byId = new Map<string, Track>();
       const eventsPromise = eventIds.length
         ? nostr.query([{ ids: eventIds }], { signal: AbortSignal.any([c.signal, AbortSignal.timeout(12000)]) }).catch(() => [])

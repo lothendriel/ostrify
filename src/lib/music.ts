@@ -11,6 +11,8 @@ export interface Track {
   source?: "wavlake" | "librivox" | "tunestr" | "fountain";
   artistId?: string;
   albumId?: string;
+  /** Stable catalog or Nostr coordinate of the parent podcast show. */
+  showId?: string;
   /** Direct audio URL (https). */
   url: string;
   /** Audio MIME type, if known. */

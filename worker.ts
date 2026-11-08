@@ -26,6 +26,28 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname.startsWith("/api/fountain/children/")) {
+      if (request.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
+      let showId: string;
+      try {
+        showId = decodeURIComponent(url.pathname.slice("/api/fountain/children/".length));
+      } catch {
+        return jsonResponse({ error: "Invalid show ID" }, 400);
+      }
+      if (!/^show:id:\S{20}$/.test(showId)) return jsonResponse({ error: "Invalid show ID" }, 400);
+      try {
+        const response = await fetch(`${FOUNTAIN_API}/content/${encodeURIComponent(showId)}/children`, {
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) {
+          return jsonResponse({ error: `Fountain returned ${response.status}` }, response.status >= 400 && response.status < 500 ? response.status : 502);
+        }
+        return jsonResponse(await response.json() as unknown, 200);
+      } catch {
+        return jsonResponse({ error: "Fountain is temporarily unavailable" }, 502);
+      }
+    }
+
     if (url.pathname.startsWith("/api/fountain/content/")) {
       if (request.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
       let contentId: string;
