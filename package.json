@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "npm i --silent && vite",
     "build": "npm i --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
-    "build:cloudflare": "npm run build && wrangler deploy",
+    "build:cloudflare": "npm run build && rm -f dist/_redirects",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy",
     "test": "npm i --silent && tsc --noEmit && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html && echo 'All tests passed!'"
   },
   "dependencies": {

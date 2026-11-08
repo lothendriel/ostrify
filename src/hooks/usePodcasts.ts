@@ -22,7 +22,7 @@ const PODCAST_TOPICS = [
   "pc20",
 ];
 
-const FOUNTAIN_API = "/api/fountain";
+const FOUNTAIN_API = import.meta.env.VITE_FOUNTAIN_API_URL?.replace(/\/$/, "") ?? "/api/fountain";
 const EPISODE_GUID_RE = /^[^\s]{1,512}$/;
 
 interface FountainEpisodeHit {

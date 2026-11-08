@@ -6,7 +6,10 @@ interface Env {
   ASSETS: AssetFetcher;
 }
 
-const FOUNTAIN_LOOKUP_URL = "https://api.fountain.fm/v1/search/lookup";
+const FOUNTAIN_API = "https://api.fountain.fm/v1";
+const FOUNTAIN_LOOKUP_URL = `${FOUNTAIN_API}/search/lookup`;
+const CONTENT_ID_RE = /^episode:id:\S{20}$/;
+const CONTENT_PATH_PREFIX = "/api/fountain/content/";
 const MAX_BODY_LENGTH = 2048;
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -27,13 +30,13 @@ export default {
       if (request.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
       let contentId: string;
       try {
-        contentId = decodeURIComponent(url.pathname.slice("/api/fountain/content/".length));
+        contentId = decodeURIComponent(url.pathname.slice(CONTENT_PATH_PREFIX.length));
       } catch {
         return jsonResponse({ error: "Invalid content ID" }, 400);
       }
-      if (!/^episode:id:\S{20}$/.test(contentId)) return jsonResponse({ error: "Invalid episode ID" }, 400);
+      if (!CONTENT_ID_RE.test(contentId)) return jsonResponse({ error: "Invalid episode ID" }, 400);
       try {
-        const response = await fetch(`${FOUNTAIN_LOOKUP_URL.replace("/search/lookup", `/content/${encodeURIComponent(contentId)}`)}`, {
+        const response = await fetch(`${FOUNTAIN_API}/content/${encodeURIComponent(contentId)}`, {
           signal: AbortSignal.timeout(10000),
         });
         if (!response.ok) {
@@ -46,7 +49,6 @@ export default {
     }
 
     if (url.pathname === "/api/fountain/lookup") {
-      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
       if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
       const contentType = request.headers.get("Content-Type") ?? "";
