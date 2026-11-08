@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoginArea } from "@/components/auth/LoginArea";
 import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
+import { FriendsActivitySheet } from "./FriendsActivitySheet";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -39,7 +40,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </SheetContent>
               </Sheet>
             </div>
-            <LoginArea className="max-w-60" />
+            <div className="ml-auto flex items-center gap-1">
+              <FriendsActivitySheet />
+              <LoginArea className="max-w-60" />
+            </div>
           </header>
 
           {/* Scrollable page content */}

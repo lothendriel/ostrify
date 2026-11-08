@@ -1,4 +1,4 @@
-import { ChevronDown, LogOut, UserIcon, UserPlus } from 'lucide-react';
+import { ChevronDown, LogOut, UserIcon, UserPlus, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { sanitizeUrl } from '@/lib/sanitize';
 import {
@@ -106,6 +106,12 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           );
         })}
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-md'>
+          <Link to="/settings">
+            <Settings className='w-4 h-4' />
+            <span>Settings</span>
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem
           onClick={onAddAccountClick}
           className='flex items-center gap-2 cursor-pointer p-2 rounded-md'

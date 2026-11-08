@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Music2, Settings, Mic, Users, BookOpen, Bookmark } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Music2, Mic, Users, BookOpen, Bookmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,7 +18,6 @@ const navItems = [
   { to: "/audiobook-library", label: "Saved Audiobooks", icon: Bookmark },
   { to: "/wavlake", label: "Wavlake", icon: Music },
   { to: "/friends", label: "Friends", icon: Users },
-  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
