@@ -1,5 +1,6 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import { wavlakeTrackId } from '@/hooks/useWavlake';
+import { fountainTrackId } from '@/hooks/usePodcasts';
 
 export const MUSIC_PLAYLIST_TOPIC = 'ostrify-music-playlist';
 export const LIKED_TRACKS_IDENTIFIER = 'nostr-tunes-liked';
@@ -15,6 +16,7 @@ export function playlistTrackRefs(event: NostrEvent): string[] {
   return event.tags.flatMap(([name, value]) => {
     if (name === 'e' && /^[0-9a-f]{64}$/i.test(value ?? '')) return [value.toLowerCase()];
     const wavlake = name === 'i' && value ? wavlakeTrackId(value) : undefined;
-    return wavlake ? [wavlake] : [];
+    const fountain = name === 'i' && value ? fountainTrackId(value) : undefined;
+    return wavlake ? [wavlake] : fountain ? [fountain] : [];
   });
 }

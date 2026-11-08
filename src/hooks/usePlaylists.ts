@@ -4,6 +4,7 @@ import type { NostrEvent } from "@nostrify/nostrify";
 import { useCurrentUser } from "./useCurrentUser";
 import { useNostrPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
+import { fountainTrackId, fountainTrackUrl } from "./usePodcasts";
 import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER } from '@/lib/musicPlaylists';
 
 export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
@@ -14,7 +15,7 @@ export interface Playlist {
   title: string;
   description?: string;
   image?: string;
-  /** Event ids of tracks in this playlist. */
+  /** Stable event or external catalog ids for tracks in this playlist. */
   trackIds: string[];
   event: NostrEvent;
   isLiked: boolean;
@@ -30,8 +31,9 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
     image: event.tags.find(([n]) => n === "image")?.[1],
     trackIds: event.tags.flatMap(([name, value]) => {
       if (name === "e" && value) return [value];
-      const external = name === "i" && value ? wavlakeTrackId(value) : undefined;
-      return external ? [external] : [];
+      const wavlake = name === "i" && value ? wavlakeTrackId(value) : undefined;
+      const fountain = name === "i" && value ? fountainTrackId(value) : undefined;
+      return wavlake ? [wavlake] : fountain ? [fountain] : [];
     }),
     event,
     isLiked: d === LIKED_SONGS_ID,
@@ -82,14 +84,14 @@ function buildPlaylistEvent(
 ): { kind: number; content: string; tags: string[][] } {
   const existing = playlist.event;
   const tags: string[][] = existing ? existing.tags.filter(([name, value]) =>
-    !['d', 'title', 'description', 'image'].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && !!wavlakeTrackId(value))
+    !['d', 'title', 'description', 'image'].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && (!!wavlakeTrackId(value) || !!fountainTrackId(value)))
   ).map((tag) => [...tag]) : [];
   tags.unshift(["d", playlist.id], ["title", playlist.title]);
   if (!tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
   if (playlist.description) tags.push(["description", playlist.description]);
   if (playlist.image) tags.push(["image", playlist.image]);
   for (const id of playlist.trackIds) {
-    const url = wavlakeTrackUrl(id);
+    const url = wavlakeTrackUrl(id) ?? fountainTrackUrl(id);
     const previous = existing?.tags.find(([name, value]) => url ? name === 'i' && value === url : name === 'e' && value === id);
     if (previous) tags.push([...previous]);
     else if (url) tags.push(['i', url]);

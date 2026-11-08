@@ -33,7 +33,7 @@ const PodcastsPage = () => {
         </div>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Podcasts</h1>
-          <p className="text-sm text-muted-foreground">Shows and episodes from across Nostr</p>
+          <p className="text-sm text-muted-foreground">Nostr episodes and Fountain-linked shows</p>
         </div>
       </div>
 
@@ -50,7 +50,7 @@ const PodcastsPage = () => {
       ) : episodes.length === 0 ? (
         <div className="border border-dashed border-border rounded-lg py-16 px-8 text-center">
           <p className="text-muted-foreground max-w-sm mx-auto">
-            No podcast episodes found right now. Try adding more relays in Settings.
+            No podcast episodes found right now. Try adding more relays in Settings, or check back when Nostr podcast references are available.
           </p>
         </div>
       ) : (
