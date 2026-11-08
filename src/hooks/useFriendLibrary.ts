@@ -13,7 +13,7 @@ export function useFriendLibrary(pubkey: string | undefined) {
       if (!pubkey) throw new Error('Missing profile');
       const events = await nostr.query([
         { kinds: [30003], authors: [pubkey], limit: 100 },
-        { kinds: [30000], authors: [pubkey], '#d': ['ostrify-artists'], limit: 5 },
+        { kinds: [30000], authors: [pubkey], '#d': ['ostrify-artists', 'ostrify-people'], limit: 20 },
       ], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
       const byId = new Map<string, typeof events[number]>();
       for (const event of events.filter(e => e.pubkey === pubkey && e.kind === 30003)) {
@@ -37,20 +37,25 @@ export function useFriendLibrary(pubkey: string | undefined) {
           otherListsUnverified = true;
         }
       }
+      const privacyHideLiked = candidates.some(([, event]) => event.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'liked'));
       const playlists = candidates.flatMap(([id, event]) => {
+        if (event.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'playlists')) return [];
+        if (id === 'nostr-tunes-liked' && privacyHideLiked) return [];
         const refs = playlistTrackRefs(event);
         const known = isOstrifyMusicPlaylist(event);
         const tracks = known ? refs : refs.filter(ref => !!wavlakeTrackUrl(ref) || audioIds.has(ref));
         if (!known && !tracks.length) return [];
         return [{ id, title: event.tags.find(([n]) => n === 'title')?.[1] || (id === 'nostr-tunes-liked' ? 'Liked Songs' : 'Playlist'), tracks }];
       });
-      const artistEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at)[0];
-      const artists = (artistEvent?.tags ?? []).flatMap(([name, value]) => {
+      const artistEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey && e.tags.some(([n, d]) => n === 'd' && d === 'ostrify-artists')).sort((a, b) => b.created_at - a.created_at)[0];
+      const artists = artistEvent?.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'artists') ? [] : (artistEvent?.tags ?? []).flatMap(([name, value]) => {
         if (name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '')) return [value];
         const artistId = name === 'i' && value ? wavlakeArtistId(value) : undefined;
         return artistId ? [`wavlake:${artistId}`] : [];
       });
-      return { playlists, artists, otherListsUnverified };
+      const peopleEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey && e.tags.some(([n, d]) => n === 'd' && d === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
+      const people = peopleEvent?.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'people') ? [] : [...new Set((peopleEvent?.tags ?? []).filter(([name, value]) => name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '') && value !== pubkey).map(([, value]) => value))];
+      return { playlists, artists, people, otherListsUnverified };
     },
   });
 }

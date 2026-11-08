@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
+import { useQuery } from '@tanstack/react-query';
+import { useNostr } from '@nostrify/react';
 import { Users, UserPlus, Radio, Disc3, X, Heart, Music2, Library, Check, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +21,7 @@ import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
 import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
 import { useFollowedPeople } from '@/hooks/useFollowedPeople';
+import { useProfilePrivacy } from '@/hooks/useProfilePrivacy';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
   const { data } = useAuthor(pubkey);
@@ -42,6 +45,24 @@ function PublicPlaylist({ title, ids }: { title: string; ids: string[] }) {
   return <div className="rounded-lg border border-border p-4"><button className="w-full flex justify-between gap-3 text-left font-semibold hover:text-primary" onClick={() => setOpen(v => !v)} aria-expanded={open}><span>{title}</span><span className="text-sm text-muted-foreground">{ids.length} tracks · {open ? 'Hide' : 'View'}</span></button>{open && <div className="mt-4"><TrackList tracks={data?.tracks ?? []} isLoading={isLoading} emptyMessage="No playable tracks could be loaded from this list." />{!!data?.unavailable && <p className="text-sm text-muted-foreground mt-2">Some tracks could not be loaded.</p>}</div>}</div>;
 }
 
+function FollowedPeopleList({ pubkey }: { pubkey: string }) {
+  const { nostr } = useNostr();
+  const privacy = useProfilePrivacy(pubkey);
+  const people = useQuery({
+    queryKey: ['public-ostrify-followed-people', pubkey],
+    queryFn: async ({ signal }) => {
+      const events = await nostr.query([{ kinds: [30000], authors: [pubkey], '#d': ['ostrify-people'], limit: 5 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
+      const event = events.filter(item => item.pubkey === pubkey && item.kind === 30000 && item.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
+      return [...new Set((event?.tags ?? []).filter(([name, value]) => name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '')).map(([, value]) => value))];
+    },
+  });
+  if (privacy.isLoading || people.isLoading) return <Skeleton className="h-20 w-full" />;
+  if (privacy.isError || people.isError) return <p role="status" className="text-sm text-muted-foreground">Followed users aren’t available from your relays right now.</p>;
+  if (privacy.isHidden('people')) return <p className="text-sm text-muted-foreground">This person has hidden their friends list.</p>;
+  if (!people.data?.length) return <p className="text-muted-foreground">No public followed users found.</p>;
+  return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{people.data.map(pubkey => <Person key={pubkey} pubkey={pubkey} />)}</div>;
+}
+
 
 
 function ProfileFriendAction({ pubkey }: { pubkey: string }) {
@@ -61,6 +82,7 @@ function ProfileFriendAction({ pubkey }: { pubkey: string }) {
 
 function FriendProfile({ pubkey }: { pubkey: string }) {
   const library = useFriendLibrary(pubkey);
+  const privacy = useProfilePrivacy(pubkey);
   const { data: author } = useAuthor(pubkey);
   const metadata = author?.metadata;
   const name = metadata?.display_name || metadata?.name || genUserName(pubkey);
@@ -75,10 +97,12 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
       <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Ostrify profile</p><h1 className="mt-2 break-words text-4xl font-bold tracking-tight">{name}</h1><p className="mt-2 text-sm text-muted-foreground">Public Ostrify music library</p>{metadata?.about && <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">{metadata.about}</p>}</div>
     </header>
     <ProfileFriendAction pubkey={pubkey} />
-    {library.isLoading ? <div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div> : library.isError ? <p role="alert" className="text-sm text-destructive">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
-      <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Heart className="size-5 text-primary" /> Liked songs</h2><TrackList tracks={likedTracks.data?.tracks ?? []} isLoading={likedTracks.isLoading} emptyMessage={liked ? 'No playable liked songs were found.' : 'This person has no public liked songs.'} />{!!likedTracks.data?.unavailable && <p className="text-sm text-muted-foreground">{likedTracks.data.unavailable} saved track(s) weren’t available from your relays.</p>}</section>
-      <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Music2 className="size-5 text-primary" /> Followed artists</h2>{library.data?.artists.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.data.artists.map(reference => <Artist key={reference} reference={reference} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>
-      <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Library className="size-5 text-primary" /> Playlists</h2>{regular.length ? <div className="grid gap-3 sm:grid-cols-2">{regular.map(playlist => <PublicPlaylist key={playlist.id} title={playlist.title} ids={playlist.tracks} />)}</div> : <p className="text-muted-foreground">No public playlists found.</p>}{library.data?.otherListsUnverified && <p className="text-sm text-muted-foreground">Some public lists couldn’t be checked because their referenced events weren’t available on your relays.</p>}</section>
+    {privacy.isError && <p role="status" className="text-sm text-muted-foreground">Profile privacy settings couldn’t be checked, so public sections are hidden for now. <button className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
+    {privacy.isLoading || privacy.isError ? <Skeleton className="h-24 w-full" /> : library.isLoading ? <div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div> : library.isError ? <p role="alert" className="text-sm text-destructive">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
+      {!privacy.isHidden('liked') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Heart className="size-5 text-primary" /> Liked songs</h2><TrackList tracks={likedTracks.data?.tracks ?? []} isLoading={likedTracks.isLoading} emptyMessage={liked ? 'No playable liked songs were found.' : 'This person has no public liked songs.'} />{!!likedTracks.data?.unavailable && <p className="text-sm text-muted-foreground">{likedTracks.data.unavailable} saved track(s) weren’t available from your relays.</p>}</section>}
+      {!privacy.isHidden('artists') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Music2 className="size-5 text-primary" /> Followed artists</h2>{library.data?.artists.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.data.artists.map(reference => <Artist key={reference} reference={reference} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>}
+      {!privacy.isHidden('people') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Users className="size-5 text-primary" /> Friends on Ostrify</h2><FollowedPeopleList pubkey={pubkey} /></section>}
+      {!privacy.isHidden('playlists') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Library className="size-5 text-primary" /> Playlists</h2>{regular.length ? <div className="grid gap-3 sm:grid-cols-2">{regular.map(playlist => <PublicPlaylist key={playlist.id} title={playlist.title} ids={playlist.tracks} />)}</div> : <p className="text-muted-foreground">No public playlists found.</p>}{library.data?.otherListsUnverified && <p className="text-sm text-muted-foreground">Some public lists couldn’t be checked because their referenced events weren’t available on your relays.</p>}</section>}
     </>}
   </div>;
 }
