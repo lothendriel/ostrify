@@ -34,6 +34,8 @@ const NOSTR_SHOW_PAGE_SIZE = 120;
 const FOUNTAIN_SHOWS_PER_LOOKUP_BATCH = 5;
 const FOUNTAIN_MAX_REFERENCE_BATCH = 16;
 const NOSTR_NOTE_KIND = 1;
+const NOSTR_PODCAST_SHOW_KIND = 10154;
+const NOSTR_PODCAST_EPISODE_KIND = 54;
 const FOUNTAIN_REFERENCE_SCAN_PAGE = 120;
 
 interface FountainEpisodeHit {
@@ -194,7 +196,7 @@ export function usePodcastEpisodes(limit = 80) {
       const seen = new Set<string>();
       for (const event of events) {
         const isFountainReference = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
-        const track = isFountainReference && (event.kind === 1 || event.kind === 1063) ? null : event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
+        const track = isFountainReference && (event.kind === NOSTR_NOTE_KIND || event.kind === 1063) ? null : event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
         if (!track || seen.has(track.url)) continue;
         seen.add(track.url);
         tracks.push({ ...track, kind: "podcast" });
@@ -274,14 +276,14 @@ export function useNostrPodcastShows() {
       const until = pageParam;
       const events = await nostr.query(
         [
-          { kinds: [10154, 54], limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+          { kinds: [NOSTR_PODCAST_SHOW_KIND, NOSTR_PODCAST_EPISODE_KIND], limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
           { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
         ],
         { signal },
       );
       const episodesByAuthor = new Map<string, NostrEvent[]>();
       for (const event of events) {
-        const isNativePodcastEpisode = event.kind === 54 && !!parsePodcastEpisodeTrack(event);
+        const isNativePodcastEpisode = event.kind === NOSTR_PODCAST_EPISODE_KIND && !!parsePodcastEpisodeTrack(event);
         const hasPodcastTopic = event.tags.some(([name, value]) => name === "t" && value && PODCAST_TOPICS.includes(value.toLowerCase()));
         const referencesFountain = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
         const isPodcastFileMetadata = event.kind === 1063 && hasPodcastTopic && !!eventToTrack(event);
@@ -295,7 +297,7 @@ export function useNostrPodcastShows() {
 
       const shows = new Map<string, PodcastShow>();
       for (const event of events) {
-        if (event.kind !== 10154) continue;
+        if (event.kind !== NOSTR_PODCAST_SHOW_KIND) continue;
         const title = event.tags.find(([name]) => name === "title")?.[1];
         if (!title) continue;
         const authorPubkeys = event.tags.filter(([name]) => name === "p").map(([, value]) => value).filter(Boolean);

@@ -76,7 +76,7 @@ const PodcastsPage = () => {
               error={viewAllSource === "nostr" ? nostrShows.isError : fountainShows.isError}
               onBack={() => setViewAllSource(null)}
               onLoadMore={() => void (viewAllSource === "nostr" ? nostrShows.fetchNextPage() : fountainShows.fetchNextPage())}
-              hasMore={viewAllSource === "nostr" ? nostrShows.hasNextPage : (fountainShows.hasNextPage || fountainShows.needsMoreScan || fountainShows.isFetching)}
+              hasMore={viewAllSource === "nostr" ? nostrShows.hasNextPage : fountainShows.hasNextPage || fountainShows.needsMoreScan || fountainShows.isFetching}
               isLoadingMore={viewAllSource === "nostr" ? nostrShows.isFetchingNextPage : fountainShows.isFetchingNextPage}
               loadMoreError={viewAllSource === "nostr" ? nostrShows.isFetchNextPageError : fountainShows.isFetchNextPageError}
               loadMoreLoading={viewAllSource === "fountain" && fountainShows.isFetching}
