@@ -81,7 +81,7 @@ export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author') 
   return useInfiniteQuery({
     queryKey: ['librivox-catalog', query, searchBy], initialPageParam: 0, retry: 1, staleTime: 5 * 60 * 1000,
     queryFn: async ({ pageParam, signal }) => {
-      const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(pageParam), sort_order: 'desc' };
+      const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(pageParam), sort_order: 'desc', extended: '1', coverart: '1' };
       if (query) params[searchBy] = `^${query.replace(/^\^/, '')}`;
       return fetchBooks(params, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
     },

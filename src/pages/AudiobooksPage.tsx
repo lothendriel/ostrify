@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Headphones, Play, Pause, Search } from 'lucide-react';
@@ -31,14 +31,22 @@ function Catalog() {
   const [searchBy, setSearchBy] = useState<'title' | 'author'>('title');
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useLibriVoxCatalog(query, searchBy);
-  const books = catalog.data?.pages.flat() ?? [];
+  const books = useMemo(() => catalog.data?.pages.flat() ?? [], [catalog.data?.pages]);
+  const visibleBooks = useMemo(() => books.filter(book => book.chapters.length > 0 && book.covers.length > 0), [books]);
+  const loadedPages = catalog.data?.pages.length ?? 0;
+  const shouldScanMore = visibleBooks.length < 20 && loadedPages < 20;
+  useEffect(() => {
+    if (shouldScanMore && catalog.hasNextPage && !catalog.isFetchingNextPage && !catalog.isFetchNextPageError) {
+      void catalog.fetchNextPage();
+    }
+  }, [shouldScanMore, catalog.hasNextPage, catalog.isFetchingNextPage, catalog.isFetchNextPageError, catalog.fetchNextPage]);
   return <div className="p-4 sm:p-6 space-y-8">
     <header className="rounded-xl bg-gradient-to-br from-teal-900 via-emerald-950 to-card p-6 sm:p-8"><p className="flex items-center gap-2 text-sm uppercase tracking-wider font-semibold text-emerald-200"><Headphones className="size-4" /> Free public-domain audiobooks</p><h1 className="text-4xl sm:text-5xl font-bold tracking-tight mt-3">Audiobooks</h1><p className="mt-3 text-muted-foreground max-w-2xl">Discover stories read by volunteers from LibriVox. Choose a book to listen chapter by chapter.</p></header>
     <section className="space-y-4"><div className="flex flex-wrap gap-2 items-center"><div className="relative flex-1 min-w-48"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" /><Input value={term} onChange={event => setTerm(event.target.value)} aria-label="Search audiobooks" placeholder="Search LibriVox" className="pl-10 h-11" /></div><label htmlFor="book-search-type" className="sr-only">Search by</label><select id="book-search-type" value={searchBy} onChange={event => setSearchBy(event.target.value as 'title' | 'author')} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
-      <p className="text-sm text-muted-foreground">Search from the beginning of a title or author’s name. LibriVox audio and cover art are hosted by third parties.</p>
+      <p className="text-sm text-muted-foreground">Only books with playable chapters and cover art are shown. Search titles or authors; LibriVox hosts the audio and artwork.</p>
     </section>
     <section className="space-y-4"><h2 className="text-2xl font-bold">{query ? `Results for “${query}”` : 'Explore audiobooks'}</h2>
-      {catalog.isLoading || query !== term.trim() ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{Array.from({ length: 10 }, (_, index) => <div key={index} className="space-y-3"><Skeleton className="aspect-square rounded-lg" /><Skeleton className="h-4 w-3/4" /></div>)}</div> : catalog.isError && !books.length ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load LibriVox audiobooks. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : !books.length ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">No audiobooks found. Try a different title or author.</div> : <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{books.map((book, index) => <BookCard key={`${book.id}-${index}`} book={book} />)}</div>{catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more books. Please try again.</p>}{catalog.hasNextPage && <Button variant="outline" disabled={catalog.isFetchingNextPage} onClick={() => void catalog.fetchNextPage()}>{catalog.isFetchingNextPage ? 'Loading…' : 'Load more audiobooks'}</Button>}</>}
+      {catalog.isLoading || query !== term.trim() ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{Array.from({ length: 10 }, (_, index) => <div key={index} className="space-y-3"><Skeleton className="aspect-square rounded-lg" /><Skeleton className="h-4 w-3/4" /></div>)}</div> : catalog.isError && !books.length ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load LibriVox audiobooks. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : !visibleBooks.length && shouldScanMore && catalog.isFetchingNextPage ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground" role="status">Looking through LibriVox results for books with playable chapters and cover art…</div> : !visibleBooks.length && shouldScanMore && catalog.isFetchNextPageError ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Couldn’t search further for books with audio and cover art. <button className="text-primary underline" onClick={() => void catalog.fetchNextPage()}>Try again</button></div> : !visibleBooks.length ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching books with playable chapters and cover art were found.' : 'No audiobooks with playable chapters and cover art were found.'}</div> : <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{visibleBooks.map((book, index) => <BookCard key={`${book.id}-${index}`} book={book} />)}</div>{catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more books. Please try again.</p>}{catalog.hasNextPage && <Button variant="outline" disabled={catalog.isFetchingNextPage} onClick={() => void catalog.fetchNextPage()}>{catalog.isFetchingNextPage ? 'Loading…' : 'Load more audiobooks'}</Button>}</>}
     </section>
   </div>;
 }
