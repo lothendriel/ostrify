@@ -5,19 +5,18 @@ import { TestApp } from '@/test/TestApp';
 import FriendsPage from './FriendsPage';
 
 const matt = '2'.repeat(64);
-const { invite } = vi.hoisted(() => ({ invite: vi.fn() }));
 
 vi.mock('@/hooks/useCurrentUser', () => ({ useCurrentUser: () => ({ user: { pubkey: '1'.repeat(64) } }) }));
 vi.mock('@/hooks/useFriends', () => ({
-  useFriends: () => ({ data: { friends: [], incoming: [], outgoing: [] }, isLoading: false, isError: false, send: { mutate: invite, isPending: false } }),
+  useFriends: () => ({ data: { friends: [], incoming: [], outgoing: [] }, isLoading: false, isError: false }),
   useNostrFollows: () => ({ data: [], isLoading: false }),
 }));
-vi.mock('@/hooks/useFollowedPeople', () => ({ useFollowedPeople: () => ({ hasReadRelays: true, people: [], isLoading: false, isError: false }) }));
+vi.mock('@/hooks/useFollowedPeople', () => ({ useFollowedPeople: () => ({ data: { tags: [['ostrify-migration', 'nip17-friends-v1']] }, hasReadRelays: true, people: [], isLoading: false, isError: false, toggle: { mutate: vi.fn(), isPending: false }, mergePeople: { mutateAsync: vi.fn().mockResolvedValue(null) } }) }));
 vi.mock('@/hooks/useFriendLibrary', () => ({ useFriendStatuses: () => ({ data: [] }), useFriendLibrary: () => ({ data: { playlists: [], artists: [] }, isLoading: false, isError: false }) }));
 vi.mock('@/hooks/useOstrifyDirectory', () => ({ useOstrifyDirectory: () => ({ hasReadRelays: true, data: [{ pubkey: '2'.repeat(64), name: 'Matt', picture: 'https://example.com/matt.jpg' }], isLoading: false, isError: false }) }));
 
 describe('Ostrify people search', () => {
-  beforeEach(() => { window.history.replaceState({}, '', '/friends'); invite.mockClear(); });
+  beforeEach(() => { window.history.replaceState({}, '', '/friends'); });
 
   it('only shows matches while searching and clears them when the input is cleared', () => {
     render(<TestApp><FriendsPage /></TestApp>);
@@ -30,6 +29,6 @@ describe('Ostrify people search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear people search' }));
     expect(screen.queryByRole('link', { name: "View Matt's Ostrify profile" })).not.toBeInTheDocument();
     expect(search).toHaveValue('');
-    expect(invite).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Add friend/ })).not.toBeInTheDocument();
   });
 });

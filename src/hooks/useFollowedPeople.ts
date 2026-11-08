@@ -6,6 +6,8 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAppContext } from '@/hooks/useAppContext';
 
 const ID = 'ostrify-people';
+const MIGRATION_TAG = 'ostrify-migration';
+const MIGRATION_VALUE = 'nip17-friends-v1';
 const HEX = /^[0-9a-f]{64}$/;
 
 function newest(events: NostrEvent[], author: string): NostrEvent | null {
@@ -33,7 +35,32 @@ export function useFollowedPeople() {
       return newest(events, user.pubkey);
     },
   });
-  const people = [...new Set((query.data?.tags ?? []).filter(([name, value]) => name === 'p' && HEX.test(value ?? '')).map(([, value]) => value))];
+  const people = [...new Set((query.data?.tags ?? []).filter(([name, value]) => name === 'p' && HEX.test(value ?? '') && value !== user?.pubkey).map(([, value]) => value))];
+
+  const mergePeople = useMutation({
+    mutationFn: async (pubkeys: string[]) => {
+      if (!user) throw new Error('Log in to follow people.');
+      if (!relayKey) throw new Error('Enable a read relay to check your followed people.');
+      const additions = [...new Set(pubkeys.filter(pubkey => HEX.test(pubkey) && pubkey !== user.pubkey))];
+      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000) });
+      const fromRelays = newest(events, user.pubkey);
+      const cached = client.getQueryData<NostrEvent | null>(key);
+      const existing = fromRelays && cached ? newest([fromRelays, cached], user.pubkey) : fromRelays ?? cached ?? null;
+      const current = [...new Set((existing?.tags ?? []).filter(([name, value]) => name === 'p' && HEX.test(value ?? '') && value !== user.pubkey).map(([, value]) => value))];
+      const next = [...current, ...additions.filter(pubkey => !current.includes(pubkey))];
+      const hasMigrationMarker = existing?.tags.some(([name, value]) => name === MIGRATION_TAG && value === MIGRATION_VALUE) ?? false;
+      if (next.length === current.length && hasMigrationMarker) return existing;
+      const tags = existing ? existing.tags.filter(([name, value]) => !(name === 'p' && HEX.test(value ?? '')) && !(name === MIGRATION_TAG && value === MIGRATION_VALUE)).map(tag => [...tag]) : [['d', ID], ['title', 'Ostrify followed people']];
+      tags.push(...next.map(pubkey => ['p', pubkey]), [MIGRATION_TAG, MIGRATION_VALUE]);
+      const now = Math.floor(Date.now() / 1000);
+      if (existing && existing.created_at >= now) throw new Error('Please wait a moment before updating your followed people again.');
+      return publish({ kind: 30000, content: existing?.content ?? '', tags, created_at: now });
+    },
+    onSuccess: async event => {
+      if (event) client.setQueryData(key, event);
+      else await client.invalidateQueries({ queryKey: key });
+    },
+  });
 
   const toggle = useMutation({
     mutationFn: async ({ pubkey, follow }: { pubkey: string; follow: boolean }) => {
@@ -44,7 +71,7 @@ export function useFollowedPeople() {
       const fromRelays = newest(events, user.pubkey);
       const cached = client.getQueryData<NostrEvent | null>(key);
       const existing = fromRelays && cached ? newest([fromRelays, cached], user.pubkey) : fromRelays ?? cached ?? null;
-      const already = existing?.tags.some(([name, value]) => name === 'p' && value === pubkey) ?? false;
+      const already = existing?.tags.some(([name, value]) => name === 'p' && value === pubkey && pubkey !== user.pubkey) ?? false;
       if (already === follow) return existing;
       // Preserve encrypted private items, metadata, relay hints and unknown tags.
       const tags = existing ? existing.tags.filter(([name, value]) => !(name === 'p' && value === pubkey)).map(tag => [...tag]) : [['d', ID], ['title', 'Ostrify followed people']];
@@ -55,5 +82,5 @@ export function useFollowedPeople() {
     },
     onSuccess: event => { if (event) client.setQueryData(key, event); },
   });
-  return { ...query, people, toggle, hasReadRelays: !!relayKey };
+  return { ...query, people, toggle, mergePeople, hasReadRelays: !!relayKey };
 }
