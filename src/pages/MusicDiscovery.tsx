@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Music2, Radio, RefreshCw, Video } from 'lucide-react';
+import { Maximize2, Minimize2, Music2, PictureInPicture2, Radio, RefreshCw, Video, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WavlakeDiscovery } from '@/pages/WavlakePage';
 import { NostrCollections } from '@/components/music/NostrCollections';
@@ -39,14 +39,62 @@ function TunestrStreamCard({ stream, onSelect }: { stream: TunestrStream; onSele
   </button>;
 }
 
-function TunestrVideoDialog({ stream, open, onOpenChange }: { stream: TunestrStream | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+function TunestrVideoDialog({ stream, open, onOpenChange, docked, onDock, onRestore }: { stream: TunestrStream | null; open: boolean; onOpenChange: (open: boolean) => void; docked: boolean; onDock: () => void; onRestore: () => void }) {
   const [failedStream, setFailedStream] = useState<string | null>(null);
+  const playerRef = useRef<HTMLDivElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const failed = !!stream && failedStream === stream.id;
-  return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-4xl overflow-hidden p-0">
-      <DialogHeader className="p-5 pb-0 pr-12"><DialogTitle>{stream?.title ?? 'TuneStr stream'}</DialogTitle><DialogDescription>{stream?.summary || 'TuneStr video stream on Nostr.'}</DialogDescription></DialogHeader>
-      {stream && !failed ? <iframe key={stream.id} src={stream.url} title={stream.title} allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;" allowFullScreen className="aspect-video w-full border-0 bg-black" onError={() => { if (stream) setFailedStream(stream.id); }} /> : <div className="p-6 text-sm text-muted-foreground">This stream could not be played. It may have ended or the host may not allow browser playback.</div>}
-      <div className="p-4 pt-0">{stream && <a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open raw stream source</a>}<span className="ml-2 text-xs text-muted-foreground">A raw .m3u8 manifest isn’t directly viewable as a web page.</span></div>
+  const currentStreamId = stream?.id;
+
+  useEffect(() => {
+    setFailedStream(null);
+  }, [currentStreamId]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerRef.current);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!open && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, [open]);
+
+  const toggleFullscreen = () => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (document.fullscreenElement === player) void document.exitFullscreen().catch(() => {});
+    else void player.requestFullscreen().catch(() => {});
+  };
+
+  const closePlayer = () => onOpenChange(false);
+  const controls = <div className="flex shrink-0 items-center gap-1">
+    {docked ? <Button type="button" variant="ghost" size="icon" aria-label="Restore player" title="Restore player" onClick={onRestore}><Maximize2 className="size-4" /></Button> : <Button type="button" variant="ghost" size="icon" aria-label="Picture in picture" title="Picture in picture" onClick={onDock}><PictureInPicture2 className="size-4" /></Button>}
+    <Button type="button" variant="ghost" size="icon" aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} title={fullscreen ? 'Exit full screen' : 'Full screen'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button>
+    <Button type="button" variant="ghost" size="icon" aria-label="Close player" title="Close player" onClick={closePlayer}><X className="size-4" /></Button>
+  </div>;
+
+  return <Dialog open={open} modal={!docked} onOpenChange={onOpenChange}>
+    <DialogContent
+      className={docked
+        ? '!fixed !left-auto !top-auto !bottom-24 !right-4 !z-[60] !w-[min(420px,calc(100vw-2rem))] !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-xl !p-0 !shadow-2xl sm:!max-w-none'
+        : 'max-w-4xl overflow-hidden p-0'}
+      showOverlay={!docked}
+      showPortal={!docked}
+      showCloseButton={false}
+      onEscapeKeyDown={event => { if (docked) event.preventDefault(); }}
+      onInteractOutside={event => { if (docked) event.preventDefault(); }}
+    >
+      <div ref={playerRef} className={docked ? 'overflow-hidden rounded-xl bg-card' : 'overflow-hidden bg-background'}>
+      <div className={docked ? 'flex items-center justify-between gap-2 px-3 py-2' : 'flex items-start justify-between gap-3 p-5 pb-0 pr-4'}>
+        <div className="min-w-0">
+          {docked ? <><DialogTitle className="sr-only">{stream?.title ?? 'TuneStr stream'}</DialogTitle><DialogDescription className="sr-only">{stream?.summary || 'TuneStr video stream on Nostr.'}</DialogDescription><p className="truncate text-sm font-semibold">{stream?.title ?? 'TuneStr stream'}</p><p className="truncate text-xs text-muted-foreground">{stream?.isLive ? 'LIVE' : 'Recording'}</p></> : <DialogHeader className="min-w-0"><DialogTitle className="truncate">{stream?.title ?? 'TuneStr stream'}</DialogTitle><DialogDescription className="line-clamp-2">{stream?.summary || 'TuneStr video stream on Nostr.'}</DialogDescription></DialogHeader>}
+        </div>
+        {controls}
+      </div>
+      {stream && !failed ? <iframe key={stream.id} src={stream.url} title={stream.title} allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen className="aspect-video w-full border-0 bg-black" onError={() => { if (stream) setFailedStream(stream.id); }} /> : <div className="p-6 text-sm text-muted-foreground">This stream could not be played. It may have ended or the host may not allow browser playback.</div>}
+      {!docked && <div className="p-4 pt-0">{stream && <a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open raw stream source</a>}<span className="ml-2 text-xs text-muted-foreground">A raw .m3u8 manifest isn’t directly viewable as a web page.</span></div>}
+      </div>
     </DialogContent>
   </Dialog>;
 }
@@ -55,6 +103,7 @@ export default function MusicDiscovery() {
   useSeoMeta({ title: 'Music — Ostrify', description: 'Discover Nostr, TuneStr, and Wavlake music in one place.' });
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedStream, setSelectedStream] = useState<TunestrStream | null>(null);
+  const [playerDocked, setPlayerDocked] = useState(false);
   const source = searchParams.get('source');
   const activeTab = source === 'wavlake' || source === 'tunestr' ? source : 'nostr';
   const feed = useMusicDiscovery();
@@ -129,6 +178,6 @@ export default function MusicDiscovery() {
       </TabsContent>
       <TabsContent value="wavlake" className="mt-0"><WavlakeDiscovery /></TabsContent>
     </Tabs>
-    <TunestrVideoDialog stream={selectedStream} open={!!selectedStream} onOpenChange={open => { if (!open) setSelectedStream(null); }} />
+    <TunestrVideoDialog stream={selectedStream} open={!!selectedStream} docked={playerDocked} onDock={() => setPlayerDocked(true)} onRestore={() => setPlayerDocked(false)} onOpenChange={open => { if (!open) { setPlayerDocked(false); setSelectedStream(null); } }} />
   </div>;
 }
