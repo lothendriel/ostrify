@@ -76,7 +76,7 @@ export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author') 
   const normalizedQuery = query.trim();
   return useInfiniteQuery({
     queryKey: ['librivox-catalog', normalizedQuery, searchBy],
-    initialPageParam: 0,
+    initialPageParam: 1,
     retry: 1,
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ pageParam, signal }): Promise<SearchPage> => {
@@ -86,7 +86,7 @@ export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author') 
       url.searchParams.set('q', `collection:librivoxaudio${terms.length ? ` AND ${terms.join(' AND ')}` : ''}`);
       url.searchParams.set('fl[]', 'identifier,title,creator,language');
       url.searchParams.set('rows', String(PAGE_SIZE));
-      url.searchParams.set('start', String(pageParam));
+      url.searchParams.set('page', String(pageParam));
       url.searchParams.set('output', 'json');
       url.searchParams.set('sort[]', 'publicdate desc');
       const result = record(await fetchJson(url, AbortSignal.any([signal, AbortSignal.timeout(15000)])));
@@ -100,12 +100,12 @@ export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author') 
         if (!identifier || !validIdentifier(identifier) || !title || title === '[]' || /^Nc[a-f0-9]{10,}$/i.test(author)) return [];
         return [makeBook(identifier, title, author, text(item?.language))];
       });
-      const total = typeof response.numFound === 'number' && Number.isFinite(response.numFound) ? response.numFound : pageParam + response.docs.length;
+      const total = typeof response.numFound === 'number' && Number.isFinite(response.numFound) ? response.numFound : pageParam * PAGE_SIZE;
       return { books, total, fetchedCount: response.docs.length };
     },
-    getNextPageParam: (lastPage, pages) => {
-      const scanned = pages.reduce((count, page) => count + page.fetchedCount, 0);
-      return scanned < lastPage.total && lastPage.fetchedCount > 0 ? scanned : undefined;
+    getNextPageParam: (lastPage, _pages, lastPageParam) => {
+      const hasMoreResults = lastPageParam * PAGE_SIZE < lastPage.total;
+      return hasMoreResults && lastPage.fetchedCount > 0 ? lastPageParam + 1 : undefined;
     },
   });
 }
