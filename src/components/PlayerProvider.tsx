@@ -2,6 +2,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
 
+const PLAYER_VOLUME_STORAGE_KEY = "ostrify-player-volume";
+const DEFAULT_PLAYER_VOLUME = 0.8;
+
+function readSavedVolume(): number {
+  try {
+    if (typeof window === "undefined") return DEFAULT_PLAYER_VOLUME;
+    const stored = window.localStorage.getItem(PLAYER_VOLUME_STORAGE_KEY);
+    if (stored === null) return DEFAULT_PLAYER_VOLUME;
+
+    const parsed: unknown = JSON.parse(stored);
+    if (typeof parsed !== "number" || !Number.isFinite(parsed)) return DEFAULT_PLAYER_VOLUME;
+    return Math.min(1, Math.max(0, parsed));
+  } catch {
+    return DEFAULT_PLAYER_VOLUME;
+  }
+}
+
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   if (audioRef.current === null && typeof Audio !== "undefined") {
@@ -13,7 +30,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolumeState] = useState(0.8);
+  const [volume, setVolumeState] = useState(readSavedVolume);
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
@@ -167,8 +184,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setVolume = useCallback((v: number) => {
-    setVolumeState(v);
-    if (v > 0) setMuted(false);
+    const nextVolume = Math.min(1, Math.max(0, Number.isFinite(v) ? v : DEFAULT_PLAYER_VOLUME));
+    setVolumeState(nextVolume);
+    try {
+      window.localStorage.setItem(PLAYER_VOLUME_STORAGE_KEY, JSON.stringify(nextVolume));
+    } catch {
+      // Volume remains functional for this session if browser storage is unavailable.
+    }
+    if (nextVolume > 0) setMuted(false);
   }, []);
 
   const toggleMute = useCallback(() => setMuted((m) => !m), []);
