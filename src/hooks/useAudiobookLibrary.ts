@@ -3,8 +3,13 @@ import { sanitizeUrl } from '@/lib/sanitize';
 
 const STORAGE_KEY = 'ostrify-audiobook-library-v1';
 
+export type AudiobookSource = 'librivox' | 'gutenberg';
+
 export interface SavedAudiobook {
+  /** Source-qualified key, e.g. `librivox:123` or `gutenberg:archive-id`. */
   id: string;
+  source?: AudiobookSource;
+  catalogId?: string;
   title: string;
   author: string;
   covers: string[];
@@ -36,13 +41,21 @@ function parseLibrary(value: string | null): AudiobookLibraryState {
     if (!parsed || typeof parsed !== 'object') return EMPTY_LIBRARY;
     const source = parsed as Partial<AudiobookLibraryState>;
     const books: Record<string, SavedAudiobook> = {};
+    const legacyBookKeys = new Map<string, string>();
     if (source.books && typeof source.books === 'object') {
       for (const [id, value] of Object.entries(source.books)) {
         if (!value || typeof value !== 'object') continue;
         const book = value as SavedAudiobook;
-        if (!/^\d{1,12}$/.test(id) || typeof book.title !== 'string' || typeof book.author !== 'string') continue;
-        books[id] = {
-          id,
+        const bookSource: AudiobookSource = book.source === 'gutenberg' || id.startsWith('gutenberg:') ? 'gutenberg' : 'librivox';
+        const catalogId = typeof book.catalogId === 'string' ? book.catalogId : bookSource === 'librivox' ? id.replace(/^librivox:/, '') : id.replace(/^gutenberg:/, '');
+        if (bookSource === 'librivox' ? !/^\d{1,12}$/.test(catalogId) : !/^[a-z0-9_-]{1,160}$/i.test(catalogId)) continue;
+        if (typeof book.title !== 'string' || typeof book.author !== 'string') continue;
+        const key = `${bookSource}:${catalogId}`;
+        legacyBookKeys.set(id, key);
+        books[key] = {
+          id: key,
+          source: bookSource,
+          catalogId,
           title: book.title,
           author: book.author,
           covers: Array.isArray(book.covers) ? book.covers.map(url => sanitizeUrl(url)).filter((url): url is string => !!url) : [],
@@ -52,13 +65,21 @@ function parseLibrary(value: string | null): AudiobookLibraryState {
         };
       }
     }
-    const favoriteIds = Array.isArray(source.favoriteIds) ? source.favoriteIds.filter(id => typeof id === 'string' && !!books[id]) : [];
+    const favoriteIds = Array.isArray(source.favoriteIds) ? source.favoriteIds.flatMap(id => {
+      if (typeof id !== 'string') return [];
+      const key = legacyBookKeys.get(id) ?? (books[id] ? id : undefined);
+      return key ? [key] : [];
+    }) : [];
     const collections = Array.isArray(source.collections) ? source.collections.flatMap(collection => {
       if (!collection || typeof collection.id !== 'string' || typeof collection.title !== 'string' || !Array.isArray(collection.audiobookIds)) return [];
       return [{
         id: collection.id,
         title: collection.title,
-        audiobookIds: collection.audiobookIds.filter(id => typeof id === 'string' && !!books[id]),
+        audiobookIds: collection.audiobookIds.flatMap(id => {
+          if (typeof id !== 'string') return [];
+          const key = legacyBookKeys.get(id) ?? (books[id] ? id : undefined);
+          return key ? [key] : [];
+        }),
       }];
     }) : [];
     return { books, favoriteIds, collections };
@@ -100,6 +121,18 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
+export function audiobookPath(book: Pick<SavedAudiobook, 'id' | 'source' | 'catalogId'>): string {
+  const source = book.source ?? 'librivox';
+  const id = book.catalogId ?? book.id.replace(/^(librivox|gutenberg):/, '');
+  return source === 'gutenberg' ? `/audiobooks/gutenberg/${encodeURIComponent(id)}` : `/audiobooks/${encodeURIComponent(id)}`;
+}
+
+function libraryKey(book: SavedAudiobook): string {
+  const source = book.source ?? 'librivox';
+  const catalogId = book.catalogId ?? book.id.replace(/^(librivox|gutenberg):/, '');
+  return `${source}:${catalogId}`;
+}
+
 function updateLibrary(updater: (current: AudiobookLibraryState) => AudiobookLibraryState): void {
   snapshot = updater(snapshot);
   try {
@@ -114,11 +147,12 @@ export function useAudiobookLibrary() {
   const library = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   function toggleFavorite(book: SavedAudiobook): void {
+    const key = libraryKey(book);
     updateLibrary(current => {
-      const favoriteIds = current.favoriteIds.includes(book.id)
-        ? current.favoriteIds.filter(id => id !== book.id)
-        : [...current.favoriteIds, book.id];
-      return { ...current, books: { ...current.books, [book.id]: book }, favoriteIds };
+      const favoriteIds = current.favoriteIds.includes(key)
+        ? current.favoriteIds.filter(id => id !== key)
+        : [...current.favoriteIds, key];
+      return { ...current, books: { ...current.books, [key]: { ...book, id: key, source: book.source ?? 'librivox', catalogId: book.catalogId ?? book.id } }, favoriteIds };
     });
   }
 
@@ -129,14 +163,15 @@ export function useAudiobookLibrary() {
   }
 
   function toggleInCollection(collectionId: string, book: SavedAudiobook): void {
+    const key = libraryKey(book);
     updateLibrary(current => ({
       ...current,
-      books: { ...current.books, [book.id]: book },
+      books: { ...current.books, [key]: { ...book, id: key, source: book.source ?? 'librivox', catalogId: book.catalogId ?? book.id } },
       collections: current.collections.map(collection => collection.id !== collectionId ? collection : {
         ...collection,
-        audiobookIds: collection.audiobookIds.includes(book.id)
-          ? collection.audiobookIds.filter(id => id !== book.id)
-          : [...collection.audiobookIds, book.id],
+        audiobookIds: collection.audiobookIds.includes(key)
+          ? collection.audiobookIds.filter(id => id !== key)
+          : [...collection.audiobookIds, key],
       }),
     }));
   }
@@ -160,9 +195,9 @@ export function useAudiobookLibrary() {
     favoriteBooks,
     savedBooks: Object.values(library.books).length ? Object.values(library.books) : EMPTY_SAVED_BOOKS,
     collections: library.collections,
-    getBook: (id: string) => library.books[id],
-    isFavorite: (id: string) => library.favoriteIds.includes(id),
-    isInCollection: (collectionId: string, bookId: string) => !!library.collections.find(collection => collection.id === collectionId)?.audiobookIds.includes(bookId),
+    getBook: (id: string) => library.books[id.includes(':') ? id : `librivox:${id}`],
+    isFavorite: (id: string) => library.favoriteIds.includes(id.includes(':') ? id : `librivox:${id}`),
+    isInCollection: (collectionId: string, bookId: string) => !!library.collections.find(collection => collection.id === collectionId)?.audiobookIds.includes(bookId.includes(':') ? bookId : `librivox:${bookId}`),
     booksInCollection: (collectionId: string) => {
       const collection = library.collections.find(item => item.id === collectionId);
       return (collection?.audiobookIds ?? []).map(id => library.books[id]).filter((book): book is SavedAudiobook => !!book);

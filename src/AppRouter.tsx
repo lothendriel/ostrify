@@ -41,6 +41,7 @@ export function AppRouter() {
             <Route path="/audiobook-library" element={<AudiobookLibraryPage />} />
             <Route path="/audiobook-library/:id" element={<AudiobookLibraryPage />} />
             <Route path="/audiobooks" element={<AudiobooksPage />} />
+            <Route path="/audiobooks/gutenberg/:id" element={<AudiobooksPage />} />
             <Route path="/audiobooks/:id" element={<AudiobooksPage />} />
             <Route path="/music" element={<MusicDiscovery />} />
             <Route path="/wavlake" element={<MusicDiscovery />} />

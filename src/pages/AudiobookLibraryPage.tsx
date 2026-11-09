@@ -2,11 +2,11 @@ import { Link, useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
+import { audiobookPath, useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 
 function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; onRemove?: () => void; removeLabel?: string }) {
   return <article className="group flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3 hover:bg-secondary/60">
-    <Link to={`/audiobooks/${book.id}`} className="flex min-w-0 flex-1 items-center gap-3 focus-visible:outline-2 focus-visible:outline-primary">
+    <Link to={audiobookPath(book)} className="flex min-w-0 flex-1 items-center gap-3 focus-visible:outline-2 focus-visible:outline-primary">
       <div className="size-14 shrink-0 overflow-hidden rounded-md bg-secondary">
         {book.covers[0] ? <img src={book.covers[0]} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><BookOpen className="size-6 text-muted-foreground" /></div>}
       </div>
