@@ -7,6 +7,7 @@ import { LoginArea } from "@/components/auth/LoginArea";
 import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { FriendsActivitySheet } from "./FriendsActivitySheet";
+import { NotificationsBell } from "./NotificationsBell";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -41,6 +42,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </Sheet>
             </div>
             <div className="ml-auto flex items-center gap-1">
+              <NotificationsBell />
               <FriendsActivitySheet />
               <LoginArea className="max-w-60" />
             </div>
