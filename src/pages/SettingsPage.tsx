@@ -1,5 +1,5 @@
 import { useSeoMeta } from "@unhead/react";
-import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users } from "lucide-react";
+import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users, Mic } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RelayListManager } from "@/components/RelayListManager";
@@ -71,6 +71,7 @@ const SettingsPage = () => {
             ['artists', 'Followed artists', Music2],
             ['people', 'Friends on Ostrify', Users],
             ['playlists', 'Playlists', Library],
+            ['podcasts', 'Saved podcasts', Mic],
           ] as const).map(([section, label, Icon]) => <div key={section} className="flex items-center justify-between gap-4 rounded-lg border border-border/60 p-3">
             <div className="flex items-center gap-3"><Icon className="size-5 text-muted-foreground" /><div><p className="font-medium">{label}</p><p className="text-xs text-muted-foreground">{privacy.isHidden(section) ? 'Private on your profile' : 'Visible on your profile'}</p></div></div>
             <div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">Private</span><Switch aria-label={`Show ${label} on profile`} checked={!privacy.isHidden(section)} disabled={!user || privacy.isSaving || privacy.isLoading || privacy.isError || !privacy.hasReadRelays} onCheckedChange={visible => privacy.setVisibility.mutate({ section, visible }, { onSuccess: () => toast({ title: `${label} ${visible ? 'shown on' : 'hidden from'} your profile` }), onError: error => toast({ title: 'Could not update profile privacy', description: error.message, variant: 'destructive' }) })} /><span className="text-xs text-muted-foreground">Public</span></div>

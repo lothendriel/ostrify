@@ -10,7 +10,7 @@ const MIGRATION_TAG = 'ostrify-migration';
 const MIGRATION_VALUE = 'nip17-friends-v1';
 export const PROFILE_HIDDEN_TAG = 'ostrify-hide';
 const HIDDEN_TAG = PROFILE_HIDDEN_TAG;
-export const PROFILE_SECTIONS = ['liked', 'artists', 'people', 'playlists'] as const;
+export const PROFILE_SECTIONS = ['liked', 'artists', 'people', 'playlists', 'podcasts'] as const;
 export type ProfileSection = typeof PROFILE_SECTIONS[number];
 const HEX = /^[0-9a-f]{64}$/;
 

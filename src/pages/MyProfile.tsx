@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Heart, Library, Music2, UserRound } from 'lucide-react';
+import { Heart, Library, Music2, UserRound, Mic } from 'lucide-react';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +15,7 @@ import { useWavlakeRelease } from '@/hooks/useWavlake';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { nip19 } from 'nostr-tools';
+import { usePodcastFavorites } from '@/hooks/usePodcasts';
 
 function FollowedPersonTile({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
@@ -44,6 +45,7 @@ export default function MyProfile() {
   const artists = useFollowedArtists();
   const followedPeople = useFollowedPeople();
   const privacy = useProfilePrivacy();
+  const podcastFavorites = usePodcastFavorites();
   const liked = playlists.data?.find(list => list.id === LIKED_SONGS_ID);
   const savedTracks = useTracksByIds(liked?.trackIds);
   if (!user) return <div className="py-20 px-6 text-center space-y-4"><UserRound className="size-12 mx-auto text-primary" /><h1 className="text-3xl font-bold">Your music profile</h1><p className="text-muted-foreground">Log in to see your followed artists, liked songs and playlists.</p><LoginArea className="max-w-60" /></div>;
@@ -62,6 +64,7 @@ export default function MyProfile() {
     {!privacy.isHidden('artists') && !privacy.isLoading && !privacy.isError && <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-2xl font-bold flex items-center gap-2"><Music2 className="size-5 text-primary" /> Followed artists</h2><Link to="/artists" className="text-sm font-semibold text-primary hover:underline">View all</Link></div>
       {artists.isLoading ? <Skeleton className="h-20 w-full" /> : artists.isError ? <p role="alert" className="text-sm text-muted-foreground">Couldn’t load followed artists. <button className="underline" onClick={() => void artists.refetch()}>Try again</button></p> : artists.data?.length ? <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{artists.data.map(reference => <ArtistTile key={reference} reference={reference} />)}</div> : <p className="text-muted-foreground">You aren’t following any artists yet.</p>}
     </section>}
+    {!privacy.isHidden('podcasts') && !privacy.isLoading && !privacy.isError && <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-2xl font-bold flex items-center gap-2"><Mic className="size-5 text-primary" /> Saved podcasts</h2><Link to="/podcast-library" className="text-sm font-semibold text-primary hover:underline">View all</Link></div>{podcastFavorites.isLoading ? <Skeleton className="h-20 w-full" /> : podcastFavorites.isError ? <p role="alert" className="text-sm text-muted-foreground">Couldn’t load saved podcasts. <button className="underline" onClick={() => void podcastFavorites.refetch()}>Try again</button></p> : podcastFavorites.data.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{podcastFavorites.data.slice(0, 6).map(item => <Link key={item.id} to={item.episode ? '/podcast-library' : item.feedId ? `/podcasts?source=directory&show=${encodeURIComponent(item.id)}` : '/podcast-library'} className="flex min-w-0 items-center gap-3 rounded-xl bg-secondary/50 p-3 hover:bg-secondary">{item.image ? <img src={item.image} alt="" className="size-12 shrink-0 rounded-md object-cover" /> : <Mic className="size-6 shrink-0 text-primary" />}<span className="min-w-0"><span className="block truncate font-semibold">{item.title}</span><span className="block truncate text-sm text-muted-foreground">{item.publisher ?? (item.episode ? 'Podcast episode' : 'Podcast')}</span></span></Link>)}</div> : <p className="text-muted-foreground">You haven’t saved any podcasts or episodes yet.</p>}</section>}
     {!privacy.isHidden('people') && !privacy.isLoading && !privacy.isError && <section className="space-y-4"><h2 className="text-2xl font-bold flex items-center gap-2"><UserRound className="size-5 text-primary" /> Friends on Ostrify</h2>{followedPeople.isLoading ? <Skeleton className="h-20 w-full" /> : followedPeople.isError ? <p role="alert" className="text-sm text-muted-foreground">Couldn’t load friends. <button className="underline" onClick={() => void followedPeople.refetch()}>Try again</button></p> : followedPeople.people.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{followedPeople.people.map(pubkey => <FollowedPersonTile key={pubkey} pubkey={pubkey} />)}</div> : <p className="text-muted-foreground">You haven’t added any friends on Ostrify yet.</p>}</section>}
     {!privacy.isHidden('playlists') && !privacy.isLoading && !privacy.isError && <section className="space-y-4"><h2 className="text-2xl font-bold flex items-center gap-2"><Library className="size-5 text-primary" /> Your playlists</h2>
       {playlists.isLoading ? <Skeleton className="h-20 w-full" /> : playlists.isError ? <p role="alert" className="text-sm text-muted-foreground">Couldn’t load playlists. <button className="underline" onClick={() => void playlists.refetch()}>Try again</button></p> : regular.length ? <div className="grid sm:grid-cols-2 gap-3">{regular.map(list => <Link key={list.id} to={`/playlist/${encodeURIComponent(list.id)}`} className="rounded-xl border border-border bg-secondary/30 p-4 hover:bg-secondary"><span className="block font-semibold truncate">{list.title}</span><span className="text-sm text-muted-foreground">{list.trackIds.length} tracks</span></Link>)}</div> : <p className="text-muted-foreground">You haven’t created a music playlist yet.</p>}

@@ -507,7 +507,7 @@ export function usePodcastFavorites() {
       return parsePodcastFavorites(event);
     },
   });
-  return { ...query, data: query.data ?? [] };
+  return { ...query, data: query.data ?? [], isEnabled: !!user };
 }
 
 export function useIsPodcastFavorite(id: string) {

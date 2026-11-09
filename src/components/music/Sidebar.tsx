@@ -126,9 +126,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 </div>
               </NavLink>
 
-              <NavLink to="/podcasts?source=directory" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
+              <NavLink to="/podcast-library" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-fuchsia-600 to-purple-700"><Mic className="size-5 text-white" /></div>
-                <div className="min-w-0"><div className="truncate text-sm font-medium">Saved Podcasts</div><div className="text-xs text-muted-foreground">{podcastFavorites.data.length} saved</div></div>
+                <div className="min-w-0"><div className="truncate text-sm font-medium">Saved Podcasts</div><div className="text-xs text-muted-foreground">{podcastFavorites.data.filter(item => !item.episode).length} shows · {podcastFavorites.data.filter(item => item.episode).length} episodes</div></div>
               </NavLink>
 
               {/* Followed Artists pinned */}
