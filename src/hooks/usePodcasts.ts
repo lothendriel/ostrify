@@ -540,8 +540,9 @@ export function usePodcastFavorites() {
       if (!user || !readRelayKey) return [] as PodcastFavorite[];
       const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }], {
         signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
+        relays: readRelayKey.split("|"),
       });
-      const event = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND).sort((a, b) => b.created_at - a.created_at)[0];
+      const event = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND && item.tags.some(([name, value]) => name === "d" && value === "favorite-podcasts")).sort((a, b) => b.created_at - a.created_at)[0];
       return parsePodcastFavorites(event);
     },
   });
@@ -567,8 +568,8 @@ export function usePodcastFavoriteActions() {
       if (!user) throw new Error("Log in to save podcasts");
       if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
       if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
-      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }], { signal: AbortSignal.timeout(15000) });
-      const existing = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND).sort((a, b) => b.created_at - a.created_at)[0];
+      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], '#d': ['favorite-podcasts'], limit: 10 }], { signal: AbortSignal.timeout(15000) });
+      const existing = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND && item.tags.some(([name, value]) => name === "d" && value === "favorite-podcasts")).sort((a, b) => b.created_at - a.created_at)[0];
       const current = parsePodcastFavorites(existing);
       const has = current.some(item => item.id === input.favorite.id);
       const next = input.saved

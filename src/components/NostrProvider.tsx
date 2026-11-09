@@ -90,7 +90,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
       return [...allRelays];
     },
-    eoseTimeout: 200,
+    // Don't discard slow relays after another relay reaches EOSE: saved library
+    // events are replaceable and a fast, empty relay can otherwise hide them.
+    eoseTimeout: 0,
   }));
 
   // Derive the current signer from the active login. This mirrors the

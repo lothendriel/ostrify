@@ -39,9 +39,9 @@ export function useFollowedArtists() {
             limit: 1,
           },
         ],
-        { signal },
+        { signal, relays: readRelayKey.split("|") },
       );
-      const event = events.sort((a, b) => b.created_at - a.created_at)[0];
+      const event = events.filter(item => item.pubkey === user.pubkey && item.kind === FOLLOW_SET_KIND && item.tags.some(([name, value]) => name === 'd' && value === FOLLOWED_ARTISTS_ID)).sort((a, b) => b.created_at - a.created_at)[0];
       return artistRefs(event);
     },
     enabled: !!user && !!readRelayKey,

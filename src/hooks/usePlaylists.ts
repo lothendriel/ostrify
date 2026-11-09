@@ -60,7 +60,7 @@ export function usePlaylists() {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(12000)]);
       const events = await nostr.query(
         [{ kinds: [PLAYLIST_KIND], authors: [user.pubkey], limit: 100 }],
-        { signal },
+        { signal, relays: readRelayKey.split("|") },
       );
       const playlists = events
         .filter(event => event.pubkey === user.pubkey && isOstrifyMusicPlaylist(event))
