@@ -5,13 +5,17 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { TrackArtwork } from "./TrackArtwork";
 import { ArtistLink } from "./ArtistLink";
 import { QueueActionsMenu } from "./QueueActionsMenu";
+import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
+import { LikeButton } from "./LikeButton";
 
 interface TrackCardProps {
   track: Track;
   queue: Track[];
+  showPlaylistAction?: boolean;
+  showLikeAction?: boolean;
 }
 
-export function TrackCard({ track, queue }: TrackCardProps) {
+export function TrackCard({ track, queue, showPlaylistAction = false, showLikeAction = false }: TrackCardProps) {
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
@@ -62,6 +66,8 @@ export function TrackCard({ track, queue }: TrackCardProps) {
         <div className="min-w-0 truncate text-sm text-muted-foreground">
           <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
         </div>
+        {showLikeAction && <LikeButton trackId={track.id} size={18} />}
+        {showPlaylistAction && <AddToPlaylistMenu trackId={track.id} />}
         {track.source !== 'tunestr' && <QueueActionsMenu track={track} />}
       </div>
     </div>
