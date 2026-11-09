@@ -68,7 +68,7 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
 
       {/* Topic (desktop only) */}
       <div className="hidden md:block truncate text-sm text-muted-foreground">
-        {track.source === 'librivox' ? 'LibriVox' : track.source === 'wavlake' ? 'Wavlake' : track.source === 'tunestr' ? 'TuneStr' : track.source === 'fountain' ? 'Fountain' : track.source === 'podcast-index' ? 'Podcast Index' : track.topics[0] ? `#${track.topics[0]}` : track.kind === "podcast" ? "Podcast" : ""}
+        {track.source === 'librivox' ? 'LibriVox' : track.source === 'gutenberg' ? 'Project Gutenberg' : track.source === 'wavlake' ? 'Wavlake' : track.source === 'tunestr' ? 'TuneStr' : track.source === 'fountain' ? 'Fountain' : track.source === 'podcast-index' ? 'Podcast Index' : track.topics[0] ? `#${track.topics[0]}` : track.kind === "podcast" ? "Podcast" : ""}
       </div>
 
       {/* Actions + duration */}

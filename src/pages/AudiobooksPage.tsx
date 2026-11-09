@@ -19,12 +19,46 @@ function BookCover({ covers, title, className, iconClassName }: { covers: string
   </div>;
 }
 
+function GutenbergSampleCard() {
+  return <Link to="/audiobooks/gutenberg-frankenstein" className="group flex items-center gap-4 rounded-xl border border-border/60 bg-secondary/30 p-4 transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
+    <BookCover covers={GUTENBERG_SAMPLE.covers} title={GUTENBERG_SAMPLE.title} className="size-20 shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-teal-800 to-emerald-950" iconClassName="size-8 text-white/75" />
+    <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wider text-emerald-200">Playback test · Project Gutenberg</p><p className="mt-1 truncate font-semibold group-hover:underline">{GUTENBERG_SAMPLE.title}</p><p className="truncate text-sm text-muted-foreground">Mary Wollstonecraft Shelley · about 7 hours</p></div>
+    <span className="ml-auto shrink-0 text-sm font-semibold text-primary">Try it</span>
+  </Link>;
+}
+
 function BookCard({ book }: { book: LibriVoxBook }) {
   return <Link to={`/audiobooks/${book.id}`} className="group rounded-xl bg-secondary/40 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary">
     <BookCover covers={book.covers} title={book.title} className="mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-teal-800 to-emerald-950" iconClassName="size-12 text-white/75" />
     <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="font-semibold truncate group-hover:underline">{book.title}</p><p className="text-sm text-muted-foreground truncate mt-1">{book.author}</p></div><div onClick={event => event.preventDefault()} onKeyDown={event => event.stopPropagation()}><AudiobookActions book={book} compact /></div></div>
   </Link>;
 }
+
+const GUTENBERG_SAMPLE: LibriVoxBook = {
+  id: 'gutenberg-frankenstein',
+  title: 'Frankenstein; Or, The Modern Prometheus',
+  author: 'Mary Wollstonecraft Shelley',
+  covers: ['https://archive.org/services/img/synapseml_gutenberg_frankenstein_or_the_modern_prometheus_by'],
+  language: 'English',
+  duration: 25295.54,
+  sectionCount: 1,
+  chapters: [{
+    id: 'gutenberg:synapseml_gutenberg_frankenstein_or_the_modern_prometheus_by',
+    source: 'gutenberg',
+    kind: 'audiobook',
+    title: 'Full audiobook',
+    artist: 'Mary Wollstonecraft Shelley',
+    album: 'Frankenstein; Or, The Modern Prometheus',
+    image: 'https://archive.org/services/img/synapseml_gutenberg_frankenstein_or_the_modern_prometheus_by',
+    url: 'https://archive.org/download/synapseml_gutenberg_frankenstein_or_the_modern_prometheus_by/frankenstein_or_the_modern_prometheus_by.mp3',
+    mimeType: 'audio/mpeg',
+    pubkey: '',
+    duration: 25295.54,
+    topics: [],
+    createdAt: 0,
+  }],
+  unavailableChapterTitles: [],
+};
 
 function Catalog() {
   const [term, setTerm] = useState('');
@@ -43,6 +77,7 @@ function Catalog() {
   }, [shouldScanMore, catalog.hasNextPage, catalog.isFetchingNextPage, catalog.isFetchNextPageError, catalog.fetchNextPage]);
   return <div className="p-4 sm:p-6 space-y-8">
     <header className="rounded-xl bg-gradient-to-br from-teal-900 via-emerald-950 to-card p-6 sm:p-8"><p className="flex items-center gap-2 text-sm uppercase tracking-wider font-semibold text-emerald-200"><Headphones className="size-4" /> Free public-domain audiobooks</p><h1 className="text-4xl sm:text-5xl font-bold tracking-tight mt-3">Audiobooks</h1><p className="mt-3 text-muted-foreground max-w-2xl">Discover stories read by volunteers from LibriVox. Choose a book to listen chapter by chapter.</p></header>
+    <section className="space-y-3"><h2 className="text-2xl font-bold">Try a Project Gutenberg audiobook</h2><p className="text-sm text-muted-foreground">A single long recording from Internet Archive, added temporarily to test Ostrify’s playback and seeking.</p><GutenbergSampleCard /></section>
     <section className="space-y-4"><div className="flex flex-wrap gap-2 items-center"><div className="relative flex-1 min-w-48"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" /><Input value={term} onChange={event => setTerm(event.target.value)} aria-label="Search audiobooks" placeholder="Search LibriVox" className="pl-10 h-11" /></div><label htmlFor="book-search-type" className="sr-only">Search by</label><select id="book-search-type" value={searchBy} onChange={event => setSearchBy(event.target.value as 'title' | 'author')} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
       <p className="text-sm text-muted-foreground">Only books with playable chapters and cover art are shown. Search titles or authors; LibriVox hosts the audio and artwork.</p>
     </section>
@@ -53,18 +88,27 @@ function Catalog() {
 }
 
 function BookDetail({ id }: { id: string }) {
-  const book = useLibriVoxBook(id);
+  const isGutenbergSample = id === GUTENBERG_SAMPLE.id;
+  const book = useLibriVoxBook(isGutenbergSample ? undefined : id);
   const player = usePlayer();
-  if (!/^\d{1,12}$/.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
-  if (book.isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-48 w-full" /></div>;
-  if (book.isError) return <div role="alert" className="p-6">Couldn’t load this audiobook. <button className="text-primary underline" onClick={() => void book.refetch()}>Try again</button></div>;
-  if (!book.data) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
-  const data = book.data;
+  if (!isGutenbergSample && !/^\d{1,12}$/.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
+  if (!isGutenbergSample && book.isLoading) return <div className="p-6 space-y-4"><Skeleton className="h-48 w-full" /><Skeleton className="h-48 w-full" /></div>;
+  if (!isGutenbergSample && book.isError) return <div role="alert" className="p-6">Couldn’t load this audiobook. <button className="text-primary underline" onClick={() => void book.refetch()}>Try again</button></div>;
+  const data = isGutenbergSample ? GUTENBERG_SAMPLE : book.data;
+  if (!data) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
   const isCurrent = data.chapters.some(chapter => chapter.id === player.current?.id);
   return <div className="p-4 sm:p-6 space-y-6"><Link to="/audiobooks" className="text-sm text-muted-foreground hover:underline">← Audiobooks</Link>
-    <div className="rounded-xl bg-gradient-to-br from-teal-900/70 via-emerald-950 to-card p-6 flex flex-col sm:flex-row gap-6 sm:items-end"><BookCover key={data.id} covers={data.covers} title={data.title} className="size-40 sm:size-48 shrink-0 rounded-lg overflow-hidden bg-secondary" iconClassName="size-14" /><div><p className="text-sm uppercase tracking-wider text-emerald-200 font-semibold">LibriVox audiobook</p><h1 className="text-4xl font-bold tracking-tight mt-2">{data.title}</h1><p className="text-muted-foreground mt-2">{data.author}</p><p className="text-sm text-muted-foreground mt-2">{data.language || 'Language unspecified'} · {data.sectionCount} chapters{data.duration ? ` · ${formatDuration(data.duration)}` : ''}</p></div></div>
-    <div className="flex flex-wrap items-center gap-4"><Button className="rounded-full" disabled={!data.chapters.length} onClick={() => { if (isCurrent && player.isPlaying) player.togglePlay(); else player.playQueue(data.chapters, isCurrent ? data.chapters.findIndex(chapter => chapter.id === player.current?.id) : 0); }}>{isCurrent && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}{isCurrent && player.isPlaying ? 'Pause' : 'Play audiobook'}</Button><AudiobookActions book={data} /><p className="text-sm text-muted-foreground">Chapters play in sequence.</p></div>
-    <section className="space-y-3"><h2 className="text-2xl font-bold">Chapters</h2><TrackList tracks={data.chapters} emptyMessage="LibriVox hasn’t provided playable audio links for this book yet." />{data.unavailableChapterTitles.length > 0 && <details className="rounded-lg border border-border/60 p-4 text-sm"><summary className="cursor-pointer text-muted-foreground">{data.unavailableChapterTitles.length} catalog chapter(s) have no audio file available</summary><ul className="mt-3 list-inside list-disc space-y-1 text-muted-foreground">{data.unavailableChapterTitles.map((title, index) => <li key={`${index}-${title}`}>{title}</li>)}</ul></details>}</section>
+    <div className="rounded-xl bg-gradient-to-br from-teal-900/70 via-emerald-950 to-card p-6 flex flex-col sm:flex-row gap-6 sm:items-end"><BookCover key={data.id} covers={data.covers} title={data.title} className="size-40 sm:size-48 shrink-0 rounded-lg overflow-hidden bg-secondary" iconClassName="size-14" /><div><p className="text-sm uppercase tracking-wider text-emerald-200 font-semibold">{isGutenbergSample ? 'Project Gutenberg Open Audiobook Collection · Internet Archive' : 'LibriVox audiobook'}</p><h1 className="text-4xl font-bold tracking-tight mt-2">{data.title}</h1><p className="text-muted-foreground mt-2">{data.author}</p><p className="text-sm text-muted-foreground mt-2">{data.language || 'Language unspecified'} · {data.sectionCount} chapters{data.duration ? ` · ${formatDuration(data.duration)}` : ''}</p></div></div>
+    <div className="flex flex-wrap items-center gap-4"><Button className="rounded-full" disabled={!data.chapters.length} onClick={() => { if (isCurrent && player.isPlaying) player.togglePlay(); else player.playQueue(data.chapters, isCurrent ? data.chapters.findIndex(chapter => chapter.id === player.current?.id) : 0); }}>{isCurrent && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}{isCurrent && player.isPlaying ? 'Pause' : 'Play audiobook'}</Button>{!isGutenbergSample && <AudiobookActions book={data} />}<p className="text-sm text-muted-foreground">{isGutenbergSample ? 'One continuous recording. Audio hosted by Internet Archive.' : 'Chapters play in sequence.'}</p></div>
+    {isGutenbergSample ? (
+      <p className="text-sm text-muted-foreground">This recording is served by Internet Archive. Its full length is about seven hours; playback and seeking may depend on browser and network support.</p>
+    ) : (
+      <section className="space-y-3">
+        <h2 className="text-2xl font-bold">Chapters</h2>
+        <TrackList tracks={data.chapters} emptyMessage="LibriVox hasn’t provided playable audio links for this book yet." />
+        {data.unavailableChapterTitles.length > 0 && <details className="rounded-lg border border-border/60 p-4 text-sm"><summary className="cursor-pointer text-muted-foreground">{data.unavailableChapterTitles.length} catalog chapter(s) have no audio file available</summary><ul className="mt-3 list-inside list-disc space-y-1 text-muted-foreground">{data.unavailableChapterTitles.map((title, index) => <li key={`${index}-${title}`}>{title}</li>)}</ul></details>}
+      </section>
+    )}
   </div>;
 }
 
