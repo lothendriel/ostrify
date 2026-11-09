@@ -18,6 +18,7 @@ const TUNESTR_RELAYS = [
   'wss://relay.divine.video/',
 ];
 const PAGE_SIZE = 200;
+const RECORDING_RECENT_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 
 export interface TunestrStream {
   id: string;
@@ -61,8 +62,7 @@ function parseStream(event: { id: string; pubkey: string; created_at: number; ki
   const recordingUrl = sanitizeUrl(tagValue(event, 'recording'));
   const eventStatus = tagValue(event, 'status') ?? 'unknown';
   const title = tagValue(event, 'title')?.trim();
-  const isRecentEvent = event.created_at >= Date.now() / 1000 - 7 * 24 * 60 * 60;
-  if (!d || !title || !['live', 'ended'].includes(eventStatus) || !isRecentEvent) return null;
+  if (!d || !title || !['live', 'ended'].includes(eventStatus)) return null;
 
   const isLive = eventStatus === 'live' && event.created_at >= Date.now() / 1000 - 60 * 60;
   const sourceUrl = isLive ? streamingUrl || recordingUrl : recordingUrl || streamingUrl;
@@ -90,7 +90,7 @@ function parseStream(event: { id: string; pubkey: string; created_at: number; ki
     topics: event.tags.filter(([name]) => name === 't').map(([, value]) => value.toLowerCase()),
     createdAt: event.created_at,
   };
-  return { id: event.id, title, summary, image, thumbnailSourceUrl, url, externalUrl: sourceUrl, createdAt: event.created_at, status, isLive, track };
+  return { id: `tunestr:${event.pubkey}:${d}`, title, summary, image, thumbnailSourceUrl, url, externalUrl: sourceUrl, createdAt: event.created_at, status, isLive, track };
 }
 
 export function useTunestrStreams() {
@@ -116,14 +116,16 @@ export function useTunestrStreams() {
       const failed: string[] = [];
       const responses = await Promise.all(relays.map(async relay => {
         try {
-          const untilFilter = typeof until === 'number' ? { until } : {};
+          const timeFilter = typeof until === 'number'
+            ? { until }
+            : { since: Math.floor(Date.now() / 1000) - RECORDING_RECENT_WINDOW_SECONDS };
           // OR the publisher/host filters with TuneStr's topical feed filters.
           // Don't require known authors alone: the streams themselves are often
           // published by individual musicians and venues.
           const filters = [
-            { kinds: [30311], authors: STREAM_PUBKEYS, limit: PAGE_SIZE, ...untilFilter },
-            { kinds: [30311], '#t': MUSIC_TAGS, limit: PAGE_SIZE, ...untilFilter },
-            { kinds: [30311], '#p': STREAM_PUBKEYS, limit: PAGE_SIZE, ...untilFilter },
+            { kinds: [30311], authors: STREAM_PUBKEYS, limit: PAGE_SIZE, ...timeFilter },
+            { kinds: [30311], '#t': MUSIC_TAGS, limit: PAGE_SIZE, ...timeFilter },
+            { kinds: [30311], '#p': STREAM_PUBKEYS, limit: PAGE_SIZE, ...timeFilter },
           ];
           const events = await nostr.relay(relay).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
           return { events, ok: true };
@@ -147,9 +149,17 @@ export function useTunestrStreams() {
       const streams = [...byAddress.values()].sort((a, b) => Number(b.isLive) - Number(a.isLive) || b.createdAt - a.createdAt);
       const allEvents = responses.flatMap(response => response.events);
       const oldest = allEvents.reduce<number | undefined>((cursor, event) => cursor === undefined || event.created_at < cursor ? event.created_at : cursor, undefined);
-      const next = oldest === undefined ? undefined : Math.max(0, oldest - 1);
-      return { streams, failed, next, rawCount: allEvents.length };
+      const next = typeof until === 'number'
+        ? oldest === undefined ? undefined : Math.max(0, oldest - 1)
+        : Math.floor(Date.now() / 1000) - RECORDING_RECENT_WINDOW_SECONDS - 1;
+      return { streams, failed, next, rawCount: allEvents.length, isRecentPage: typeof until !== 'number' };
     },
-    getNextPageParam: (page, pages) => page.rawCount >= PAGE_SIZE && page.next !== undefined && pages.every(item => item.next !== page.next) ? page.next : undefined,
+    getNextPageParam: (page, pages) => {
+      // Always offer one older-than-recent query, even if the recent query was
+      // sparse. Subsequent pages continue only when the relay batch was full.
+      const hasMoreOlderResults = page.isRecentPage || page.rawCount >= PAGE_SIZE;
+      const advancesCursor = pages.slice(0, -1).every(item => item.next !== page.next);
+      return page.next !== undefined && hasMoreOlderResults && advancesCursor ? page.next : undefined;
+    },
   });
 }

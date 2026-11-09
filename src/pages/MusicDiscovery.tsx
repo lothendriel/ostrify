@@ -104,6 +104,7 @@ export default function MusicDiscovery() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedStream, setSelectedStream] = useState<TunestrStream | null>(null);
   const [playerDocked, setPlayerDocked] = useState(false);
+  const [visibleRecordingCount, setVisibleRecordingCount] = useState(24);
   const source = searchParams.get('source');
   const activeTab = source === 'wavlake' || source === 'tunestr' ? source : 'nostr';
   const feed = useMusicDiscovery();
@@ -132,6 +133,9 @@ export default function MusicDiscovery() {
     }
     return [...unique.values()].sort((left, right) => right.createdAt - left.createdAt);
   }, [tunestr.data]);
+  const liveStreams = tunedStreams.filter(stream => stream.isLive);
+  const recordings = tunedStreams.filter(stream => !stream.isLive);
+  const visibleRecordings = recordings.slice(0, visibleRecordingCount);
   const supportedRelayCount = config.relayMetadata.relays.filter(relay => relay.read).length;
 
   return <div className="p-4 sm:p-6 space-y-6">
@@ -165,16 +169,28 @@ export default function MusicDiscovery() {
         </div>
       </TabsContent>
       <TabsContent value="tunestr" className="mt-0">
-        <section className="space-y-4">
-          <div><h2 className="text-2xl font-bold">TuneStr live & recent shows</h2><p className="text-sm text-muted-foreground">NIP-53 live streams and recordings published by TuneStr. A Cloudflare HLS manifest is video, so it must play in a video player; the raw .m3u8 URL is not a normal web page.</p></div>
-          {tunestr.isLoading && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="aspect-video rounded-xl" />)}</div>}
+        <div className="space-y-8">
+          <div><p className="text-sm text-muted-foreground">NIP-53 streams and recordings published on Nostr. A Cloudflare HLS manifest is video, so it must play in a video player; the raw .m3u8 URL is not a normal web page.</p></div>
           {!supportedRelayCount && <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Add read relays in Settings to discover TuneStr shows.</div>}
           {tunestr.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">TuneStr shows couldn’t be loaded. <button className="underline" onClick={() => void tunestr.refetch()}>Try again</button></div>}
           {tunestr.data?.pages.flatMap(page => page.failed).length ? <p className="text-sm text-muted-foreground">Some relays didn’t respond. Results from the relays that did respond are shown.</p> : null}
-          {!tunestr.isLoading && !tunedStreams.length && !tunestr.isError && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No TuneStr live shows or recordings were found on your read relays.</div>}
-          {tunedStreams.length > 0 && <div className="grid gap-4 sm:grid-cols-2">{tunedStreams.map(stream => <TunestrStreamCard key={stream.id} stream={stream} onSelect={setSelectedStream} />)}</div>}
-          {tunestr.hasNextPage && <Button variant="outline" onClick={() => void tunestr.fetchNextPage()} disabled={tunestr.isFetchingNextPage}>{tunestr.isFetchingNextPage ? 'Loading…' : 'Load older TuneStr shows'}</Button>}
-        </section>
+
+          <section aria-labelledby="tunestr-live-heading" className="space-y-4">
+            <div><h2 id="tunestr-live-heading" className="text-2xl font-bold">Live streams</h2><p className="text-sm text-muted-foreground">Currently live TuneStr shows.</p></div>
+            {tunestr.isLoading && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <Skeleton key={index} className="aspect-video rounded-xl" />)}</div>}
+            {!tunestr.isLoading && !liveStreams.length && !tunestr.isError && <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">No live TuneStr streams were found.</div>}
+            {liveStreams.length > 0 && <div className="grid gap-4 sm:grid-cols-2">{liveStreams.map(stream => <TunestrStreamCard key={stream.id} stream={stream} onSelect={setSelectedStream} />)}</div>}
+          </section>
+
+          <section aria-labelledby="tunestr-recordings-heading" className="space-y-4">
+            <div><h2 id="tunestr-recordings-heading" className="text-2xl font-bold">Recordings</h2><p className="text-sm text-muted-foreground">Recent recordings appear first. Load older recordings to browse further back.</p></div>
+            {tunestr.isLoading && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <Skeleton key={`recording-${index}`} className="aspect-video rounded-xl" />)}</div>}
+            {!tunestr.isLoading && !recordings.length && !tunestr.isError && <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">No TuneStr recordings were found in the recent results.</div>}
+            {recordings.length > 0 && <div className="grid gap-4 sm:grid-cols-2">{visibleRecordings.map(stream => <TunestrStreamCard key={stream.id} stream={stream} onSelect={setSelectedStream} />)}</div>}
+            {visibleRecordingCount < recordings.length && <Button variant="outline" onClick={() => setVisibleRecordingCount(count => count + 24)}>Show more recordings</Button>}
+            {tunestr.hasNextPage && <Button variant="outline" onClick={() => { setVisibleRecordingCount(count => count + 24); void tunestr.fetchNextPage(); }} disabled={tunestr.isFetchingNextPage}>{tunestr.isFetchingNextPage ? 'Loading older recordings…' : 'Load older recordings'}</Button>}
+          </section>
+        </div>
       </TabsContent>
       <TabsContent value="wavlake" className="mt-0"><WavlakeDiscovery /></TabsContent>
     </Tabs>
