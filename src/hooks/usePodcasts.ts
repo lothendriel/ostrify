@@ -31,6 +31,11 @@ const PODCAST_TOPICS = [
 ];
 
 const FOUNTAIN_API = (import.meta.env.VITE_FOUNTAIN_API_URL ?? "/api/fountain").replace(/\/$/, "");
+const PODCAST_INDEX_WORKER = (import.meta.env.VITE_PODCAST_INDEX_WORKER_URL ?? "https://ostrify.lothendriel.workers.dev").replace(/\/$/, "");
+
+function podcastIndexError(response: Response, operation: string): Error {
+  return new Error(`${operation} failed with HTTP ${response.status}. Check the Ostrify Worker configuration.`);
+}
 const EPISODE_GUID_RE = /^[^\s]{1,512}$/;
 const NOSTR_SHOW_PAGE_SIZE = 120;
 const FOUNTAIN_SHOWS_PER_LOOKUP_BATCH = 5;
@@ -445,8 +450,8 @@ export function usePodcastIndexEpisodes(feedId: number | undefined) {
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }): Promise<Track[]> => {
       if (!feedId) return [];
-      const response = await fetch(`/api/podcast-index/episodes/byfeedid?id=${feedId}`, { signal });
-      if (!response.ok) throw new Error(`Podcast Index episodes returned ${response.status}`);
+      const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedid?id=${feedId}`, { signal });
+      if (!response.ok) throw podcastIndexError(response, "Loading podcast episodes");
       const data: unknown = await response.json();
       if (!isRecord(data) || !Array.isArray(data.items)) throw new Error("Invalid Podcast Index episodes response");
       return data.items.map((value): Track | null => {
@@ -482,8 +487,8 @@ export function usePodcastIndexSearch(term: string) {
     enabled: normalized.length >= 2,
     staleTime: 10 * 60 * 1000,
     queryFn: async ({ signal }) => {
-      const response = await fetch(`/api/podcast-index/search/byterm?q=${encodeURIComponent(normalized)}`, { signal });
-      if (!response.ok) throw new Error(`Podcast Index search returned ${response.status}`);
+      const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/search/byterm?q=${encodeURIComponent(normalized)}`, { signal });
+      if (!response.ok) throw podcastIndexError(response, "Searching Podcast Index");
       const data: unknown = await response.json();
       if (!isRecord(data) || !Array.isArray(data.feeds)) throw new Error("Invalid Podcast Index search response");
       return data.feeds.map((value): PodcastShow | null => {
