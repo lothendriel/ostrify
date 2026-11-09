@@ -259,11 +259,12 @@ async function lookupFountainEpisode(
  * Fetch podcast episodes. Combines true NIP-F4 episodes (kind 54), audio
  * tracks/notes tagged as podcasts, and Fountain episode GUID references.
  */
-export function usePodcastEpisodes(limit = 80) {
+export function usePodcastEpisodes(limit = 80, fountainLimit = 10) {
   const { nostr } = useNostr();
 
-  return useQuery({
-    queryKey: ["podcast-episodes", limit, FOUNTAIN_API],
+  const query = useQuery<Track[]>({
+    queryKey: ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API],
+    placeholderData: (previousData) => previousData,
     retry: 1,
     staleTime: 5 * 60 * 1000,
     queryFn: async (c) => {
@@ -274,7 +275,7 @@ export function usePodcastEpisodes(limit = 80) {
           { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit },
           // `k` is the NIP-73 kind label for the `i` reference; the GUID itself
           // lives in an unindexed tag value and must be resolved via Fountain.
-          { kinds: [1], "#k": ["podcast:item:guid"], limit: Math.min(limit, 30) },
+          { kinds: [1], "#k": ["podcast:item:guid"], limit: Math.min(limit, Math.max(30, fountainLimit)) },
         ],
         { signal },
       );
@@ -304,7 +305,7 @@ export function usePodcastEpisodes(limit = 80) {
       }
 
       const resolvedFountain: (Track | null)[] = [];
-      const referencesToResolve = [...fountainReferences.entries()].slice(0, Math.min(limit, 10));
+      const referencesToResolve = [...fountainReferences.entries()].slice(0, fountainLimit);
       const referenceBatches = Array.from(
         { length: Math.ceil(referencesToResolve.length / FOUNTAIN_SHOWS_PER_LOOKUP_BATCH) },
         (_, index) => referencesToResolve.slice(index * FOUNTAIN_SHOWS_PER_LOOKUP_BATCH, (index + 1) * FOUNTAIN_SHOWS_PER_LOOKUP_BATCH),
@@ -332,6 +333,7 @@ export function usePodcastEpisodes(limit = 80) {
       return tracks.slice(0, limit);
     },
   });
+  return query;
 }
 
 function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): PodcastShow | null {
