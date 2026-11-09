@@ -1,6 +1,6 @@
 const BUILD_ID = new URL(self.location.href).searchParams.get('build') ?? 'default';
 const CACHE_NAME = `ostrify-app-${BUILD_ID}`;
-const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/pwa-192.svg', '/pwa-512.svg'];
+const APP_SHELL = ['/', '/manifest.webmanifest', '/ostrify-logo.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

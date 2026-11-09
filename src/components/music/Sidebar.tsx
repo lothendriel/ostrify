@@ -33,9 +33,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
       {/* Logo */}
       <div className="flex items-center gap-2 px-5 pt-5 pb-2">
-        <div className="size-8 rounded-md bg-primary flex items-center justify-center">
-          <Music className="size-5 text-primary-foreground" />
-        </div>
+        <img src="/ostrify-logo.png" alt="" className="size-8 rounded-md object-cover" />
         <span className="font-bold text-lg tracking-tight">Ostrify</span>
       </div>
 
