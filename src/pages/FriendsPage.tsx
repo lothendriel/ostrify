@@ -151,6 +151,11 @@ function FriendsHome() {
   const hasCheckedMigration = followedPeople.data?.tags.some(([name, value]) => name === 'ostrify-migration' && value === 'nip17-friends-v1') ?? false;
   const list = followedPeople.people;
   const statuses = useFriendStatuses(list);
+  const outgoingInvites = new Set((friends.data?.outgoing ?? []).map(request => request.to));
+  const inviteToFollowBack = (pubkey: string) => friends.send.mutate({ peer: pubkey, action: 'request' }, {
+    onSuccess: () => toast({ title: 'Invite sent', description: 'Your private invite was sent. They can choose to follow you back.' }),
+    onError: error => toast({ title: 'Could not send invite', description: error.message, variant: 'destructive' }),
+  });
   const addFriend = (pubkey: string) => followedPeople.toggle.mutate({ pubkey, follow: true }, {
     onSuccess: () => toast({ title: 'Added to friends' }),
     onError: error => toast({ title: 'Could not add friend', description: error.message, variant: 'destructive' }),
@@ -183,7 +188,8 @@ function FriendsHome() {
     {followedPeople.hasReadRelays && !followedPeople.isLoading && !friends.isLoading && !friends.isError && !hasCheckedMigration && !migrationStarted.current && <p className="text-sm text-muted-foreground">Checking for existing friends to migrate…</p>}
     <section className="space-y-3 rounded-xl border border-border/60 bg-secondary/20 p-4 sm:p-5">
       <div><h2 className="text-xl font-semibold">Invite someone to follow you</h2><p className="mt-1 text-sm text-muted-foreground">Enter their Nostr npub to send a private Ostrify invite. They can review your profile and choose to follow you.</p></div>
-      <div className="flex flex-col gap-2 sm:flex-row"><Input value={inviteIdentifier} onChange={event => setInviteIdentifier(event.target.value)} placeholder="npub1…" aria-label="Nostr public key to invite" autoComplete="off" className="sm:max-w-lg" /><Button type="button" disabled={friends.send.isPending || !inviteIdentifier.trim()} onClick={() => {
+      <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => {
+        event.preventDefault();
         let recipient: string;
         try {
           const decoded = nip19.decode(inviteIdentifier.trim().replace(/^nostr:/, ""));
@@ -198,13 +204,13 @@ function FriendsHome() {
           onSuccess: () => { setInviteIdentifier(""); toast({ title: "Invite sent", description: "Your private Ostrify invite was delivered to their NIP-17 inbox." }); },
           onError: error => toast({ title: "Could not send invite", description: error.message, variant: "destructive" }),
         });
-      }}>{friends.send.isPending ? "Sending…" : "Send invite"}</Button></div>
+      }}><Input value={inviteIdentifier} onChange={event => setInviteIdentifier(event.target.value)} placeholder="npub1…" aria-label="Nostr public key to invite" autoComplete="off" className="sm:max-w-lg" /><Button type="submit" disabled={friends.send.isPending || !inviteIdentifier.trim()}>{friends.send.isPending ? "Sending…" : "Send invite"}</Button></form>
       {friends.send.isPending && <p role="status" className="text-sm text-muted-foreground">Looking up their NIP-17 inbox and sending your private invite…</p>}
       <p className="text-xs text-muted-foreground">Invites are private Nostr messages. Both you and the recipient need NIP-44 support and NIP-17 DM relays configured.</p>
     </section>
     {friends.isError && <div role="status" className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Private invites may be unavailable until your NIP-17 inbox relays are configured. {friends.error.message}</div>}
     <OstrifyDirectory me={user.pubkey} onFollow={addFriend} friendKeys={list} pending={followedPeople.toggle.isPending} />
-    {follows.data?.length ? <section className="space-y-3"><h2 className="text-2xl font-semibold">Add from your Nostr follows</h2><p className="text-sm text-muted-foreground">This adds them as an Ostrify friend; it does not change your Nostr follow list.</p><div className="max-h-80 space-y-2 overflow-y-auto">{follows.data.filter(pubkey => pubkey !== user.pubkey && !list.includes(pubkey)).map(pubkey => <Person key={pubkey} pubkey={pubkey}><Button size="sm" variant="outline" onClick={() => addFriend(pubkey)}>Add friend</Button></Person>)}</div></section> : <p className="text-sm text-muted-foreground">{follows.isLoading ? 'Loading Nostr follows…' : 'No Nostr follows available to add.'}</p>}
+    {follows.data?.length ? <section className="space-y-3"><h2 className="text-2xl font-semibold">Invite from your Nostr follows</h2><p className="text-sm text-muted-foreground">Send a private Ostrify invite to someone you already follow. They can choose to follow you back; this won’t change your Nostr follow list.</p><div className="max-h-80 space-y-2 overflow-y-auto">{follows.data.filter(pubkey => pubkey !== user.pubkey && !list.includes(pubkey)).map(pubkey => <Person key={pubkey} pubkey={pubkey}><Button size="sm" variant="outline" disabled={friends.send.isPending || outgoingInvites.has(pubkey)} onClick={() => inviteToFollowBack(pubkey)}>{outgoingInvites.has(pubkey) ? 'Invite sent' : friends.send.isPending ? 'Sending…' : 'Invite to follow back'}</Button></Person>)}</div></section> : <p className="text-sm text-muted-foreground">{follows.isLoading ? 'Loading Nostr follows…' : 'No Nostr follows available to add.'}</p>}
       <section className="space-y-3"><h2 className="text-2xl font-semibold">Your friends · {list.length}</h2>{followedPeople.isLoading ? <Skeleton className="h-20 w-full" /> : list.length ? list.map(pubkey => <Person key={pubkey} pubkey={pubkey}><Button size="sm" variant="ghost" disabled={followedPeople.toggle.isPending} onClick={() => removeFriend(pubkey)}>Remove</Button></Person>) : <p className="text-muted-foreground">You haven’t added any friends on Ostrify yet. Search the directory above to get started.</p>}</section>
     <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-semibold"><Radio className="size-5" /> Listening now</h2><p className="text-sm text-muted-foreground">Public music statuses shared by people you follow on Ostrify. Sharing is optional.</p>{statuses.data?.length ? statuses.data.map(status => <div key={status.pubkey} className="space-y-1"><Person pubkey={status.pubkey} /><p className="ml-4 text-sm text-primary">{status.content}</p></div>) : <p className="text-muted-foreground">No friends are sharing a current listening status.</p>}</section>
   </div>;

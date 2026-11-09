@@ -54,6 +54,10 @@ function LibraryRefreshSync() {
         client.invalidateQueries({ queryKey: ['playlists'] }),
         client.invalidateQueries({ queryKey: ['followed-artists'] }),
         client.invalidateQueries({ queryKey: ['podcast-favorites'] }),
+        client.invalidateQueries({ queryKey: ['ostrify-followed-people'] }),
+        client.invalidateQueries({ queryKey: ['ostrify-friends'] }),
+        client.invalidateQueries({ queryKey: ['friend-invite-follows'] }),
+        client.invalidateQueries({ queryKey: ['friend-statuses'] }),
       ]);
       window.dispatchEvent(new Event('ostrify-library-refresh'));
     };

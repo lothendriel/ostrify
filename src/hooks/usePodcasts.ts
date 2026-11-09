@@ -531,6 +531,9 @@ export function usePodcastFavorites() {
   const query = useQuery({
     queryKey: [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey],
     enabled: !!user && !!readRelayKey,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async ({ signal }) => {
       if (!user || !readRelayKey) return [] as PodcastFavorite[];
       const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }], {

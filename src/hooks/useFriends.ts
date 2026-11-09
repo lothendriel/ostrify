@@ -88,28 +88,27 @@ export function useFriends() {
   const query = useQuery({
     queryKey: key,
     enabled: !!user,
-    retry: false,
-    refetchInterval: 60000,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    retry: 1,
+    refetchInterval: 30000,
     queryFn: async ({ signal }) => {
       if (!user?.signer.nip44) throw new Error('Your signer must support NIP-44 to use private invitations.');
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(12000)]);
       const relays = await inboxRelays(nostr, user.pubkey, timeout);
       if (!relays.length) throw new Error('Set up NIP-17 DM relays in your Nostr messaging app before using Ostrify friends.');
-      const events = await nostr.group(relays).query([{ kinds: [1059], '#p': [user.pubkey], limit: 100 }], { signal: timeout });
+      const events = await nostr.group(relays).query([{ kinds: [1059], '#p': [user.pubkey], limit: 500 }], { signal: timeout });
       const cached = queryClient.getQueryData<Message[]>(['ostrify-friend-messages', user.pubkey]) ?? [];
-      const processed = new Set(queryClient.getQueryData<string[]>(['ostrify-friend-wraps', user.pubkey]) ?? []);
       const seen = new Set(cached.map(message => message.id));
       const messages: Message[] = [...cached];
       // Signer requests can be interactive; do not decrypt hundreds in parallel.
       for (const event of events) {
         if (signal.aborted) break;
-        if (processed.has(event.id)) continue;
         const message = await unwrapMessage(user, event);
-        processed.add(event.id);
         if (message && !seen.has(message.id)) { seen.add(message.id); messages.push(message); }
       }
       queryClient.setQueryData(['ostrify-friend-messages', user.pubkey], messages);
-      queryClient.setQueryData(['ostrify-friend-wraps', user.pubkey], [...processed]);
       return derive(messages, user.pubkey);
     },
   });

@@ -51,6 +51,9 @@ export function usePlaylists() {
 
   return useQuery({
     queryKey: ["playlists", user?.pubkey ?? "", readRelayKey],
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async (c) => {
       if (!user) return [] as Playlist[];
       if (!readRelayKey) return [] as Playlist[];
