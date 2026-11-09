@@ -22,7 +22,7 @@ export function QueueActionsMenu({ track }: { track: Track }) {
         <ListMusic className="size-4" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end">
+    <DropdownMenuContent align="end" onClick={event => event.stopPropagation()}>
       <DropdownMenuItem onSelect={() => player.playNext([track])}>
         <ListEnd className="size-4" /> Play next
       </DropdownMenuItem>
