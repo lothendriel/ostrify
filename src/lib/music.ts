@@ -9,7 +9,7 @@ export interface Track {
   /** The underlying Nostr event, when the track was published on Nostr. */
   event?: NostrEvent;
   /** External catalog tracks are not Nostr events. */
-  source?: "wavlake" | "librivox" | "tunestr" | "fountain";
+  source?: "wavlake" | "librivox" | "tunestr" | "fountain" | "podcast-index";
   artistId?: string;
   /** Explicit Nostr identity for the artist, distinct from the event publisher. */
   artistPubkey?: string;

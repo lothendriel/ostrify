@@ -12,9 +12,11 @@ export interface PodcastShow {
   publisher?: string;
   /** Nostr author pubkey; Fountain shows are external catalog entries. */
   pubkey?: string;
-  source: "nostr" | "fountain";
+  source: "nostr" | "fountain" | "podcast-index";
   episodeCount?: number;
   feedGuid?: string;
+  feedId?: number;
+  feedUrl?: string;
   event?: NostrEvent;
 }
 
@@ -436,4 +438,70 @@ export function useFountainPodcastShows() {
   return { ...query, data, hasNextPage: lastPage?.hasMore ?? false, needsMoreScan: lastPage?.needsMoreScan ?? false };
 }
 
+export function usePodcastIndexEpisodes(feedId: number | undefined) {
+  return useQuery({
+    queryKey: ["podcast-index", "episodes", feedId],
+    enabled: feedId !== undefined && Number.isInteger(feedId) && feedId > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }): Promise<Track[]> => {
+      if (!feedId) return [];
+      const response = await fetch(`/api/podcast-index/episodes/byfeedid?id=${feedId}`, { signal });
+      if (!response.ok) throw new Error(`Podcast Index episodes returned ${response.status}`);
+      const data: unknown = await response.json();
+      if (!isRecord(data) || !Array.isArray(data.items)) throw new Error("Invalid Podcast Index episodes response");
+      return data.items.map((value): Track | null => {
+        if (!isRecord(value)) return null;
+        const enclosure = sanitizeUrl(text(value.enclosureUrl));
+        const title = text(value.title);
+        if (!enclosure || !title) return null;
+        const duration = typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0 ? value.duration : undefined;
+        const publishedAt = typeof value.datePublished === "number" && Number.isFinite(value.datePublished) ? value.datePublished : 0;
+        return {
+          id: `podcast-index:${String(value.id ?? `${feedId}-${publishedAt}-${title}`)}`,
+          source: "podcast-index",
+          showId: `podcast-index:${feedId}`,
+          url: enclosure,
+          title,
+          artist: text(value.feedTitle),
+          image: sanitizeUrl(text(value.image) ?? text(value.feedImage)),
+          pubkey: "",
+          duration,
+          kind: "podcast",
+          topics: ["podcast"],
+          createdAt: publishedAt,
+        };
+      }).filter((track): track is Track => !!track).sort((a, b) => b.createdAt - a.createdAt);
+    },
+  });
+}
 
+export function usePodcastIndexSearch(term: string) {
+  const normalized = term.trim();
+  return useQuery({
+    queryKey: ["podcast-index", "search", normalized],
+    enabled: normalized.length >= 2,
+    staleTime: 10 * 60 * 1000,
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/podcast-index/search/byterm?q=${encodeURIComponent(normalized)}`, { signal });
+      if (!response.ok) throw new Error(`Podcast Index search returned ${response.status}`);
+      const data: unknown = await response.json();
+      if (!isRecord(data) || !Array.isArray(data.feeds)) throw new Error("Invalid Podcast Index search response");
+      return data.feeds.map((value): PodcastShow | null => {
+        if (!isRecord(value) || typeof value.id !== "number" || !Number.isInteger(value.id)) return null;
+        const title = text(value.title);
+        if (!title) return null;
+        return {
+          id: `podcast-index:${value.id}`,
+          feedId: value.id,
+          title,
+          image: sanitizeUrl(text(value.artwork) ?? text(value.image)),
+          description: text(value.description),
+          publisher: text(value.author) ?? text(value.ownerName),
+          feedUrl: sanitizeUrl(text(value.url)),
+          episodeCount: typeof value.episodeCount === "number" ? value.episodeCount : undefined,
+          source: "podcast-index",
+        };
+      }).filter((show): show is PodcastShow => !!show);
+    },
+  });
+}

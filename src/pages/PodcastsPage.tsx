@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { Mic, Radio, Globe2, ChevronRight, Play } from "lucide-react";
-import { usePodcastEpisodes, useNostrPodcastShows, useFountainPodcastShows, type PodcastShow } from "@/hooks/usePodcasts";
+import { Mic, Radio, Globe2, ChevronRight, Play, Search, ArrowLeft } from "lucide-react";
+import { usePodcastEpisodes, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, type PodcastShow } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +13,7 @@ import { sanitizeUrl } from "@/lib/sanitize";
 import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
 import { nip19 } from "nostr-tools";
+import { Input } from "@/components/ui/input";
 
 const PodcastsPage = () => {
   useSeoMeta({ title: "Podcasts — Ostrify" });
@@ -20,12 +21,22 @@ const PodcastsPage = () => {
   const nostrShows = useNostrPodcastShows();
   const fountainShows = useFountainPodcastShows();
   const player = usePlayer();
-  const [source, setSource] = useState<"nostr" | "fountain">("nostr");
+  const [source, setSource] = useState<"nostr" | "fountain" | "directory">("nostr");
   const [viewAllSource, setViewAllSource] = useState<"nostr" | "fountain" | null>(null);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedShow, setSelectedShow] = useState<PodcastShow | null>(null);
+  const podcastSearch = usePodcastIndexSearch(debouncedSearch);
+  const directoryEpisodes = usePodcastIndexEpisodes(selectedShow?.feedId);
+  const catalogSource = source === "directory" ? "nostr" : source;
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
   const selectedShows = source === "nostr" ? nostrShows.data ?? [] : fountainShows.data ?? [];
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
   const fountainEpisodeCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const episode of episodes.data ?? []) {
@@ -57,16 +68,25 @@ const PodcastsPage = () => {
       <header className="rounded-xl bg-gradient-to-br from-fuchsia-900 via-purple-950 to-card p-6 sm:p-8">
         <p className="flex items-center gap-2 text-sm uppercase tracking-wider font-semibold text-fuchsia-200"><Mic className="size-4" /> Podcasts on Ostrify</p>
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mt-3">Podcasts</h1>
-        <p className="mt-3 text-muted-foreground max-w-2xl">Browse podcast shows and episodes, with separate catalogs for Nostr-native shows and Fountain-discovered shows.</p>
+        <p className="mt-3 text-muted-foreground max-w-2xl">Browse Nostr podcasts or search the Podcast Index directory for shows from across the open podcast ecosystem.</p>
       </header>
 
-      <Tabs value={source} onValueChange={(value) => { if (value === "nostr" || value === "fountain") { setSource(value); setViewAllSource(null); } }}>
-        <TabsList className="grid w-full max-w-lg grid-cols-2">
+      <Tabs value={source} onValueChange={(value) => { if (value === "nostr" || value === "fountain" || value === "directory") { setSource(value); setViewAllSource(null); setSelectedShow(null); } }}>
+        <TabsList className="grid h-auto w-full max-w-2xl grid-cols-3 gap-1">
           <TabsTrigger value="nostr"><Radio className="size-4" /> Nostr podcasts</TabsTrigger>
           <TabsTrigger value="fountain"><Globe2 className="size-4" /> Fountain.fm</TabsTrigger>
+          <TabsTrigger value="directory"><Search className="size-4" /> Discover podcasts</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={source} className="mt-6 space-y-8">
+        <TabsContent value="directory" className="mt-6 space-y-8">
+          {selectedShow ? <PodcastIndexShow show={selectedShow} tracks={directoryEpisodes.data ?? []} isLoading={directoryEpisodes.isLoading} isError={directoryEpisodes.isError} onRetry={() => void directoryEpisodes.refetch()} onBack={() => setSelectedShow(null)} onPlay={() => { if (directoryEpisodes.data?.length) player.playQueue(directoryEpisodes.data); }} /> : <section className="space-y-4">
+            <div><h2 className="text-2xl font-bold">Search podcasts</h2><p className="text-sm text-muted-foreground">Find shows in the Podcast Index directory and browse their latest episodes.</p></div>
+            <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search shows, hosts, and topics" aria-label="Search podcasts" maxLength={120} className="pl-10" /></div>
+            {search.trim().length < 2 ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Enter at least two characters to search the podcast directory.</div> : podcastSearch.isLoading || debouncedSearch !== search.trim() ? <ShowSkeletonGrid /> : podcastSearch.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t search Podcast Index. <button type="button" className="underline" onClick={() => void podcastSearch.refetch()}>Try again</button></p> : podcastSearch.data?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{podcastSearch.data.map(show => <button type="button" key={show.id} onClick={() => setSelectedShow(show)} className="group rounded-xl bg-secondary/40 p-3 text-left transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary"><div className="mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">{show.image ? <img src={show.image} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-white/70" /></div>}</div><p className="truncate font-semibold">{show.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{show.publisher || "Podcast show"}</p></button>)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No shows found. Try another search.</div>}
+          </section>}
+        </TabsContent>
+
+        <TabsContent value={source === "directory" ? "catalog-hidden" : source} className="mt-6 space-y-8">
           {viewAllSource ? (
             <ShowCatalog
               key={viewAllSource}
@@ -86,16 +106,16 @@ const PodcastsPage = () => {
               <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div><h2 className="text-2xl font-bold">Top shows</h2><p className="text-sm text-muted-foreground">{source === "nostr" ? "Shows with the most playable NIP-F4 episodes found on your relays." : "Shows discovered through NIP-73 podcast feed references on Nostr."}</p></div>
-                  <Button variant="outline" onClick={() => setViewAllSource(source)}>View all {source === "nostr" ? "Nostr" : "Fountain"} shows <ChevronRight className="size-4" /></Button>
+                  <Button variant="outline" onClick={() => setViewAllSource(catalogSource)}>View all {catalogSource === "nostr" ? "Nostr" : "Fountain"} shows <ChevronRight className="size-4" /></Button>
                 </div>
                 {sourceError && <p role="alert" className="text-sm text-destructive">Couldn’t load this show catalog. <button className="underline" onClick={() => void (source === "nostr" ? nostrShows.refetch() : fountainShows.refetch())}>Try again</button></p>}
-                {sourceLoading ? <ShowSkeletonGrid /> : topShows.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{topShows.map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} />)}</div> : <EmptyShows source={source} />}
+                {sourceLoading ? <ShowSkeletonGrid /> : topShows.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{topShows.map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} />)}</div> : <EmptyShows source={catalogSource} />}
               </section>
 
               <section className="space-y-4">
                 {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div>}
                 {source === "fountain" && <div><h2 className="text-2xl font-bold">Latest Fountain episodes</h2><p className="text-sm text-muted-foreground">Fountain episodes currently referenced on Nostr.</p></div>}
-                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{selectedTracks.slice(0, 10).map((episode) => <TrackCard key={episode.id} track={episode} queue={selectedTracks} />)}</div>{source === "nostr" && <TrackList tracks={selectedTracks} />}</> : <EmptyEpisodes source={source} />}
+                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{selectedTracks.slice(0, 10).map((episode) => <TrackCard key={episode.id} track={episode} queue={selectedTracks} />)}</div>{source === "nostr" && <TrackList tracks={selectedTracks} />}</> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
               </section>
             </>
           )}
@@ -116,12 +136,25 @@ function ShowCard({ show, tracks, onPlay }: { show: PodcastShow; tracks: Track[]
         {cover ? <img src={cover} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-white/70" /></div>}
       </div>
       <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1"><p className="truncate font-semibold" title={name}>{name}</p><p className="mt-1 truncate text-sm text-muted-foreground">{show.source === "fountain" ? show.publisher ?? "Fountain show" : "Nostr show"} · {show.episodeCount ?? tracks.length} episodes</p></div>
+        <div className="min-w-0 flex-1"><p className="truncate font-semibold" title={name}>{name}</p><p className="mt-1 truncate text-sm text-muted-foreground">{show.source === "fountain" ? show.publisher ?? "Fountain show" : show.source === "podcast-index" ? show.publisher ?? "Podcast Index" : "Nostr show"} · {show.episodeCount ?? tracks.length} episodes</p></div>
         {playTracks.length > 0 && onPlay && <button type="button" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label={`Play ${name}`} onClick={() => onPlay(playTracks)}><Play className="size-4 fill-current" /></button>}
       </div>
       {show.pubkey && <Link to={`/${nip19.npubEncode(show.pubkey)}`} className="mt-2 inline-block text-xs text-primary hover:underline">Open Nostr show</Link>}
     </article>
   );
+}
+
+function PodcastIndexShow({ show, tracks, isLoading, isError, onRetry, onBack, onPlay }: { show: PodcastShow; tracks: Track[]; isLoading: boolean; isError: boolean; onRetry: () => void; onBack: () => void; onPlay: () => void }) {
+  return <section className="space-y-5">
+    <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to search</button>
+    <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-fuchsia-900/70 via-purple-950 to-card p-6 sm:flex-row sm:items-center">
+      <div className="size-32 shrink-0 overflow-hidden rounded-xl bg-secondary">{show.image ? <img src={show.image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-muted-foreground" /></div>}</div>
+      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">Podcast Index show</p><h2 className="mt-2 break-words text-3xl font-bold">{show.title}</h2>{show.publisher && <p className="mt-1 text-muted-foreground">{show.publisher}</p>}{show.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.description}</p>}</div>
+    </header>
+    <div className="flex items-center justify-between gap-3"><div><h3 className="text-2xl font-bold">Episodes</h3><p className="text-sm text-muted-foreground">Latest episodes from this show’s RSS feed.</p></div><Button type="button" onClick={onPlay} disabled={!tracks.length || isLoading}><Play className="size-4 fill-current" /> Play latest</Button></div>
+    {isLoading ? <TrackSkeletonGrid /> : isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load episodes. <button type="button" className="underline" onClick={onRetry}>Try again</button></p> : tracks.length ? <TrackList tracks={tracks} /> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found for this show.</div>}
+    {show.feedUrl && <a href={show.feedUrl} target="_blank" rel="noreferrer" className="inline-block text-sm text-primary hover:underline">Open the show’s RSS feed</a>}
+  </section>;
 }
 
 function ShowCatalog({ source, shows, isLoading, error, onBack, onLoadMore, hasMore, isLoadingMore, loadMoreError, loadMoreLoading }: { source: "nostr" | "fountain"; shows: PodcastShow[]; isLoading: boolean; error: boolean; onBack: () => void; onLoadMore: () => void; hasMore: boolean; isLoadingMore: boolean; loadMoreError: boolean; loadMoreLoading: boolean }) {
