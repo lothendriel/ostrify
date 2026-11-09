@@ -34,7 +34,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       {/* Logo */}
       <div className="flex items-center gap-2 px-5 pt-5 pb-2">
         <img src="/ostrify-logo.png" alt="" className="size-10 rounded-md object-contain" />
-        <span className="font-bold text-lg tracking-tight">Ostrify</span>
+        <span className="font-bold text-xl tracking-tight">Ostrify</span>
       </div>
 
       {/* Main nav */}
