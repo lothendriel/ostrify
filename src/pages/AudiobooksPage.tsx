@@ -87,7 +87,13 @@ function GutenbergCatalog() {
   const [searchBy, setSearchBy] = useState<'title' | 'author'>('title');
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useGutenbergAudiobookCatalog(query, searchBy);
-  const books = useMemo(() => catalog.data?.pages.flatMap(page => page.books) ?? [], [catalog.data?.pages]);
+  const books = useMemo(() => {
+    const uniqueBooks = new Map<string, GutenbergAudiobook>();
+    for (const book of catalog.data?.pages.flatMap(page => page.books) ?? []) {
+      if (!uniqueBooks.has(book.catalogId)) uniqueBooks.set(book.catalogId, book);
+    }
+    return [...uniqueBooks.values()];
+  }, [catalog.data?.pages]);
   const total = catalog.data?.pages[0]?.total;
 
   return <div className="space-y-5">
