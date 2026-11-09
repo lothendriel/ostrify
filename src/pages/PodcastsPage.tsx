@@ -29,9 +29,11 @@ const PodcastsPage = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedShow, setSelectedShow] = useState<PodcastShow | null>(null);
   const podcastSearch = usePodcastIndexSearch(debouncedSearch);
-  const directoryEpisodes = usePodcastIndexEpisodes(selectedShow?.feedId);
   const podcastFavorites = usePodcastFavorites();
   const podcastFavoriteActions = usePodcastFavoriteActions();
+  const favoriteShowSelection = searchParams.get("show") ? podcastFavorites.data.find(item => item.id === searchParams.get("show") && !item.episode) : undefined;
+  const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
+  const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl);
   const catalogSource = source === "directory" ? "nostr" : source;
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");
@@ -83,7 +85,7 @@ const PodcastsPage = () => {
         </TabsList>
 
         <TabsContent value="directory" className="mt-6 space-y-8">
-          {selectedShow ? <PodcastIndexShow show={selectedShow} tracks={directoryEpisodes.data ?? []} isLoading={directoryEpisodes.isLoading} isError={directoryEpisodes.isError} onRetry={() => void directoryEpisodes.refetch()} onBack={() => { setSelectedShow(null); setSearchParams({ source: "directory" }); }} onPlay={() => { if (directoryEpisodes.data?.length) player.playQueue(directoryEpisodes.data); }} onPlayTrack={track => player.playQueue([track])} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} saving={podcastFavoriteActions.toggleFavorite.isPending} userLoggedIn={podcastFavorites.isEnabled} /> : <section className="space-y-4">
+          {activeShow ? <PodcastIndexShow show={activeShow} tracks={directoryEpisodes.data ?? []} isLoading={directoryEpisodes.isLoading} isError={directoryEpisodes.isError} onRetry={() => void directoryEpisodes.refetch()} onBack={() => { setSelectedShow(null); setSearchParams({ source: "directory" }); }} onPlay={() => { if (directoryEpisodes.data?.length) player.playQueue(directoryEpisodes.data); }} onPlayTrack={track => player.playQueue([track])} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} saving={podcastFavoriteActions.toggleFavorite.isPending} userLoggedIn={podcastFavorites.isEnabled} /> : <section className="space-y-4">
             <div><h2 className="text-2xl font-bold">Search podcasts</h2><p className="text-sm text-muted-foreground">Find shows in the Podcast Index directory and browse their latest episodes.</p></div>
             <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search shows, hosts, and topics" aria-label="Search podcasts" maxLength={120} className="pl-10" /></div>
             {search.trim().length < 2 ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Enter at least two characters to search the podcast directory.</div> : podcastSearch.isLoading || debouncedSearch !== search.trim() ? <ShowSkeletonGrid /> : podcastSearch.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t search Podcast Index: {podcastSearch.error.message}. <button type="button" className="underline" onClick={() => void podcastSearch.refetch()}>Try again</button></p> : podcastSearch.data?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{podcastSearch.data.map(show => <article key={show.id} className="rounded-xl bg-secondary/40 p-3"><button type="button" onClick={() => setSelectedShow(show)} className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-primary"><div className="mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">{show.image ? <img src={show.image} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-white/70" /></div>}</div><p className="truncate font-semibold">{show.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{show.publisher || "Podcast show"}</p></button></article>)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No shows found. Try another search.</div>}
@@ -151,6 +153,19 @@ function ShowCard({ show, tracks, onPlay, favorites, onToggleFavorite, userLogge
       <PodcastFavoriteButton favorite={favorite} saved={false} onToggle={saved => onToggleFavorite(favorite, saved)} userLoggedIn={userLoggedIn} />
     </article>
   );
+}
+
+function favoriteSelectionToShow(favorite: PodcastFavorite): PodcastShow {
+  return {
+    id: favorite.id,
+    title: favorite.title,
+    source: favorite.source === "nostr" ? "nostr" : "podcast-index",
+    feedId: favorite.feedId,
+    feedUrl: favorite.feedUrl,
+    pubkey: favorite.pubkey,
+    publisher: favorite.publisher,
+    image: favorite.image,
+  };
 }
 
 function podcastFavoriteFromShow(show: PodcastShow): PodcastFavorite {

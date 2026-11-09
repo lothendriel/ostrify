@@ -58,6 +58,7 @@ export interface PodcastFavorite {
   feedId?: number;
   feedUrl?: string;
   pubkey?: string;
+  identity?: string;
   episode?: boolean;
   episodeId?: number;
 }
@@ -90,6 +91,22 @@ export function parsePodcastFavorites(event: NostrEvent | undefined): PodcastFav
   for (const [name, id, title, publisher, image, feedId, episodeId] of event.tags) {
     if (name !== "ostrify-episode" || !id || !episodeId || !/^\d{1,12}$/.test(episodeId)) continue;
     favorites.set(id, { id, source: "podcast-index", title: text(title) ?? `Episode ${episodeId}`, publisher: text(publisher), image: sanitizeUrl(image), feedId: feedId && /^\d{1,12}$/.test(feedId) ? Number(feedId) : undefined, episode: true, episodeId: Number(episodeId) });
+  }
+  for (const [name, id, title, publisher, image, identity, feedId] of event.tags) {
+    if (name !== "ostrify-show" || !id) continue;
+    const parsedFeedId = feedId && /^\d{1,12}$/.test(feedId) ? Number(feedId) : undefined;
+    const safeIdentity = text(identity) ?? "";
+    favorites.set(id, {
+      id,
+      source: safeIdentity.startsWith("nostr:") ? "nostr" : "podcast-index",
+      title: text(title) ?? "Podcast",
+      publisher: text(publisher),
+      image: sanitizeUrl(image),
+      feedUrl: safeIdentity.startsWith("https://") ? safeIdentity : undefined,
+      feedId: parsedFeedId,
+      pubkey: safeIdentity.startsWith("nostr:") ? safeIdentity.slice(6) : undefined,
+      identity: safeIdentity,
+    });
   }
   return [...favorites.values()];
 }
@@ -532,12 +549,12 @@ export function usePodcastFavoriteActions() {
       const next = input.saved
         ? (has ? current : [...current, input.favorite])
         : current.filter(item => item.id !== input.favorite.id);
-      const tags: string[][] = existing?.tags.filter(([name]) => name !== "p" && name !== "url" && name !== "ostrify" && name !== "ostrify-episode").map(tag => [...tag]) ?? [];
+      const tags: string[][] = existing?.tags.filter(([name]) => name !== "p" && name !== "url" && name !== "ostrify" && name !== "ostrify-episode" && name !== "ostrify-show").map(tag => [...tag]) ?? [];
       for (const favorite of next) {
         if (favorite.source === "nostr" && favorite.pubkey) tags.push(["p", favorite.pubkey]);
-        else if (favorite.feedUrl) tags.push(["url", favorite.feedUrl]);
-        tags.push(["ostrify", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : ""]);
-        if (favorite.episode && favorite.episodeId) tags.push(["ostrify-episode", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : "", String(favorite.episodeId)]);
+        else if (favorite.feedUrl && !favorite.episode) tags.push(["url", favorite.feedUrl]);
+        if (favorite.episode) tags.push(["ostrify-episode", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : "", favorite.episodeId ? String(favorite.episodeId) : ""]);
+        else tags.push(["ostrify-show", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.identity ?? (favorite.source === "nostr" ? `nostr:${favorite.pubkey ?? ""}` : favorite.feedUrl ?? ""), favorite.feedId ? String(favorite.feedId) : ""]);
       }
       tags.unshift(["d", "favorite-podcasts"]);
       const event = await publish({ kind: PODCAST_FAVORITES_KIND, content: existing?.content ?? "", tags });
@@ -586,14 +603,18 @@ export async function fetchPodcastIndexEpisodes(episodeId: number, signal: Abort
   };
 }
 
-export function usePodcastIndexEpisodes(feedId: number | undefined) {
+export function usePodcastIndexEpisodes(feedId: number | undefined, feedUrl?: string) {
+  const hasFeed = (feedId !== undefined && Number.isInteger(feedId) && feedId > 0) || !!feedUrl;
   return useQuery({
-    queryKey: ["podcast-index", "episodes", feedId],
-    enabled: feedId !== undefined && Number.isInteger(feedId) && feedId > 0,
+    queryKey: ["podcast-index", "episodes", feedId ?? feedUrl ?? ""],
+    enabled: hasFeed,
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }): Promise<Track[]> => {
-      if (!feedId) return [];
-      const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedid?id=${feedId}`, { signal });
+      if (!feedId && !feedUrl) return [];
+      const endpoint = feedId
+        ? `${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedid?id=${feedId}`
+        : `${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedurl?url=${encodeURIComponent(feedUrl!)}`;
+      const response = await fetch(endpoint, { signal });
       if (!response.ok) throw podcastIndexError(response, "Loading podcast episodes");
       const data: unknown = await response.json();
       if (!isRecord(data) || !Array.isArray(data.items)) throw new Error("Invalid Podcast Index episodes response");
@@ -605,9 +626,9 @@ export function usePodcastIndexEpisodes(feedId: number | undefined) {
         const duration = typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0 ? value.duration : undefined;
         const publishedAt = typeof value.datePublished === "number" && Number.isFinite(value.datePublished) ? value.datePublished : 0;
         return {
-          id: `podcast-index:episode:id:${String(value.id ?? `${feedId}-${publishedAt}-${title}`)}`,
+          id: `podcast-index:episode:id:${String(value.id ?? `${feedId ?? feedUrl}-${publishedAt}-${title}`)}`,
           source: "podcast-index",
-          showId: `podcast-index:${feedId}`,
+          showId: feedId ? `podcast-index:${feedId}` : undefined,
           podcastIndexEpisodeId: typeof value.id === "number" && Number.isInteger(value.id) ? value.id : undefined,
           url: enclosure,
           title,
@@ -620,6 +641,35 @@ export function usePodcastIndexEpisodes(feedId: number | undefined) {
           createdAt: publishedAt,
         };
       }).filter((track): track is Track => !!track).sort((a, b) => b.createdAt - a.createdAt);
+    },
+  });
+}
+
+export function usePodcastIndexFeed(feedUrl: string | undefined) {
+  return useQuery({
+    queryKey: ["podcast-index", "feed", feedUrl ?? ""],
+    enabled: !!sanitizeUrl(feedUrl),
+    staleTime: 60 * 60 * 1000,
+    queryFn: async ({ signal }): Promise<PodcastShow | null> => {
+      const safeFeedUrl = sanitizeUrl(feedUrl);
+      if (!safeFeedUrl) return null;
+      const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/podcasts/byfeedurl?url=${encodeURIComponent(safeFeedUrl)}`, { signal });
+      if (!response.ok) throw podcastIndexError(response, "Loading podcast details");
+      const data: unknown = await response.json();
+      if (!isRecord(data) || !Array.isArray(data.feeds)) throw new Error("Invalid Podcast Index feed response");
+      const value = data.feeds.find(isRecord);
+      if (!value) return null;
+      const id = typeof value.id === "number" && Number.isInteger(value.id) ? value.id : undefined;
+      return {
+        id: id ? `podcast-index:${id}` : `feed:${safeFeedUrl}`,
+        feedId: id,
+        feedUrl: sanitizeUrl(text(value.url)) ?? safeFeedUrl,
+        title: text(value.title) ?? safeFeedUrl,
+        publisher: text(value.author) ?? text(value.ownerName),
+        image: sanitizeUrl(text(value.artwork) ?? text(value.image)),
+        description: text(value.description),
+        source: "podcast-index",
+      };
     },
   });
 }

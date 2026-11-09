@@ -1,21 +1,32 @@
 import { Link } from 'react-router-dom';
+import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
 import { ArrowLeft, Heart, Mic, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { usePodcastFavoriteActions, usePodcastFavorites, type PodcastFavorite } from '@/hooks/usePodcasts';
+import { usePodcastFavoriteActions, usePodcastFavorites, usePodcastIndexFeed, type PodcastFavorite } from '@/hooks/usePodcasts';
 import { useTracksByIds } from '@/hooks/useTracksByIds';
 import { usePlayer } from '@/hooks/usePlayer';
+
+function SavedShowCard({ show, onRemove, pending }: { show: PodcastFavorite; onRemove: () => void; pending: boolean }) {
+  const rssDetails = usePodcastIndexFeed(show.source === 'podcast-index' && !show.feedId ? show.feedUrl : undefined);
+  const title = rssDetails.data?.title ?? show.title;
+  const image = rssDetails.data?.image ?? show.image;
+  const subtitle = rssDetails.data?.publisher ?? show.publisher;
+  const to = show.source === 'nostr' && show.pubkey ? `/${nip19.npubEncode(show.pubkey)}` : `/podcasts?source=directory&show=${encodeURIComponent(show.id)}`;
+  return <article className="group overflow-hidden rounded-xl border border-border/60 bg-secondary/30 transition-colors hover:bg-secondary/60"><Link to={to} className="block focus-visible:outline-2 focus-visible:outline-primary"><div className="aspect-square overflow-hidden bg-gradient-to-br from-fuchsia-800 to-purple-950">{image ? <img src={image} alt="" loading="lazy" className="size-full object-cover transition-transform group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center"><Mic className="size-16 text-white/70" /></div>}</div><div className="p-4"><h3 className="truncate font-semibold group-hover:underline">{title}</h3><p className="mt-1 truncate text-sm text-muted-foreground">{subtitle ?? 'Podcast'}</p></div></Link><div className="px-2 pb-2"><Button type="button" variant="ghost" size="sm" aria-label={`Remove ${show.title} from saved podcasts`} disabled={pending} onClick={onRemove}><Trash2 className="size-4" /> Remove</Button></div></article>;
+}
 
 export default function SavedPodcastsPage() {
   useSeoMeta({ title: 'Saved Podcasts — Ostrify' });
   const favorites = usePodcastFavorites();
   const actions = usePodcastFavoriteActions();
   const player = usePlayer();
-  const episodeIds = favorites.data.flatMap(item => item.episodeId ? [`podcast-index:episode:id:${item.episodeId}`] : []);
+  const episodeIds = favorites.data.flatMap(item => item.episode ? item.episodeId ? [`podcast-index:episode:id:${item.episodeId}`] : [] : []);
   const episodes = useTracksByIds(episodeIds);
   const shows = favorites.data.filter(item => !item.episode);
   const savedEpisodes = favorites.data.filter(item => item.episode);
+  const rssShow = usePodcastIndexFeed(shows[0]?.source === 'podcast-index' && !shows[0].feedId ? shows[0].feedUrl : undefined);
   const tracksById = new Map((episodes.data?.tracks ?? []).map(track => [track.id, track]));
   const playable = savedEpisodes.flatMap(item => item.episodeId ? [tracksById.get(`podcast-index:episode:id:${item.episodeId}`)].filter((track): track is NonNullable<typeof track> => !!track) : []);
   const remove = (favorite: PodcastFavorite) => actions.toggleFavorite.mutate({ favorite, saved: false });
@@ -33,7 +44,7 @@ export default function SavedPodcastsPage() {
 
     <section className="space-y-3">
       <h2 className="flex items-center gap-2 text-2xl font-bold"><Mic className="size-5 text-primary" /> Shows</h2>
-      {favorites.isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-20 rounded-xl" />)}</div> : shows.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shows.map(show => <article key={show.id} className="flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3"><div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">{show.image ? <img src={show.image} alt="" className="size-full object-cover" /> : <Mic className="size-5 text-muted-foreground" />}</div><div className="min-w-0 flex-1">{show.feedId ? <Link to={`/podcasts?source=directory&show=${encodeURIComponent(show.id)}`} className="block truncate font-semibold hover:underline">{show.title}</Link> : <p className="truncate font-semibold">{show.title}</p>}<p className="truncate text-sm text-muted-foreground">{show.publisher ?? 'Podcast'}</p></div><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${show.title} from saved podcasts`} disabled={actions.toggleFavorite.isPending} onClick={() => remove(show)}><Trash2 className="size-4" /></Button></article>)}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">No shows saved yet. Find a show in Discover Podcasts and choose Save show.</p>}
+      {favorites.isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-20 rounded-xl" />)}</div> : shows.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shows.map(show => <SavedShowCard key={show.id} show={show} onRemove={() => remove(show)} pending={actions.toggleFavorite.isPending} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">No shows saved yet. Find a show in Discover Podcasts and choose Save show.</p>}
     </section>
 
     <section className="space-y-3">
