@@ -55,8 +55,8 @@ function LibriVoxCatalog() {
   const [searchBy, setSearchBy] = useState<'title' | 'author'>('title');
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useLibriVoxCatalog(query, searchBy);
-  const books = useMemo(() => catalog.data?.pages.flat() ?? [], [catalog.data?.pages]);
-  const visibleBooks = useMemo(() => books.filter(book => book.chapters.length > 0 && book.covers.length > 0), [books]);
+  const books = useMemo(() => catalog.data?.pages.flatMap(page => page.books) ?? [], [catalog.data?.pages]);
+  const visibleBooks = books;
   const loadedPages = catalog.data?.pages.length ?? 0;
   const shouldScanMore = visibleBooks.length < 20 && loadedPages < 20;
 
@@ -114,7 +114,6 @@ function BookDetail({ id, source }: { id: string; source: 'librivox' | 'gutenber
   const libriVoxBook = useLibriVoxBook(source === 'librivox' ? id : undefined);
   const gutenbergBook = useGutenbergAudiobook(source === 'gutenberg' ? id : undefined);
   const player = usePlayer();
-  const library = useAudiobookLibrary();
   const isLoading = source === 'librivox' ? libriVoxBook.isLoading : gutenbergBook.isLoading;
   const isError = source === 'librivox' ? libriVoxBook.isError : gutenbergBook.isError;
   const error = source === 'librivox' ? libriVoxBook.error : gutenbergBook.error;
@@ -122,7 +121,7 @@ function BookDetail({ id, source }: { id: string; source: 'librivox' | 'gutenber
 
   useSeoMeta({ title: data ? `${data.title} — Audiobooks — Ostrify` : 'Audiobook — Ostrify' });
 
-  if (source === 'librivox' && !/^\d{1,12}$/.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
+  if (source === 'librivox' && !/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
   if (source === 'gutenberg' && !/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks?source=gutenberg" className="text-primary underline">Browse Gutenberg audiobooks</Link></div>;
   if (isLoading) return <div className="space-y-4 p-6"><Skeleton className="h-48 w-full" /><Skeleton className="h-48 w-full" /></div>;
   if (isError) return <div role="alert" className="p-6">Couldn’t load this audiobook: {error?.message ?? 'Unknown error'}. <button className="text-primary underline" onClick={() => void (source === 'librivox' ? libriVoxBook.refetch() : gutenbergBook.refetch())}>Try again</button></div>;

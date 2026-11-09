@@ -1,64 +1,50 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { Track } from '@/lib/music';
+import type { SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { sanitizeUrl } from '@/lib/sanitize';
 
-const API = 'https://librivox.org/api/feed/audiobooks/';
-const PAGE_SIZE = 20;
-interface LibriVoxBook {
-  id: string;
-  title: string;
-  author: string;
-  language?: string;
-  covers: string[];
-  duration?: number;
+const ARCHIVE_SEARCH = 'https://archive.org/advancedsearch.php';
+const ARCHIVE_ITEM = 'https://archive.org/metadata';
+const PAGE_SIZE = 24;
+
+export interface LibriVoxBook extends SavedAudiobook {
+  source: 'librivox';
+  catalogId: string;
   chapters: Track[];
   unavailableChapterTitles: string[];
-  sectionCount: number;
 }
 
-type Data = Record<string, unknown>;
-function record(value: unknown): Data | undefined { return value && typeof value === 'object' && !Array.isArray(value) ? value as Data : undefined; }
-function text(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value.trim() : undefined; }
-function numericId(value: unknown): string | undefined { const str = typeof value === 'number' ? String(value) : text(value); return str && /^\d{1,12}$/.test(str) ? str : undefined; }
-function seconds(value: unknown): number | undefined { const n = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN; return Number.isFinite(n) && n > 0 ? n : undefined; }
+interface SearchPage {
+  books: LibriVoxBook[];
+  total: number;
+  fetchedCount: number;
+}
 
-function parseBook(value: unknown): LibriVoxBook | null {
-  const book = record(value);
-  const bookId = numericId(book?.id);
-  const title = text(book?.title);
-  if (!book || !bookId || !title) return null;
-  const author = Array.isArray(book.authors) ? book.authors.map(author => {
-    const a = record(author);
-    return [text(a?.first_name), text(a?.last_name)].filter(Boolean).join(' ');
-  }).filter(Boolean).join(', ') || 'Unknown author' : 'Unknown author';
-  const coverUrls = [book.coverart_thumbnail, book.coverart_jpg]
-    .map(value => sanitizeUrl(text(value)))
-    .filter((url): url is string => !!url);
-  const chapters: Track[] = [];
-  const unavailableChapterTitles: string[] = [];
-  if (Array.isArray(book.sections)) {
-    for (const value of book.sections) {
-      const section = record(value);
-      const sectionId = numericId(section?.id);
-      if (!sectionId) continue;
-      const chapterTitle = text(section?.title) || `Chapter ${text(section?.section_number) || chapters.length + unavailableChapterTitles.length + 1}`;
-      const url = sanitizeUrl(text(section?.listen_url));
-      if (!url) {
-        unavailableChapterTitles.push(chapterTitle);
-        continue;
-      }
-      chapters.push({ id: `librivox:${bookId}:${sectionId}`, source: 'librivox', kind: 'audiobook', title: chapterTitle, artist: author, album: title, image: coverUrls[0], url, pubkey: '', duration: seconds(section?.playtime), topics: [], createdAt: 0 });
-    }
+type JsonRecord = Record<string, unknown>;
+
+function record(value: unknown): JsonRecord | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : undefined;
+}
+
+function text(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const values = value.filter((item): item is string => typeof item === 'string' && !!item.trim());
+    if (values.length) return values.join(', ');
   }
-  const sectionCount = Number(book.num_sections);
-  return { id: bookId, title, author, covers: coverUrls, language: text(book.language), duration: seconds(book.totaltimesecs), sectionCount: Number.isFinite(sectionCount) && sectionCount > 0 ? sectionCount : chapters.length + unavailableChapterTitles.length, chapters, unavailableChapterTitles };
+  return undefined;
 }
 
-async function fetchBooks(params: Record<string, string>, signal: AbortSignal): Promise<LibriVoxBook[]> {
-  const url = new URL(API);
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('coverart', '1');
-  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+function numeric(value: unknown): number | undefined {
+  const result = typeof value === 'string' || typeof value === 'number' ? Number(value) : NaN;
+  return Number.isFinite(result) && result > 0 ? result : undefined;
+}
+
+function validIdentifier(value: string): boolean {
+  return /^[a-z0-9][a-z0-9_-]{0,159}$/i.test(value);
+}
+
+async function fetchJson(url: URL, signal: AbortSignal): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(url, { signal });
@@ -66,38 +52,110 @@ async function fetchBooks(params: Record<string, string>, signal: AbortSignal): 
     if (signal.aborted) throw error;
     response = await fetch(`https://proxy.shakespeare.diy/?url=${encodeURIComponent(url.href)}`, { signal });
   }
-  // LibriVox responds with HTTP 404 when a catalog search has no matches.
-  if (response.status === 404 && (params.title || params.author)) return [];
-  if (!response.ok) throw new Error(`LibriVox returned ${response.status}.`);
-  const data: unknown = await response.json();
-  const result = record(data);
-  // LibriVox returns {"error":"not found"} for searches with no matches.
-  if (result && result.error === 'not found') return [];
-  if (!result || !Array.isArray(result.books)) throw new Error('Unexpected response from LibriVox.');
-  return result.books.map(parseBook).filter((book): book is LibriVoxBook => !!book);
+  if (!response.ok) throw new Error(`Internet Archive returned ${response.status}.`);
+  return response.json();
+}
+
+function makeBook(identifier: string, title: string, author: string, language?: string): LibriVoxBook {
+  const cover = sanitizeUrl(`https://archive.org/services/img/${encodeURIComponent(identifier)}`);
+  return {
+    id: `librivox:${identifier}`,
+    source: 'librivox',
+    catalogId: identifier,
+    title,
+    author,
+    covers: cover ? [cover] : [],
+    language,
+    sectionCount: 0,
+    chapters: [],
+    unavailableChapterTitles: [],
+  };
 }
 
 export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author') {
+  const normalizedQuery = query.trim();
   return useInfiniteQuery({
-    queryKey: ['librivox-catalog', query, searchBy], initialPageParam: 0, retry: 1, staleTime: 5 * 60 * 1000,
-    queryFn: async ({ pageParam, signal }) => {
-      const params: Record<string, string> = { limit: String(PAGE_SIZE), offset: String(pageParam), sort_order: 'desc', extended: '1', coverart: '1' };
-      if (query) params[searchBy] = `^${query.replace(/^\^/, '')}`;
-      return fetchBooks(params, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
+    queryKey: ['librivox-catalog', normalizedQuery, searchBy],
+    initialPageParam: 0,
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ pageParam, signal }): Promise<SearchPage> => {
+      const url = new URL(ARCHIVE_SEARCH);
+      const field = searchBy === 'title' ? 'title' : 'creator';
+      const terms = normalizedQuery.split(/\s+/).filter(Boolean).map(term => `${field}:${JSON.stringify(`*${term.replace(/[\\"\\\\]/g, '\\\\$&')}*`)}`);
+      url.searchParams.set('q', `collection:librivoxaudio${terms.length ? ` AND ${terms.join(' AND ')}` : ''}`);
+      url.searchParams.set('fl[]', 'identifier,title,creator,language');
+      url.searchParams.set('rows', String(PAGE_SIZE));
+      url.searchParams.set('start', String(pageParam));
+      url.searchParams.set('output', 'json');
+      url.searchParams.set('sort[]', 'publicdate desc');
+      const result = record(await fetchJson(url, AbortSignal.any([signal, AbortSignal.timeout(15000)])));
+      const response = record(result?.response);
+      if (!Array.isArray(response?.docs)) throw new Error('Unexpected search response from Internet Archive.');
+      const books = response.docs.flatMap((value): LibriVoxBook[] => {
+        const item = record(value);
+        const identifier = text(item?.identifier);
+        const title = text(item?.title);
+        const author = text(item?.creator) ?? 'Unknown author';
+        if (!identifier || !validIdentifier(identifier) || !title || title === '[]' || /^Nc[a-f0-9]{10,}$/i.test(author)) return [];
+        return [makeBook(identifier, title, author, text(item?.language))];
+      });
+      const total = typeof response.numFound === 'number' && Number.isFinite(response.numFound) ? response.numFound : pageParam + response.docs.length;
+      return { books, total, fetchedCount: response.docs.length };
     },
-    getNextPageParam: (page, pages) => page.length === PAGE_SIZE ? pages.length * PAGE_SIZE : undefined,
+    getNextPageParam: (lastPage, pages) => {
+      const scanned = pages.reduce((count, page) => count + page.fetchedCount, 0);
+      return scanned < lastPage.total && lastPage.fetchedCount > 0 ? scanned : undefined;
+    },
   });
 }
 
-export function useLibriVoxBook(id: string | undefined) {
+export function useLibriVoxBook(identifier: string | undefined) {
   return useQuery({
-    queryKey: ['librivox-book', id], enabled: !!id && /^\d{1,12}$/.test(id), retry: 1, staleTime: 5 * 60 * 1000,
-    queryFn: async ({ signal }) => {
-      if (!id || !/^\d{1,12}$/.test(id)) throw new Error('Invalid audiobook ID.');
-      const books = await fetchBooks({ id, extended: '1', coverart: '1' }, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
-      return books.find(book => book.id === id) ?? null;
+    queryKey: ['librivox-book', identifier],
+    enabled: !!identifier && validIdentifier(identifier),
+    retry: 1,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async ({ signal }): Promise<LibriVoxBook | null> => {
+      if (!identifier || !validIdentifier(identifier)) throw new Error('Invalid Internet Archive item ID.');
+      const url = new URL(`${ARCHIVE_ITEM}/${encodeURIComponent(identifier)}`);
+      const result = record(await fetchJson(url, AbortSignal.any([signal, AbortSignal.timeout(20000)])));
+      const metadata = record(result?.metadata);
+      const title = text(metadata?.title);
+      if (!metadata || !title) return null;
+      const author = text(metadata.creator) ?? 'Unknown author';
+      const book = makeBook(identifier, title, author, text(metadata.language));
+      const files = Array.isArray(result?.files) ? result.files : [];
+      const chapters: Track[] = files.flatMap((value): { track: Track; filename: string }[] => {
+        const file = record(value);
+        const filename = text(file?.name);
+        if (!filename || !/\.mp3$/i.test(filename) || file?.source === 'derivative' || !file?.length) return [];
+        const duration = numeric(file.length);
+        const filenameTitle = filename.replace(/\.mp3$/i, '').replace(/[_-]+/g, ' ').trim();
+        const chapterTitle = text(file.title) ?? filenameTitle;
+        return [{ filename, track: {
+          id: `librivox:${identifier}:${filename}`,
+          source: 'librivox',
+          kind: 'audiobook',
+          title: chapterTitle,
+          artist: author,
+          album: title,
+          image: book.covers[0],
+          url: `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(filename)}`,
+          mimeType: 'audio/mpeg',
+          pubkey: '',
+          duration,
+          topics: [],
+          createdAt: 0,
+        } }];
+      }).sort((left, right) => left.filename.localeCompare(right.filename, undefined, { numeric: true })).map(item => item.track);
+      if (!chapters.length) throw new Error('No MP3 chapter files were found for this audiobook.');
+      return {
+        ...book,
+        chapters,
+        sectionCount: chapters.length,
+        duration: chapters.reduce((total, chapter) => total + (chapter.duration ?? 0), 0) || undefined,
+      };
     },
   });
 }
-
-export type { LibriVoxBook };

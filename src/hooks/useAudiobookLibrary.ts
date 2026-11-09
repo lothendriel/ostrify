@@ -48,7 +48,7 @@ function parseLibrary(value: string | null): AudiobookLibraryState {
         const book = value as SavedAudiobook;
         const bookSource: AudiobookSource = book.source === 'gutenberg' || id.startsWith('gutenberg:') ? 'gutenberg' : 'librivox';
         const catalogId = typeof book.catalogId === 'string' ? book.catalogId : bookSource === 'librivox' ? id.replace(/^librivox:/, '') : id.replace(/^gutenberg:/, '');
-        if (bookSource === 'librivox' ? !/^\d{1,12}$/.test(catalogId) : !/^[a-z0-9_-]{1,160}$/i.test(catalogId)) continue;
+        if (!/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(catalogId)) continue;
         if (typeof book.title !== 'string' || typeof book.author !== 'string') continue;
         const key = `${bookSource}:${catalogId}`;
         legacyBookKeys.set(id, key);
