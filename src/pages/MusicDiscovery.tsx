@@ -147,8 +147,8 @@ export default function MusicDiscovery() {
     <Tabs value={activeTab} onValueChange={value => setSearchParams(value === 'nostr' ? {} : { source: value }, { replace: true })} className="space-y-6">
       <TabsList className="grid w-full max-w-xl grid-cols-3">
         <TabsTrigger value="nostr">Nostr music</TabsTrigger>
-        <TabsTrigger value="tunestr">TuneStr</TabsTrigger>
         <TabsTrigger value="wavlake">Wavlake catalog</TabsTrigger>
+        <TabsTrigger value="tunestr">TuneStr</TabsTrigger>
       </TabsList>
       <TabsContent value="nostr" className="mt-0">
         <div className="space-y-6">
