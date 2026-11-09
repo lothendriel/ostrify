@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
+import { usePodcastFavorites } from "@/hooks/usePodcasts";
 
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
@@ -22,6 +23,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
   const { data: playlists, isLoading } = usePlaylists();
   const audiobookLibrary = useAudiobookLibrary();
+  const podcastFavorites = usePodcastFavorites();
   const [createOpen, setCreateOpen] = useState(false);
 
   const liked = playlists?.find((p) => p.isLiked);
@@ -122,6 +124,11 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   <div className="font-medium text-sm truncate">Saved Audiobooks</div>
                   <div className="text-xs text-muted-foreground">{`${audiobookLibrary.favoriteBooks.length} favorites · ${audiobookLibrary.collections.length} collections`}</div>
                 </div>
+              </NavLink>
+
+              <NavLink to="/podcasts?source=directory" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-fuchsia-600 to-purple-700"><Mic className="size-5 text-white" /></div>
+                <div className="min-w-0"><div className="truncate text-sm font-medium">Saved Podcasts</div><div className="text-xs text-muted-foreground">{podcastFavorites.data.length} saved</div></div>
               </NavLink>
 
               {/* Followed Artists pinned */}

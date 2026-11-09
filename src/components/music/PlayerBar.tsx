@@ -18,6 +18,7 @@ import { formatDuration } from "@/lib/music";
 import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
 import { ArtistLink } from "./ArtistLink";
+import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 
 export function PlayerBar() {
   const player = usePlayer();
@@ -38,9 +39,10 @@ export function PlayerBar() {
                 <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />
               </div>
             </div>
-            <div className="hidden sm:block">
-              {current.source !== 'librivox' && <LikeButton trackId={current.id} size={16} />}
-            </div>
+            {current.source !== 'librivox' && current.source !== 'fountain' && current.kind === 'podcast' && <div className="hidden sm:flex items-center">
+              <LikeButton trackId={current.id} size={16} />
+              {current.kind === 'podcast' && <AddToPlaylistMenu trackId={current.id} />}
+            </div>}
           </>
         ) : (
           <div className="text-sm text-muted-foreground hidden sm:block">Nothing playing</div>

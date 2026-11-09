@@ -16,6 +16,8 @@ export interface Track {
   albumId?: string;
   /** Stable catalog or Nostr coordinate of the parent podcast show. */
   showId?: string;
+  /** Podcast Index episode identifier for restoring saved directory episodes. */
+  podcastIndexEpisodeId?: number;
   /** Direct audio URL (https). */
   url: string;
   /** Audio MIME type, if known. */

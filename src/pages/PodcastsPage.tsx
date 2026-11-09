@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { Mic, Radio, Globe2, ChevronRight, Play, Search, ArrowLeft } from "lucide-react";
-import { usePodcastEpisodes, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, type PodcastShow } from "@/hooks/usePodcasts";
+import { Mic, Radio, Globe2, ChevronRight, Play, Search, ArrowLeft, Heart } from "lucide-react";
+import { usePodcastEpisodes, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +14,8 @@ import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
 import { nip19 } from "nostr-tools";
 import { Input } from "@/components/ui/input";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useTracksByIds } from "@/hooks/useTracksByIds";
 
 const PodcastsPage = () => {
   useSeoMeta({ title: "Podcasts — Ostrify" });
@@ -21,13 +23,27 @@ const PodcastsPage = () => {
   const nostrShows = useNostrPodcastShows();
   const fountainShows = useFountainPodcastShows();
   const player = usePlayer();
-  const [source, setSource] = useState<"nostr" | "fountain" | "directory">("nostr");
+  const { user } = useCurrentUser();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialSource = searchParams.get("source");
+  const [source, setSource] = useState<"nostr" | "fountain" | "directory">(initialSource === "directory" ? "directory" : initialSource === "fountain" ? "fountain" : "nostr");
   const [viewAllSource, setViewAllSource] = useState<"nostr" | "fountain" | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedShow, setSelectedShow] = useState<PodcastShow | null>(null);
   const podcastSearch = usePodcastIndexSearch(debouncedSearch);
   const directoryEpisodes = usePodcastIndexEpisodes(selectedShow?.feedId);
+  const podcastFavorites = usePodcastFavorites();
+  const podcastFavoriteActions = usePodcastFavoriteActions();
+  const savedEpisodeIds = podcastFavorites.data.flatMap(item => item.episodeId ? [`podcast-index:episode:id:${item.episodeId}`] : []);
+  const savedEpisodeTracks = useTracksByIds(savedEpisodeIds);
+  useEffect(() => {
+    const favoriteId = searchParams.get("show");
+    if (!favoriteId || selectedShow) return;
+    const saved = podcastFavorites.data.find(item => item.id === favoriteId);
+    if (saved?.feedId) setSelectedShow({ id: saved.id, feedId: saved.feedId, title: saved.title, publisher: saved.publisher, image: saved.image, feedUrl: saved.feedUrl, source: "podcast-index" });
+    else if (saved?.pubkey) setSelectedShow({ id: saved.id, pubkey: saved.pubkey, title: saved.title.replace(/^Podcast by /, ""), publisher: saved.publisher, image: saved.image, source: "nostr" });
+  }, [podcastFavorites.data, searchParams, selectedShow]);
   const catalogSource = source === "directory" ? "nostr" : source;
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");
@@ -71,7 +87,7 @@ const PodcastsPage = () => {
         <p className="mt-3 text-muted-foreground max-w-2xl">Browse Nostr podcasts or search the Podcast Index directory for shows from across the open podcast ecosystem.</p>
       </header>
 
-      <Tabs value={source} onValueChange={(value) => { if (value === "nostr" || value === "fountain" || value === "directory") { setSource(value); setViewAllSource(null); setSelectedShow(null); } }}>
+      <Tabs value={source} onValueChange={(value) => { if (value === "nostr" || value === "fountain" || value === "directory") { setSource(value); setSearchParams(value === "nostr" ? {} : { source: value }); setViewAllSource(null); setSelectedShow(null); } }}>
         <TabsList className="grid h-auto w-full max-w-2xl grid-cols-3 gap-1">
           <TabsTrigger value="nostr"><Radio className="size-4" /> Nostr podcasts</TabsTrigger>
           <TabsTrigger value="fountain"><Globe2 className="size-4" /> Fountain.fm</TabsTrigger>
@@ -79,10 +95,12 @@ const PodcastsPage = () => {
         </TabsList>
 
         <TabsContent value="directory" className="mt-6 space-y-8">
-          {selectedShow ? <PodcastIndexShow show={selectedShow} tracks={directoryEpisodes.data ?? []} isLoading={directoryEpisodes.isLoading} isError={directoryEpisodes.isError} onRetry={() => void directoryEpisodes.refetch()} onBack={() => setSelectedShow(null)} onPlay={() => { if (directoryEpisodes.data?.length) player.playQueue(directoryEpisodes.data); }} /> : <section className="space-y-4">
+          <SavedEpisodes favorites={podcastFavorites.data.filter(item => item.episode)} tracks={savedEpisodeTracks.data?.tracks ?? []} isLoading={savedEpisodeTracks.isLoading} onRemove={episode => podcastFavoriteActions.toggleFavorite.mutate({ favorite: episode, saved: false })} userLoggedIn={!!user} />
+          <SavedPodcasts favorites={podcastFavorites.data} isLoading={podcastFavorites.isLoading} onToggle={favorite => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved: false })} pending={podcastFavoriteActions.toggleFavorite.isPending} userLoggedIn={!!user} />
+          {selectedShow ? <PodcastIndexShow show={selectedShow} tracks={directoryEpisodes.data ?? []} isLoading={directoryEpisodes.isLoading} isError={directoryEpisodes.isError} onRetry={() => void directoryEpisodes.refetch()} onBack={() => { setSelectedShow(null); setSearchParams({ source: "directory" }); }} onPlay={() => { if (directoryEpisodes.data?.length) player.playQueue(directoryEpisodes.data); }} onPlayTrack={track => player.playQueue([track])} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} saving={podcastFavoriteActions.toggleFavorite.isPending} userLoggedIn={!!user} /> : <section className="space-y-4">
             <div><h2 className="text-2xl font-bold">Search podcasts</h2><p className="text-sm text-muted-foreground">Find shows in the Podcast Index directory and browse their latest episodes.</p></div>
             <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search shows, hosts, and topics" aria-label="Search podcasts" maxLength={120} className="pl-10" /></div>
-            {search.trim().length < 2 ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Enter at least two characters to search the podcast directory.</div> : podcastSearch.isLoading || debouncedSearch !== search.trim() ? <ShowSkeletonGrid /> : podcastSearch.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t search Podcast Index: {podcastSearch.error.message}. <button type="button" className="underline" onClick={() => void podcastSearch.refetch()}>Try again</button></p> : podcastSearch.data?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{podcastSearch.data.map(show => <button type="button" key={show.id} onClick={() => setSelectedShow(show)} className="group rounded-xl bg-secondary/40 p-3 text-left transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary"><div className="mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">{show.image ? <img src={show.image} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-white/70" /></div>}</div><p className="truncate font-semibold">{show.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{show.publisher || "Podcast show"}</p></button>)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No shows found. Try another search.</div>}
+            {search.trim().length < 2 ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Enter at least two characters to search the podcast directory.</div> : podcastSearch.isLoading || debouncedSearch !== search.trim() ? <ShowSkeletonGrid /> : podcastSearch.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t search Podcast Index: {podcastSearch.error.message}. <button type="button" className="underline" onClick={() => void podcastSearch.refetch()}>Try again</button></p> : podcastSearch.data?.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{podcastSearch.data.map(show => <article key={show.id} className="rounded-xl bg-secondary/40 p-3"><button type="button" onClick={() => setSelectedShow(show)} className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-primary"><div className="mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">{show.image ? <img src={show.image} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-white/70" /></div>}</div><p className="truncate font-semibold">{show.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{show.publisher || "Podcast show"}</p></button><PodcastFavoriteButton favorite={podcastFavoriteFromShow(show)} saved={podcastFavorites.data.some(item => item.id === show.id)} onToggle={saved => podcastFavoriteActions.toggleFavorite.mutate({ favorite: podcastFavoriteFromShow(show), saved })} pending={podcastFavoriteActions.toggleFavorite.isPending} userLoggedIn={!!user} showLoginHint /></article>)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No shows found. Try another search.</div>}
           </section>}
         </TabsContent>
 
@@ -90,6 +108,9 @@ const PodcastsPage = () => {
           {viewAllSource ? (
             <ShowCatalog
               key={viewAllSource}
+              favorites={podcastFavorites.data}
+              onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })}
+              userLoggedIn={!!user}
               source={viewAllSource}
               shows={viewAllSource === "nostr" ? nostrShows.data ?? [] : fountainShows.data ?? []}
               isLoading={viewAllSource === "nostr" ? nostrShows.isLoading : fountainShows.isLoading}
@@ -109,7 +130,7 @@ const PodcastsPage = () => {
                   <Button variant="outline" onClick={() => setViewAllSource(catalogSource)}>View all {catalogSource === "nostr" ? "Nostr" : "Fountain"} shows <ChevronRight className="size-4" /></Button>
                 </div>
                 {sourceError && <p role="alert" className="text-sm text-destructive">Couldn’t load this show catalog. <button className="underline" onClick={() => void (source === "nostr" ? nostrShows.refetch() : fountainShows.refetch())}>Try again</button></p>}
-                {sourceLoading ? <ShowSkeletonGrid /> : topShows.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{topShows.map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} />)}</div> : <EmptyShows source={catalogSource} />}
+                {sourceLoading ? <ShowSkeletonGrid /> : topShows.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{topShows.map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={!!user} />)}</div> : <EmptyShows source={catalogSource} />}
               </section>
 
               <section className="space-y-4">
@@ -125,11 +146,12 @@ const PodcastsPage = () => {
   );
 };
 
-function ShowCard({ show, tracks, onPlay }: { show: PodcastShow; tracks: Track[]; onPlay?: (tracks: Track[]) => void }) {
+function ShowCard({ show, tracks, onPlay, favorites, onToggleFavorite, userLoggedIn }: { show: PodcastShow; tracks: Track[]; onPlay?: (tracks: Track[]) => void; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; userLoggedIn: boolean }) {
   const author = useAuthor(show.pubkey);
   const cover = sanitizeUrl(show.image) ?? sanitizeUrl(author.data?.metadata?.picture);
   const name = show.title || show.publisher || author.data?.metadata?.display_name || author.data?.metadata?.name || "Podcast show";
   const playTracks = tracks;
+  const favorite = podcastFavoriteFromShow(show);
   return (
     <article className="group rounded-xl bg-secondary/40 p-3 hover:bg-secondary transition-colors">
       <div className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">
@@ -140,29 +162,58 @@ function ShowCard({ show, tracks, onPlay }: { show: PodcastShow; tracks: Track[]
         {playTracks.length > 0 && onPlay && <button type="button" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label={`Play ${name}`} onClick={() => onPlay(playTracks)}><Play className="size-4 fill-current" /></button>}
       </div>
       {show.pubkey && <Link to={`/${nip19.npubEncode(show.pubkey)}`} className="mt-2 inline-block text-xs text-primary hover:underline">Open Nostr show</Link>}
+      <PodcastFavoriteButton favorite={favorite} saved={favorites.some(item => item.id === favorite.id)} onToggle={saved => onToggleFavorite(favorite, saved)} userLoggedIn={userLoggedIn} />
     </article>
   );
 }
 
-function PodcastIndexShow({ show, tracks, isLoading, isError, onRetry, onBack, onPlay }: { show: PodcastShow; tracks: Track[]; isLoading: boolean; isError: boolean; onRetry: () => void; onBack: () => void; onPlay: () => void }) {
+function podcastFavoriteFromShow(show: PodcastShow): PodcastFavorite {
+  return { id: show.id, source: show.source === "nostr" ? "nostr" : "podcast-index", title: show.title, publisher: show.publisher, image: show.image, feedId: show.feedId, feedUrl: show.feedUrl, pubkey: show.pubkey };
+}
+
+function SavedEpisodes({ favorites, tracks, isLoading, onRemove, userLoggedIn }: { favorites: PodcastFavorite[]; tracks: Track[]; isLoading: boolean; onRemove: (favorite: PodcastFavorite) => void; userLoggedIn: boolean }) {
+  const player = usePlayer();
+  if (!favorites.length) return null;
+  const trackById = new Map(tracks.map(track => [track.id, track]));
+  const playableTracks = favorites.flatMap(item => item.episodeId ? [trackById.get(`podcast-index:episode:id:${item.episodeId}`)].filter((track): track is Track => !!track) : []);
+  return <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-xl font-bold"><Heart className="size-5 text-primary" /> Saved episodes</h2><Button variant="outline" size="sm" disabled={!playableTracks.length} onClick={() => player.playQueue(playableTracks)}><Play className="size-4" /> Play all</Button></div>{isLoading ? <TrackSkeletonGrid /> : <div className="space-y-2">{favorites.map(favorite => {
+    const track = favorite.episodeId ? trackById.get(`podcast-index:episode:id:${favorite.episodeId}`) : undefined;
+    return <div key={favorite.id} className="flex items-center gap-3 rounded-xl bg-secondary/40 p-3"><div className="size-12 shrink-0 overflow-hidden rounded-md bg-secondary">{favorite.image && <img src={favorite.image} alt="" className="size-full object-cover" />}</div><button type="button" className="min-w-0 flex-1 truncate text-left font-semibold hover:text-primary" disabled={!track} onClick={() => { if (track) player.playQueue([track]); }}>{track?.title ?? favorite.title}</button><PodcastFavoriteButton favorite={favorite} saved onToggle={() => onRemove(favorite)} userLoggedIn={userLoggedIn} /></div>;
+  })}</div>}</section>;
+}
+
+function PodcastFavoriteButton({ favorite, saved, onToggle, pending = false, userLoggedIn, showLoginHint = false }: { favorite: PodcastFavorite; saved: boolean; onToggle: (saved: boolean) => void; pending?: boolean; userLoggedIn: boolean; showLoginHint?: boolean }) {
+  const label = favorite.episode ? "episode" : "show";
+  return <Button type="button" variant="ghost" size="sm" className="mt-2 gap-2" disabled={pending} aria-pressed={saved} aria-label={saved ? `Remove ${favorite.title} from saved podcasts` : `Save ${favorite.title}`} onClick={event => { event.stopPropagation(); if (userLoggedIn) onToggle(!saved); }}><Heart className="size-4" fill={saved ? "currentColor" : "none"} />{saved ? "Saved" : userLoggedIn ? `Save ${label}` : showLoginHint ? "Log in to save" : `Save ${label}`}</Button>;
+}
+
+function SavedPodcasts({ favorites, isLoading, onToggle, pending, userLoggedIn }: { favorites: PodcastFavorite[]; isLoading: boolean; onToggle: (favorite: PodcastFavorite) => void; pending: boolean; userLoggedIn: boolean }) {
+  if (isLoading) return <Skeleton className="h-16 w-full" />;
+  if (!favorites.length) return null;
+  return <section className="space-y-3"><h2 className="flex items-center gap-2 text-xl font-bold"><Heart className="size-5 text-primary" /> Saved podcasts</h2><div className="grid gap-2 sm:grid-cols-2">{favorites.filter(item => !item.episode).map(item => <article key={item.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-secondary/30 p-3">{item.source === "nostr" && item.pubkey ? <Link to={`/${nip19.npubEncode(item.pubkey)}`} className="min-w-0 flex-1 hover:underline"><span className="block truncate font-semibold">{item.title}</span><span className="block truncate text-sm text-muted-foreground">{item.publisher ?? "Nostr podcast"}</span></Link> : item.feedId ? <Link to={`/podcasts?source=directory&show=${encodeURIComponent(item.id)}`} className="min-w-0 flex-1 hover:underline"><span className="block truncate font-semibold">{item.title}</span><span className="block truncate text-sm text-muted-foreground">{item.publisher ?? "Podcast"}</span></Link> : <div className="min-w-0 flex-1"><span className="block truncate font-semibold">{item.title}</span><span className="block truncate text-sm text-muted-foreground">{item.publisher ?? "Podcast"}</span></div>}<PodcastFavoriteButton favorite={item} saved onToggle={() => onToggle(item)} pending={pending} userLoggedIn={userLoggedIn} /></article>)}</div></section>;
+}
+
+function PodcastIndexShow({ show, tracks, isLoading, isError, onRetry, onBack, onPlay, onPlayTrack, favorites, onToggleFavorite, saving, userLoggedIn }: { show: PodcastShow; tracks: Track[]; isLoading: boolean; isError: boolean; onRetry: () => void; onBack: () => void; onPlay: () => void; onPlayTrack: (track: Track) => void; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; saving: boolean; userLoggedIn: boolean }) {
+  const favorite = podcastFavoriteFromShow(show);
   return <section className="space-y-5">
     <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to search</button>
     <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-fuchsia-900/70 via-purple-950 to-card p-6 sm:flex-row sm:items-center">
       <div className="size-32 shrink-0 overflow-hidden rounded-xl bg-secondary">{show.image ? <img src={show.image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-muted-foreground" /></div>}</div>
-      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">Podcast Index show</p><h2 className="mt-2 break-words text-3xl font-bold">{show.title}</h2>{show.publisher && <p className="mt-1 text-muted-foreground">{show.publisher}</p>}{show.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.description}</p>}</div>
+      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">{show.source === "nostr" ? "Nostr podcast" : "Podcast Index show"}</p><h2 className="mt-2 break-words text-3xl font-bold">{show.title}</h2>{show.publisher && <p className="mt-1 text-muted-foreground">{show.publisher}</p>}{show.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.description}</p>}<PodcastFavoriteButton favorite={favorite} saved={favorites.some(item => item.id === favorite.id)} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /></div>
     </header>
-    <div className="flex items-center justify-between gap-3"><div><h3 className="text-2xl font-bold">Episodes</h3><p className="text-sm text-muted-foreground">Latest episodes from this show’s RSS feed.</p></div><Button type="button" onClick={onPlay} disabled={!tracks.length || isLoading}><Play className="size-4 fill-current" /> Play latest</Button></div>
-    {isLoading ? <TrackSkeletonGrid /> : isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load episodes. <button type="button" className="underline" onClick={onRetry}>Try again</button></p> : tracks.length ? <TrackList tracks={tracks} /> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found for this show.</div>}
+    <div className="flex items-center justify-between gap-3"><div><h3 className="text-2xl font-bold">Episodes</h3><p className="text-sm text-muted-foreground">Latest episodes from this show’s RSS feed.</p></div>{show.source !== "nostr" && <Button type="button" onClick={onPlay} disabled={!tracks.length || isLoading}><Play className="size-4 fill-current" /> Play latest</Button>}</div>
+    {isLoading ? <TrackSkeletonGrid /> : isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load episodes. <button type="button" className="underline" onClick={onRetry}>Try again</button></p> : tracks.length ? <PodcastEpisodeList tracks={tracks} show={show} favorites={favorites} onToggleFavorite={onToggleFavorite} onPlayTrack={onPlayTrack} saving={saving} userLoggedIn={userLoggedIn} /> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found for this show.</div>}
     {show.feedUrl && <a href={show.feedUrl} target="_blank" rel="noreferrer" className="inline-block text-sm text-primary hover:underline">Open the show’s RSS feed</a>}
+    {show.pubkey && <Link to={`/${nip19.npubEncode(show.pubkey)}`} className="inline-block text-sm text-primary hover:underline">Open Nostr show profile</Link>}
   </section>;
 }
 
-function ShowCatalog({ source, shows, isLoading, error, onBack, onLoadMore, hasMore, isLoadingMore, loadMoreError, loadMoreLoading }: { source: "nostr" | "fountain"; shows: PodcastShow[]; isLoading: boolean; error: boolean; onBack: () => void; onLoadMore: () => void; hasMore: boolean; isLoadingMore: boolean; loadMoreError: boolean; loadMoreLoading: boolean }) {
+function ShowCatalog({ source, shows, isLoading, error, onBack, onLoadMore, hasMore, isLoadingMore, loadMoreError, loadMoreLoading, favorites, onToggleFavorite, userLoggedIn }: { source: "nostr" | "fountain"; shows: PodcastShow[]; isLoading: boolean; error: boolean; onBack: () => void; onLoadMore: () => void; hasMore: boolean; isLoadingMore: boolean; loadMoreError: boolean; loadMoreLoading: boolean; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; userLoggedIn: boolean }) {
   return <section className="space-y-4">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><button type="button" onClick={onBack} className="text-sm text-primary hover:underline">← Back to top shows</button><h2 className="mt-2 text-2xl font-bold">All {source === "nostr" ? "Nostr" : "Fountain.fm"} shows</h2><p className="text-sm text-muted-foreground">{shows.length} shows loaded from discovered podcast references.</p></div></div>
     <p className="text-sm text-muted-foreground">{source === "fountain" ? "Fountain shows are resolved from public podcast feed GUID references found on Nostr." : "Nostr shows are collected from playable NIP-F4 episodes and show metadata on your enabled read relays."}</p>
     {error && <p role="alert" className="text-sm text-destructive">Couldn’t load the show catalog.</p>}
-    {isLoading ? <ShowSkeletonGrid /> : shows.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{shows.map((show) => <ShowCard key={show.id} show={show} tracks={[]} />)}</div>{loadMoreError && <p role="alert" className="text-sm text-destructive">Couldn’t load more shows. Try again.</p>}{hasMore && <Button variant="outline" disabled={isLoadingMore || loadMoreLoading} onClick={onLoadMore}>{isLoadingMore || loadMoreLoading ? "Loading more shows…" : "Load more shows"}</Button>}</> : <EmptyShows source={source} />}
+    {isLoading ? <ShowSkeletonGrid /> : shows.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{shows.map((show) => <ShowCard key={show.id} show={show} tracks={[]} favorites={favorites} onToggleFavorite={onToggleFavorite} userLoggedIn={userLoggedIn} />)}</div>{loadMoreError && <p role="alert" className="text-sm text-destructive">Couldn’t load more shows. Try again.</p>}{hasMore && <Button variant="outline" disabled={isLoadingMore || loadMoreLoading} onClick={onLoadMore}>{isLoadingMore || loadMoreLoading ? "Loading more shows…" : "Load more shows"}</Button>}</> : <EmptyShows source={source} />}
   </section>;
 }
 
@@ -180,6 +231,15 @@ function EmptyShows({ source }: { source: "nostr" | "fountain" }) {
 
 function EmptyEpisodes({ source }: { source: "nostr" | "fountain" }) {
   return <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground">No {source === "nostr" ? "Nostr" : "Fountain-linked"} episodes were found in the relays currently loaded.</div>;
+}
+
+function PodcastEpisodeList({ tracks, show, favorites, onToggleFavorite, onPlayTrack, saving, userLoggedIn }: { tracks: Track[]; show: PodcastShow; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; onPlayTrack: (track: Track) => void; saving: boolean; userLoggedIn: boolean }) {
+  return <div><div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Category</span><span className="pr-14">Actions</span></div>{tracks.map((track, index) => {
+const episodeId = track.podcastIndexEpisodeId;
+    const favorite: PodcastFavorite | undefined = episodeId ? { id: `podcast-index:episode:id:${episodeId}`, source: "podcast-index", title: track.title, publisher: show.title, image: track.image ?? show.image, feedId: show.feedId, episode: true, episodeId } : undefined;
+    const isSaved = !!favorite && favorites.some(item => item.id === favorite.id);
+    return <div key={track.id} className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/10"><span className="text-center text-sm text-muted-foreground">{index + 1}</span><button type="button" className="min-w-0 truncate text-left font-medium hover:text-primary" onClick={() => onPlayTrack(track)}>{track.title}</button><span className="hidden truncate text-sm text-muted-foreground md:block">{show.title}</span>{favorite ? <PodcastFavoriteButton favorite={favorite} saved={isSaved} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /> : <span />}</div>;
+  })}</div>;
 }
 
 export default PodcastsPage;

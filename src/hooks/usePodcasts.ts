@@ -1,8 +1,10 @@
 import { useNostr } from "@nostrify/react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { eventToTrack, parsePodcastEpisodeTrack, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useNostrPublish } from "@/hooks/useNostrPublish";
 
 export interface PodcastShow {
   id: string;
@@ -44,6 +46,53 @@ const NOSTR_NOTE_KIND = 1;
 const NOSTR_PODCAST_SHOW_KIND = 10154;
 const NOSTR_PODCAST_EPISODE_KIND = 54;
 const FOUNTAIN_REFERENCE_SCAN_PAGE = 120;
+const PODCAST_FAVORITES_KIND = 10054;
+const PODCAST_LIBRARY_QUERY_KEY = "podcast-favorites";
+
+export interface PodcastFavorite {
+  id: string;
+  source: "nostr" | "podcast-index";
+  title: string;
+  publisher?: string;
+  image?: string;
+  feedId?: number;
+  feedUrl?: string;
+  pubkey?: string;
+  episode?: boolean;
+  episodeId?: number;
+}
+
+export function parsePodcastFavorites(event: NostrEvent | undefined): PodcastFavorite[] {
+  if (!event) return [];
+  const metadata = new Map<string, { title?: string; publisher?: string; image?: string; feedId?: number }>();
+  for (const [name, id, title, publisher, image, feedId] of event.tags) {
+    if (name !== "ostrify" || !id) continue;
+    metadata.set(id, {
+      title: text(title), publisher: text(publisher), image: sanitizeUrl(image),
+      feedId: feedId && /^\d{1,12}$/.test(feedId) ? Number(feedId) : undefined,
+    });
+  }
+  const favorites = new Map<string, PodcastFavorite>();
+  for (const [name, value] of event.tags) {
+    if (name === "p" && value && /^[0-9a-f]{64}$/i.test(value)) {
+      const id = `nostr:${value}`;
+      const data = metadata.get(id);
+      favorites.set(id, { id, source: "nostr", title: data?.title ?? `Podcast by ${value.slice(0, 8)}`, publisher: data?.publisher, image: data?.image, pubkey: value });
+    }
+    if (name === "url" && value) {
+      const safeUrl = sanitizeUrl(value);
+      if (!safeUrl) continue;
+      const data = metadata.get(value);
+      const id = data?.feedId ? `podcast-index:${data.feedId}` : `feed:${safeUrl}`;
+      favorites.set(id, { id, source: "podcast-index", feedId: data?.feedId, feedUrl: safeUrl, title: data?.title ?? safeUrl, publisher: data?.publisher, image: data?.image });
+    }
+  }
+  for (const [name, id, title, publisher, image, feedId, episodeId] of event.tags) {
+    if (name !== "ostrify-episode" || !id || !episodeId || !/^\d{1,12}$/.test(episodeId)) continue;
+    favorites.set(id, { id, source: "podcast-index", title: text(title) ?? `Episode ${episodeId}`, publisher: text(publisher), image: sanitizeUrl(image), feedId: feedId && /^\d{1,12}$/.test(feedId) ? Number(feedId) : undefined, episode: true, episodeId: Number(episodeId) });
+  }
+  return [...favorites.values()];
+}
 
 interface FountainEpisodeHit {
   _id?: unknown;
@@ -443,6 +492,100 @@ export function useFountainPodcastShows() {
   return { ...query, data, hasNextPage: lastPage?.hasMore ?? false, needsMoreScan: lastPage?.needsMoreScan ?? false };
 }
 
+export function usePodcastFavorites() {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const query = useQuery({
+    queryKey: [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? ""],
+    enabled: !!user,
+    queryFn: async ({ signal }) => {
+      if (!user) return [] as PodcastFavorite[];
+      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 5 }], {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+      });
+      const event = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND).sort((a, b) => b.created_at - a.created_at)[0];
+      return parsePodcastFavorites(event);
+    },
+  });
+  return { ...query, data: query.data ?? [] };
+}
+
+export function useIsPodcastFavorite(id: string) {
+  const favorites = usePodcastFavorites();
+  return favorites.data.some(item => item.id === id);
+}
+
+export function usePodcastFavoriteActions() {
+  const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { mutateAsync: publish } = useNostrPublish();
+  const queryClient = useQueryClient();
+  const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? ""];
+
+  const toggleFavorite = useMutation({
+    mutationFn: async (input: { favorite: PodcastFavorite; saved: boolean }) => {
+      if (!user) throw new Error("Log in to save podcasts");
+      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 5 }], { signal: AbortSignal.timeout(6000) });
+      const existing = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND).sort((a, b) => b.created_at - a.created_at)[0];
+      const current = parsePodcastFavorites(existing);
+      const has = current.some(item => item.id === input.favorite.id);
+      const next = input.saved
+        ? (has ? current : [...current, input.favorite])
+        : current.filter(item => item.id !== input.favorite.id);
+      const tags: string[][] = existing?.tags.filter(([name]) => name !== "p" && name !== "url" && name !== "ostrify" && name !== "ostrify-episode").map(tag => [...tag]) ?? [];
+      for (const favorite of next) {
+        if (favorite.source === "nostr" && favorite.pubkey) tags.push(["p", favorite.pubkey]);
+        else if (favorite.feedUrl) tags.push(["url", favorite.feedUrl]);
+        tags.push(["ostrify", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : ""]);
+        if (favorite.episode && favorite.episodeId) tags.push(["ostrify-episode", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : "", String(favorite.episodeId)]);
+      }
+      tags.unshift(["d", "favorite-podcasts"]);
+      const event = await publish({ kind: PODCAST_FAVORITES_KIND, content: existing?.content ?? "", tags });
+      return parsePodcastFavorites(event);
+    },
+    onSuccess: data => { if (user) queryClient.setQueryData(queryKey, data); },
+  });
+
+  return { toggleFavorite, isReady: !!user };
+}
+
+export function podcastIndexTrackUrl(trackId: string): string | undefined {
+  const match = /^podcast-index:episode:id:(\d{1,12})$/.exec(trackId);
+  return match ? `https://api.podcastindex.org/api/1.0/episodes/byid?id=${match[1]}` : undefined;
+}
+
+export function podcastIndexTrackId(url: string): string | undefined {
+  const match = /^https:\/\/api\.podcastindex\.org\/api\/1\.0\/episodes\/byid\?id=(\d{1,12})$/.exec(url);
+  return match ? `podcast-index:episode:id:${match[1]}` : undefined;
+}
+
+export async function fetchPodcastIndexEpisodes(episodeId: number, signal: AbortSignal): Promise<Track | null> {
+  if (!Number.isInteger(episodeId) || episodeId < 1) return null;
+  const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byid?id=${episodeId}`, { signal });
+  if (!response.ok) throw podcastIndexError(response, "Loading saved podcast episode");
+  const data: unknown = await response.json();
+  if (!isRecord(data) || !isRecord(data.episode)) return null;
+  const value = data.episode;
+  const enclosure = sanitizeUrl(text(value.enclosureUrl));
+  const title = text(value.title);
+  if (!enclosure || !title) return null;
+  const publishedAt = typeof value.datePublished === "number" && Number.isFinite(value.datePublished) ? value.datePublished : 0;
+  return {
+    id: `podcast-index:episode:id:${episodeId}`,
+    source: "podcast-index",
+    podcastIndexEpisodeId: episodeId,
+    url: enclosure,
+    title,
+    artist: text(value.feedTitle),
+    image: sanitizeUrl(text(value.image) ?? text(value.feedImage)),
+    pubkey: "",
+    duration: typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0 ? value.duration : undefined,
+    kind: "podcast",
+    topics: ["podcast"],
+    createdAt: publishedAt,
+  };
+}
+
 export function usePodcastIndexEpisodes(feedId: number | undefined) {
   return useQuery({
     queryKey: ["podcast-index", "episodes", feedId],
@@ -462,9 +605,10 @@ export function usePodcastIndexEpisodes(feedId: number | undefined) {
         const duration = typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0 ? value.duration : undefined;
         const publishedAt = typeof value.datePublished === "number" && Number.isFinite(value.datePublished) ? value.datePublished : 0;
         return {
-          id: `podcast-index:${String(value.id ?? `${feedId}-${publishedAt}-${title}`)}`,
+          id: `podcast-index:episode:id:${String(value.id ?? `${feedId}-${publishedAt}-${title}`)}`,
           source: "podcast-index",
           showId: `podcast-index:${feedId}`,
+          podcastIndexEpisodeId: typeof value.id === "number" && Number.isInteger(value.id) ? value.id : undefined,
           url: enclosure,
           title,
           artist: text(value.feedTitle),

@@ -2,7 +2,7 @@ import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, type Track } from "@/lib/music";
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
-import { fetchFountainTrack } from "./usePodcasts";
+import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
 export function useTracksByIds(ids: string[] | undefined) {
@@ -16,6 +16,7 @@ export function useTracksByIds(ids: string[] | undefined) {
       const eventIds = ids.filter((id) => /^[0-9a-f]{64}$/i.test(id));
       const catalogIds = [...new Set(ids.filter((id) => !!wavlakeTrackUrl(id)))];
       const fountainIds = [...new Set(ids.filter((id) => id.startsWith("fountain:episode:id:")))];
+      const podcastIndexIds = [...new Set(ids.filter((id) => !!podcastIndexTrackUrl(id)))];
       const byId = new Map<string, Track>();
       const eventsPromise = eventIds.length
         ? nostr.query([{ ids: eventIds }], { signal: AbortSignal.any([c.signal, AbortSignal.timeout(12000)]) }).catch(() => [])
@@ -35,6 +36,12 @@ export function useTracksByIds(ids: string[] | undefined) {
       }
       if (c.signal.aborted) throw c.signal.reason;
       for (const track of await externalPromises) if (track) byId.set(track.id.toLowerCase(), track);
+      for (const id of podcastIndexIds) {
+        const episodeId = Number(id.slice("podcast-index:episode:id:".length));
+        if (!Number.isInteger(episodeId) || episodeId < 1) continue;
+        const track = await fetchPodcastIndexEpisodes(episodeId, AbortSignal.any([c.signal, AbortSignal.timeout(12000)]));
+        if (track) byId.set(track.id.toLowerCase(), track);
+      }
       for (const event of await eventsPromise) {
         const track = eventToTrack(event);
         if (track) byId.set(event.id, track);
