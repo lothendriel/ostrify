@@ -18,8 +18,6 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { APP_RELAYS } from '@/lib/appRelays';
 
@@ -41,17 +39,12 @@ const DEFAULT_RELAY_URLS = new Set(
 
 export function RelayListManager() {
   const { config, updateConfig } = useAppContext();
-  const { user } = useCurrentUser();
-  const { mutate: publishEvent } = useNostrPublish();
   const { toast } = useToast();
 
   const [relays, setRelays] = useState<Relay[]>(config.relayMetadata.relays);
   const [newRelayUrl, setNewRelayUrl] = useState('');
 
-  // Sync local state with config when it changes (e.g., from NostrProvider sync).
-  // This is a legitimate "mirror external source of truth" pattern: the local
-  // `relays` state is what the UI edits optimistically, and we need to reset
-  // it when the authoritative config changes from outside.
+  // Sync the editable relay list with its persisted app-specific configuration.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRelays(config.relayMetadata.relays);
@@ -148,7 +141,7 @@ export function RelayListManager() {
     // eslint-disable-next-line react-hooks/purity
     const now = Math.floor(Date.now() / 1000);
 
-    // Update local config
+    // Persist relay choices only in Ostrify's local app configuration.
     updateConfig((current) => ({
       ...current,
       relayMetadata: {
@@ -156,49 +149,6 @@ export function RelayListManager() {
         updatedAt: now,
       },
     }));
-
-    // Publish to Nostr if user is logged in
-    if (user) {
-      publishNIP65RelayList(newRelays);
-    }
-  };
-
-  const publishNIP65RelayList = (relayList: Relay[]) => {
-    const tags = relayList.map(relay => {
-      if (relay.read && relay.write) {
-        return ['r', relay.url];
-      } else if (relay.read) {
-        return ['r', relay.url, 'read'];
-      } else if (relay.write) {
-        return ['r', relay.url, 'write'];
-      }
-      // If neither read nor write, don't include (shouldn't happen)
-      return null;
-    }).filter((tag): tag is string[] => tag !== null);
-
-    publishEvent(
-      {
-        kind: 10002,
-        content: '',
-        tags,
-      },
-      {
-        onSuccess: () => {
-          toast({
-            title: 'Relay list published',
-            description: 'Your relay list has been published to Nostr.',
-          });
-        },
-        onError: (error) => {
-          console.error('Failed to publish relay list:', error);
-          toast({
-            title: 'Failed to publish relay list',
-            description: 'There was an error publishing your relay list to Nostr.',
-            variant: 'destructive',
-          });
-        },
-      }
-    );
   };
 
   const renderRelayUrl = (url: string): string => {
@@ -328,9 +278,7 @@ export function RelayListManager() {
       {/* Reset to defaults */}
       <div className="flex items-center justify-between gap-2 pt-1">
         <p className="text-xs text-muted-foreground">
-          {user
-            ? 'Changes sync to your Nostr relay list (NIP-65).'
-            : 'Log in to sync your relay list with Nostr.'}
+          These relay choices are saved in Ostrify only and won’t change your NIP-65 relay list.
         </p>
         <AlertDialog>
           <AlertDialogTrigger asChild>
@@ -345,8 +293,8 @@ export function RelayListManager() {
               <AlertDialogDescription>
                 This replaces your current relay list with Ostrify's recommended set,
                 including the music-focused relays (Wavlake, Fountain, and more). Any relays
-                you added yourself will be removed.
-                {user && ' Your updated list will be published to Nostr.'}
+                you added yourself will be removed. This affects Ostrify only; your NIP-65 relay
+                list on Nostr won’t be changed.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

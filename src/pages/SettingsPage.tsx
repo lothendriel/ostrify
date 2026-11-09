@@ -31,10 +31,10 @@ const SettingsPage = () => {
             Relays
           </CardTitle>
           <CardDescription>
-            Ostrify loads all music and podcasts from these relays. Add more sources to
-            discover more audio, and toggle read (fetch music) or write (publish your likes
-            &amp; playlists) for each. When you're logged in, your list syncs across every
-            Nostr client via NIP-65.
+            Ostrify loads music and podcasts from these relays. Add more sources to discover
+            more audio, and toggle read (fetch music) or write (publish your likes &amp; playlists)
+            for each. These choices apply only to Ostrify and never overwrite your NIP-65 relay
+            list or change relay settings in other Nostr clients.
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -1,9 +1,8 @@
 import type { RelayMetadata } from '@/contexts/AppContext';
 
 /**
- * App default relays. Used as the initial `relayMetadata` for new users and as
- * a fallback when the user has no NIP-65 relay list configured (e.g. during
- * nostrconnect handshakes before any user relays have been loaded).
+ * Ostrify's recommended relay defaults. These initialize the app-specific
+ * relay configuration and are not imported from or published to NIP-65.
  */
 export const APP_RELAYS: RelayMetadata = {
   relays: [

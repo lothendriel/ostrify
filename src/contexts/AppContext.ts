@@ -20,7 +20,7 @@ export interface BlossomServerMetadata {
 export interface AppConfig {
   /** Current theme */
   theme: Theme;
-  /** NIP-65 relay list metadata */
+  /** Ostrify-specific relay choices, stored locally and never synced to NIP-65. */
   relayMetadata: RelayMetadata;
   /** User's kind 10063 Blossom server list. */
   blossomServerMetadata: BlossomServerMetadata;
