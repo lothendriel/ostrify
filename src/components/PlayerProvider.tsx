@@ -243,15 +243,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const next = useCallback(() => {
     restoredStateRef.current = false;
     pendingSeekRef.current = 0;
-    setIndex((cur) => {
-      const n = pickNextIndex(cur);
-      return n === -1 ? cur : n;
-    });
-    // If at the end with repeat off, stop.
-    setIsPlaying((playing) => {
-      const n = pickNextIndex(index);
-      return n === -1 ? false : playing;
-    });
+    const nextIndex = pickNextIndex(index);
+    if (nextIndex === -1) {
+      setIsPlaying(false);
+      return;
+    }
+    setIndex(nextIndex);
   }, [pickNextIndex, index]);
 
   const previous = useCallback(() => {
@@ -327,14 +324,61 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     setIndex(0);
   }, []);
 
-  const addToQueue = useCallback((track: Track) => {
+  const addToQueue = useCallback((tracks: Track[]) => {
+    if (tracks.length === 0) return;
     restoredStateRef.current = false;
-    setQueue((q) => {
-      if (q.some((t) => t.id === track.id)) return q;
-      return [...q, track];
+    const hasCurrentTrack = index >= 0 && index < queue.length;
+    setQueue((currentQueue) => hasCurrentTrack ? [...currentQueue, ...tracks] : tracks);
+    if (!hasCurrentTrack) {
+      pendingSeekRef.current = 0;
+      setProgress(0);
+      setIndex(0);
+    }
+  }, [index, queue.length]);
+
+  const playNext = useCallback((tracks: Track[]) => {
+    if (tracks.length === 0) return;
+    restoredStateRef.current = false;
+    const hasCurrentTrack = index >= 0 && index < queue.length;
+    setQueue((currentQueue) => {
+      const insertionIndex = hasCurrentTrack ? index + 1 : 0;
+      return [...currentQueue.slice(0, insertionIndex), ...tracks, ...currentQueue.slice(insertionIndex)];
     });
-    setIndex((cur) => (cur === -1 ? 0 : cur));
-  }, []);
+    if (!hasCurrentTrack) {
+      pendingSeekRef.current = 0;
+      setProgress(0);
+      setIndex(0);
+    }
+  }, [index, queue.length]);
+
+  const removeQueueItem = useCallback((queueIndex: number) => {
+    if (queueIndex < 0 || queueIndex >= queue.length) return;
+    restoredStateRef.current = false;
+    const remaining = queue.filter((_, itemIndex) => itemIndex !== queueIndex);
+    setQueue(remaining);
+    if (remaining.length === 0) {
+      setIsPlaying(false);
+      setIndex(-1);
+      setProgress(0);
+      return;
+    }
+    if (queueIndex < index) setIndex(index - 1);
+    else if (queueIndex === index) {
+      setIndex(Math.min(index, remaining.length - 1));
+      pendingSeekRef.current = 0;
+      setProgress(0);
+    }
+  }, [queue, index]);
+
+  const moveQueueItem = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex <= index || toIndex <= index || fromIndex >= queue.length || toIndex >= queue.length || fromIndex === toIndex) return;
+    restoredStateRef.current = false;
+    const reordered = [...queue];
+    const [movedTrack] = reordered.splice(fromIndex, 1);
+    if (!movedTrack) return;
+    reordered.splice(toIndex, 0, movedTrack);
+    setQueue(reordered);
+  }, [queue, index]);
 
   const togglePlay = useCallback(() => {
     restoredStateRef.current = false;
@@ -386,6 +430,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       playQueue,
       playTrack,
       addToQueue,
+      playNext,
+      removeQueueItem,
+      moveQueueItem,
       togglePlay,
       next,
       previous,
@@ -409,6 +456,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       playQueue,
       playTrack,
       addToQueue,
+      playNext,
+      removeQueueItem,
+      moveQueueItem,
       togglePlay,
       next,
       previous,

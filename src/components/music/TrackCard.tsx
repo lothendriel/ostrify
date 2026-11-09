@@ -4,6 +4,7 @@ import type { Track } from "@/lib/music";
 import { usePlayer } from "@/hooks/usePlayer";
 import { TrackArtwork } from "./TrackArtwork";
 import { ArtistLink } from "./ArtistLink";
+import { QueueActionsMenu } from "./QueueActionsMenu";
 
 interface TrackCardProps {
   track: Track;
@@ -57,8 +58,11 @@ export function TrackCard({ track, queue }: TrackCardProps) {
         </button>
       </div>
       <div className="font-semibold truncate">{track.title}</div>
-      <div className="text-sm text-muted-foreground truncate mt-0.5">
-        <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate text-sm text-muted-foreground">
+          <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
+        </div>
+        {track.source !== 'tunestr' && <QueueActionsMenu track={track} />}
       </div>
     </div>
   );

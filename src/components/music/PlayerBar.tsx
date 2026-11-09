@@ -19,6 +19,7 @@ import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
 import { ArtistLink } from "./ArtistLink";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
+import { QueuePanel } from "./QueuePanel";
 
 export function PlayerBar() {
   const player = usePlayer();
@@ -50,7 +51,7 @@ export function PlayerBar() {
       </div>
 
       {/* Controls */}
-      <div className="flex-1 flex flex-col items-center gap-1 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col items-center gap-1">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -122,24 +123,27 @@ export function PlayerBar() {
         </div>
       </div>
 
-      {/* Volume */}
-      <div className="hidden md:flex items-center gap-2 w-[20%] max-w-[12rem] justify-end">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={player.toggleMute}
-          aria-label={player.muted ? "Unmute" : "Mute"}
-          className="rounded-full size-8 text-muted-foreground hover:text-foreground"
-        >
-          <VolumeIcon className="size-4" />
-        </Button>
-        <Slider
-          value={[player.muted ? 0 : player.volume * 100]}
-          max={100}
-          onValueChange={([v]) => player.setVolume(v / 100)}
-          aria-label="Volume"
-          className="w-24"
-        />
+      {/* Queue and volume */}
+      <div className="flex shrink-0 items-center gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
+        <QueuePanel />
+        <div className="hidden md:flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={player.toggleMute}
+            aria-label={player.muted ? "Unmute" : "Mute"}
+            className="rounded-full size-8 text-muted-foreground hover:text-foreground"
+          >
+            <VolumeIcon className="size-4" />
+          </Button>
+          <Slider
+            value={[player.muted ? 0 : player.volume * 100]}
+            max={100}
+            onValueChange={([v]) => player.setVolume(v / 100)}
+            aria-label="Volume"
+            className="w-24"
+          />
+        </div>
       </div>
     </footer>
   );

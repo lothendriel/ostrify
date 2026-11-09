@@ -6,6 +6,7 @@ import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { ArtistLink } from "./ArtistLink";
+import { QueueActionsMenu } from "./QueueActionsMenu";
 
 interface TrackRowProps {
   track: Track;
@@ -76,6 +77,7 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
         <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
           {track.source !== 'librivox' && track.source !== 'tunestr' && track.source !== 'fountain' && <LikeButton trackId={track.id} />}
           {track.source !== 'librivox' && track.source !== 'tunestr' && track.source !== 'fountain' && <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />}
+          {track.source !== 'tunestr' && <QueueActionsMenu track={track} />}
         </div>
         <span className="text-sm text-muted-foreground tabular-nums w-12 text-right">
           {formatDuration(track.duration)}

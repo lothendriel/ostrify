@@ -24,8 +24,14 @@ export interface PlayerState {
   playQueue: (tracks: Track[], startIndex?: number) => void;
   /** Play a single track immediately. */
   playTrack: (track: Track) => void;
-  /** Add a track to the end of the queue. */
-  addToQueue: (track: Track) => void;
+  /** Add tracks to the end of the queue. */
+  addToQueue: (tracks: Track[]) => void;
+  /** Insert tracks immediately after the current track. */
+  playNext: (tracks: Track[]) => void;
+  /** Remove a track from a queue position. */
+  removeQueueItem: (queueIndex: number) => void;
+  /** Move an upcoming queue item to another position. */
+  moveQueueItem: (fromIndex: number, toIndex: number) => void;
   togglePlay: () => void;
   next: () => void;
   previous: () => void;
