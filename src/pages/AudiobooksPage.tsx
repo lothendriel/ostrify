@@ -55,7 +55,13 @@ function LibriVoxCatalog() {
   const [searchBy, setSearchBy] = useState<'title' | 'author'>('title');
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useLibriVoxCatalog(query, searchBy);
-  const books = useMemo(() => catalog.data?.pages.flatMap(page => page.books) ?? [], [catalog.data?.pages]);
+  const books = useMemo(() => {
+    const uniqueBooks = new Map<string, LibriVoxBook>();
+    for (const book of catalog.data?.pages.flatMap(page => page.books) ?? []) {
+      if (!uniqueBooks.has(book.catalogId)) uniqueBooks.set(book.catalogId, book);
+    }
+    return [...uniqueBooks.values()];
+  }, [catalog.data?.pages]);
   const visibleBooks = books;
   const loadedPages = catalog.data?.pages.length ?? 0;
   const shouldScanMore = visibleBooks.length < 20 && loadedPages < 20;
