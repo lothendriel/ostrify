@@ -1,8 +1,9 @@
-import { ChevronDown, ChevronUp, ListMusic, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3, ListMusic, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDuration, type Track } from '@/lib/music';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayer } from '@/hooks/usePlayer';
 import { TrackArtwork } from './TrackArtwork';
 import { ArtistLink } from './ArtistLink';
@@ -15,31 +16,46 @@ export function QueuePanel() {
   return <Sheet>
     <SheetTriggerButton queueLength={upcoming.length} />
     <SheetContent side="right" className="w-[min(420px,90vw)] gap-0 p-0 sm:max-w-[420px]">
-      <SheetHeader className="border-b px-5 py-5 pr-14">
-        <SheetTitle className="flex items-center gap-2 text-lg"><ListMusic className="size-5" /> Queue</SheetTitle>
-        <SheetDescription>{upcoming.length} {upcoming.length === 1 ? 'track' : 'tracks'} up next</SheetDescription>
-      </SheetHeader>
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-5 p-4">
-          <section aria-labelledby="queue-now-playing" className="space-y-2">
-            <h2 id="queue-now-playing" className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Now playing</h2>
-            {current ? <QueueTrack track={current} active onRemove={() => player.removeQueueItem(player.index)} /> : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nothing is playing.</p>}
-          </section>
-          <section aria-labelledby="queue-up-next" className="space-y-2">
-            <h2 id="queue-up-next" className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Up next</h2>
-            {upcoming.length ? upcoming.map((track, offset) => {
-              const queueIndex = player.index + 1 + offset;
-              return <QueueTrack
-                key={`${track.id}-${queueIndex}`}
-                track={track}
-                onRemove={() => player.removeQueueItem(queueIndex)}
-                onMoveUp={queueIndex > player.index + 1 ? () => player.moveQueueItem(queueIndex, queueIndex - 1) : undefined}
-                onMoveDown={queueIndex < player.queue.length - 1 ? () => player.moveQueueItem(queueIndex, queueIndex + 1) : undefined}
-              />;
-            }) : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Add a song, podcast episode, or audiobook chapter to build your queue.</p>}
-          </section>
-        </div>
-      </ScrollArea>
+      <Tabs defaultValue="queue" className="flex min-h-0 flex-1 flex-col gap-0">
+        <SheetHeader className="border-b px-5 py-5 pr-14">
+          <SheetTitle className="flex items-center gap-2 text-lg"><ListMusic className="size-5" /> Player</SheetTitle>
+          <TabsList className="mt-3 grid w-full grid-cols-2">
+            <TabsTrigger value="queue">Queue ({upcoming.length})</TabsTrigger>
+            <TabsTrigger value="history">Recently played</TabsTrigger>
+          </TabsList>
+          <SheetDescription className="sr-only">Manage upcoming tracks or browse recently played audio.</SheetDescription>
+        </SheetHeader>
+        <TabsContent value="queue" className="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="space-y-5 p-4">
+              <section aria-labelledby="queue-now-playing" className="space-y-2">
+                <h2 id="queue-now-playing" className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Now playing</h2>
+                {current ? <QueueTrack track={current} active onRemove={() => player.removeQueueItem(player.index)} /> : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nothing is playing.</p>}
+              </section>
+              <section aria-labelledby="queue-up-next" className="space-y-2">
+                <h2 id="queue-up-next" className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Up next</h2>
+                {upcoming.length ? upcoming.map((track, offset) => {
+                  const queueIndex = player.index + 1 + offset;
+                  return <QueueTrack
+                    key={`${track.id}-${queueIndex}`}
+                    track={track}
+                    onRemove={() => player.removeQueueItem(queueIndex)}
+                    onMoveUp={queueIndex > player.index + 1 ? () => player.moveQueueItem(queueIndex, queueIndex - 1) : undefined}
+                    onMoveDown={queueIndex < player.queue.length - 1 ? () => player.moveQueueItem(queueIndex, queueIndex + 1) : undefined}
+                  />;
+                }) : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Add a song, podcast episode, or audiobook chapter to build your queue.</p>}
+              </section>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+        <TabsContent value="history" className="min-h-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full">
+            <div className="space-y-2 p-4">
+              {player.history.length ? player.history.map((track, index) => <QueueTrack key={`${track.id}-${index}`} track={track} active={current?.id === track.id} />) : <div className="rounded-lg border border-dashed p-8 text-center"><Clock3 className="mx-auto mb-3 size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">Tracks you start playing will appear here.</p></div>}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
     </SheetContent>
   </Sheet>;
 }

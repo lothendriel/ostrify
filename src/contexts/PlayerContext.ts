@@ -6,6 +6,8 @@ export type RepeatMode = "off" | "all" | "one";
 export interface PlayerState {
   /** The current playback queue. */
   queue: Track[];
+  /** Tracks that have actually started playing, newest first. */
+  history: Track[];
   /** Index of the current track within the queue, or -1. */
   index: number;
   /** The currently loaded track, if any. */
