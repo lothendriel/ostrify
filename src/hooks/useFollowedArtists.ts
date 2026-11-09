@@ -1,6 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "./useCurrentUser";
+import { useAppContext } from "./useAppContext";
 import { useNostrPublish } from "./useNostrPublish";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { wavlakeArtistId, wavlakeArtistUrl } from "./useWavlake";
@@ -21,12 +22,14 @@ const FOLLOW_SET_KIND = 30000;
 export function useFollowedArtists() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
 
   return useQuery({
-    queryKey: ["followed-artists", user?.pubkey ?? ""],
+    queryKey: ["followed-artists", user?.pubkey ?? "", readRelayKey],
     queryFn: async (c) => {
-      if (!user) return [] as string[];
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(5000)]);
+      if (!user || !readRelayKey) return [] as string[];
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(12000)]);
       const events = await nostr.query(
         [
           {
@@ -41,7 +44,7 @@ export function useFollowedArtists() {
       const event = events.sort((a, b) => b.created_at - a.created_at)[0];
       return artistRefs(event);
     },
-    enabled: !!user,
+    enabled: !!user && !!readRelayKey,
   });
 }
 

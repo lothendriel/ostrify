@@ -4,6 +4,7 @@ import type { NostrEvent } from "@nostrify/nostrify";
 import { eventToTrack, parsePodcastEpisodeTrack, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useAppContext } from "@/hooks/useAppContext";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 
 export interface PodcastShow {
@@ -525,19 +526,21 @@ export function useFountainPodcastShows() {
 export function usePodcastFavorites() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
   const query = useQuery({
-    queryKey: [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? ""],
-    enabled: !!user,
+    queryKey: [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey],
+    enabled: !!user && !!readRelayKey,
     queryFn: async ({ signal }) => {
-      if (!user) return [] as PodcastFavorite[];
-      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 5 }], {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+      if (!user || !readRelayKey) return [] as PodcastFavorite[];
+      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }], {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
       });
       const event = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND).sort((a, b) => b.created_at - a.created_at)[0];
       return parsePodcastFavorites(event);
     },
   });
-  return { ...query, data: query.data ?? [], isEnabled: !!user };
+  return { ...query, data: query.data ?? [], isEnabled: !!user, hasReadRelays: !!readRelayKey };
 }
 
 export function useIsPodcastFavorite(id: string) {
@@ -548,14 +551,18 @@ export function useIsPodcastFavorite(id: string) {
 export function usePodcastFavoriteActions() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const { mutateAsync: publish } = useNostrPublish();
   const queryClient = useQueryClient();
-  const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? ""];
+  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+  const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey];
 
   const toggleFavorite = useMutation({
     mutationFn: async (input: { favorite: PodcastFavorite; saved: boolean }) => {
       if (!user) throw new Error("Log in to save podcasts");
-      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 5 }], { signal: AbortSignal.timeout(6000) });
+      if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
+      if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
+      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }], { signal: AbortSignal.timeout(15000) });
       const existing = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND).sort((a, b) => b.created_at - a.created_at)[0];
       const current = parsePodcastFavorites(existing);
       const has = current.some(item => item.id === input.favorite.id);

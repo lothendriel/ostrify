@@ -121,6 +121,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     signerRef.current = currentSigner;
   }, [currentSigner]);
 
+  // Invalidate user-owned libraries on login changes; the selected account
+  // determines the authors filter, and cached account data must not linger.
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+    void queryClient.invalidateQueries({ queryKey: ['followed-artists'] });
+    void queryClient.invalidateQueries({ queryKey: ['podcast-favorites'] });
+  }, [currentLogin?.id, queryClient]);
+
   // Invalidate Nostr queries when relay metadata changes.
   useEffect(() => {
     relayMetadataRef.current = config.relayMetadata;

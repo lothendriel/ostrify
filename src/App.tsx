@@ -4,7 +4,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { InferSeoMetaPlugin } from 'unhead/plugins';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
@@ -24,9 +24,10 @@ const head = createHead({
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 60000, // 1 minute
+      refetchOnWindowFocus: true,
+      staleTime: 60000,
       gcTime: Infinity,
+      retry: 2,
     },
   },
 });
@@ -45,6 +46,30 @@ const defaultConfig: AppConfig = {
   useAppBlossomServers: true,
 };
 
+function LibraryRefreshSync() {
+  useEffect(() => {
+    const client = queryClient;
+    const handleFocus = () => {
+      void Promise.all([
+        client.invalidateQueries({ queryKey: ['playlists'] }),
+        client.invalidateQueries({ queryKey: ['followed-artists'] }),
+        client.invalidateQueries({ queryKey: ['podcast-favorites'] }),
+      ]);
+      window.dispatchEvent(new Event('ostrify-library-refresh'));
+    };
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') handleFocus();
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisible);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
+  }, []);
+  return null;
+}
+
 export function App() {
   return (
     <UnheadProvider head={head}>
@@ -52,6 +77,7 @@ export function App() {
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
+              <LibraryRefreshSync />
               <NostrSync />
               <TooltipProvider>
                 <Toaster />

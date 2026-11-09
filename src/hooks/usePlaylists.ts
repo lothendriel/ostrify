@@ -2,6 +2,7 @@ import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { useCurrentUser } from "./useCurrentUser";
+import { useAppContext } from "./useAppContext";
 import { useNostrPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTrackUrl } from "./usePodcasts";
@@ -45,12 +46,15 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
 export function usePlaylists() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
 
   return useQuery({
-    queryKey: ["playlists", user?.pubkey ?? ""],
+    queryKey: ["playlists", user?.pubkey ?? "", readRelayKey],
     queryFn: async (c) => {
       if (!user) return [] as Playlist[];
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(5000)]);
+      if (!readRelayKey) return [] as Playlist[];
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(12000)]);
       const events = await nostr.query(
         [{ kinds: [PLAYLIST_KIND], authors: [user.pubkey], limit: 100 }],
         { signal },
@@ -67,7 +71,7 @@ export function usePlaylists() {
       });
       return playlists;
     },
-    enabled: !!user,
+    enabled: !!user && !!readRelayKey,
   });
 }
 
