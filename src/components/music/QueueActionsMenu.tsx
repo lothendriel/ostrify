@@ -22,11 +22,19 @@ export function QueueActionsMenu({ track }: { track: Track }) {
         <ListMusic className="size-4" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" onClick={event => event.stopPropagation()}>
-      <DropdownMenuItem onSelect={() => player.playNext([track])}>
+    <DropdownMenuContent align="end" data-queue-action="true" onClick={event => event.stopPropagation()}>
+      <DropdownMenuItem
+        data-queue-action="true"
+        onClick={event => event.stopPropagation()}
+        onSelect={() => player.playNext([track])}
+      >
         <ListEnd className="size-4" /> Play next
       </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => player.addToQueue([track])}>
+      <DropdownMenuItem
+        data-queue-action="true"
+        onClick={event => event.stopPropagation()}
+        onSelect={() => player.addToQueue([track])}
+      >
         <ListPlus className="size-4" /> {alreadyQueued ? 'Add again to queue' : 'Add to queue'}
       </DropdownMenuItem>
     </DropdownMenuContent>

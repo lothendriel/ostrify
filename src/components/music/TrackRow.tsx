@@ -37,7 +37,7 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
         isCurrent && "bg-accent/10",
       )}
       onClick={(event) => {
-        if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem]")) return;
+        if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem], [data-queue-action='true']")) return;
         handlePlay();
       }}
       role="button"

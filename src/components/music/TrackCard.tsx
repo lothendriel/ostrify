@@ -10,12 +10,11 @@ import { LikeButton } from "./LikeButton";
 
 interface TrackCardProps {
   track: Track;
-  queue: Track[];
   showPlaylistAction?: boolean;
   showLikeAction?: boolean;
 }
 
-export function TrackCard({ track, queue, showPlaylistAction = false, showLikeAction = false }: TrackCardProps) {
+export function TrackCard({ track, showPlaylistAction = false, showLikeAction = false }: TrackCardProps) {
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
@@ -25,46 +24,30 @@ export function TrackCard({ track, queue, showPlaylistAction = false, showLikeAc
     if (isCurrent) {
       player.togglePlay();
     } else {
-      player.playQueue(queue, queue.findIndex((t) => t.id === track.id));
+      player.playTrack(track);
     }
   };
 
   return (
-    <div
-      className="group relative p-3 rounded-lg bg-card hover:bg-accent/10 transition-colors cursor-pointer"
-      onClick={(event) => {
-        if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem]")) return;
-        handlePlay(event);
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
-          if (isCurrent) player.togglePlay();
-          else player.playQueue(queue, queue.findIndex((t) => t.id === track.id));
-        }
-      }}
-    >
-      <div className="relative mb-3">
-        <TrackArtwork track={track} className="w-full aspect-square" rounded="rounded-md shadow-lg" />
-        <button
-          type="button"
-          onClick={handlePlay}
-          aria-label={isPlaying ? "Pause" : "Play"}
-          className={cn(
-            "absolute bottom-2 right-2 size-12 rounded-full bg-primary text-primary-foreground",
-            "flex items-center justify-center shadow-xl",
-            "transition-all duration-200",
-            isPlaying
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 focus:opacity-100 focus:translate-y-0",
-          )}
-        >
-          {isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current ml-0.5" />}
-        </button>
-      </div>
-      <div className="font-semibold truncate">{track.title}</div>
+    <div className="group relative rounded-lg bg-card p-3 transition-colors hover:bg-accent/10">
+      <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="block w-full text-left">
+        <div className="relative mb-3">
+          <TrackArtwork track={track} className="w-full aspect-square" rounded="rounded-md shadow-lg" />
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute bottom-2 right-2 flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl",
+              "transition-all duration-200",
+              isPlaying
+                ? "translate-y-0 opacity-100"
+                : "translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100",
+            )}
+          >
+            {isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="ml-0.5 size-5 fill-current" />}
+          </span>
+        </div>
+        <div className="truncate font-semibold">{track.title}</div>
+      </button>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 truncate text-sm text-muted-foreground">
           <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />

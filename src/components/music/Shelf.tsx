@@ -27,7 +27,7 @@ export function Shelf({ title, subtitle, tracks, isLoading }: ShelfProps) {
                 <Skeleton className="h-3 w-1/2" />
               </div>
             ))
-          : tracks.map((track) => <TrackCard key={track.id} track={track} queue={tracks} />)}
+          : tracks.map((track) => <TrackCard key={track.id} track={track} />)}
       </div>
     </section>
   );
