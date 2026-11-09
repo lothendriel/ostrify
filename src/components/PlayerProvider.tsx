@@ -1,9 +1,130 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
+import { sanitizeUrl } from "@/lib/sanitize";
 
 const PLAYER_VOLUME_STORAGE_KEY = "ostrify-player-volume";
+const PLAYER_STATE_STORAGE_KEY = "ostrify-player-state";
 const DEFAULT_PLAYER_VOLUME = 0.8;
+
+interface SavedPlayerState {
+  queue: Track[];
+  index: number;
+  progress: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function restoreTrack(value: unknown): Track | undefined {
+  if (!isRecord(value)) return undefined;
+  const { id, url, title, pubkey, kind, topics, createdAt } = value;
+  const safeUrl = typeof url === "string" ? sanitizeUrl(url) : undefined;
+  if (
+    typeof id !== "string" || !id || !safeUrl ||
+    typeof title !== "string" || !title.trim() ||
+    typeof pubkey !== "string" ||
+    !["music", "podcast", "audiobook"].includes(String(kind)) ||
+    !Array.isArray(topics) || !topics.every(topic => typeof topic === "string") ||
+    typeof createdAt !== "number" || !Number.isFinite(createdAt)
+  ) return undefined;
+
+  const source = ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(String(value.source))
+    ? value.source as Track["source"]
+    : undefined;
+  const duration = typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0
+    ? value.duration
+    : undefined;
+  const image = typeof value.image === "string" ? sanitizeUrl(value.image) : undefined;
+
+  return {
+    id,
+    source,
+    artistId: optionalString(value.artistId),
+    artistPubkey: optionalString(value.artistPubkey),
+    albumId: optionalString(value.albumId),
+    showId: optionalString(value.showId),
+    podcastIndexEpisodeId: typeof value.podcastIndexEpisodeId === "number" && Number.isFinite(value.podcastIndexEpisodeId)
+      ? value.podcastIndexEpisodeId
+      : undefined,
+    url: safeUrl,
+    mimeType: optionalString(value.mimeType),
+    title: title.trim(),
+    artist: optionalString(value.artist),
+    album: optionalString(value.album),
+    image,
+    pubkey,
+    duration,
+    kind: kind as Track["kind"],
+    topics: topics as string[],
+    createdAt,
+  };
+}
+
+function readSavedPlayerState(): SavedPlayerState | undefined {
+  try {
+    if (typeof window === "undefined") return undefined;
+    const stored = window.localStorage.getItem(PLAYER_STATE_STORAGE_KEY);
+    if (!stored) return undefined;
+    const parsed: unknown = JSON.parse(stored);
+    if (!isRecord(parsed) || !Array.isArray(parsed.queue)) return undefined;
+
+    const queue = parsed.queue.map(restoreTrack);
+    if (queue.some(track => !track)) return undefined;
+    const tracks = queue.filter((track): track is Track => track !== undefined);
+    const index = parsed.index;
+    const progress = parsed.progress;
+    if (
+      tracks.length === 0 || typeof index !== "number" || !Number.isInteger(index) ||
+      index < 0 || index >= tracks.length || typeof progress !== "number" ||
+      !Number.isFinite(progress) || progress < 0
+    ) return undefined;
+    return { queue: tracks, index, progress };
+  } catch {
+    return undefined;
+  }
+}
+
+function writeSavedPlayerState(state: SavedPlayerState | undefined): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (!state) {
+      window.localStorage.removeItem(PLAYER_STATE_STORAGE_KEY);
+      return;
+    }
+    const persistedState: SavedPlayerState = {
+      ...state,
+      queue: state.queue.map(track => ({
+        id: track.id,
+        source: track.source,
+        artistId: track.artistId,
+        artistPubkey: track.artistPubkey,
+        albumId: track.albumId,
+        showId: track.showId,
+        podcastIndexEpisodeId: track.podcastIndexEpisodeId,
+        url: track.url,
+        mimeType: track.mimeType,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        image: track.image,
+        pubkey: track.pubkey,
+        duration: track.duration,
+        kind: track.kind,
+        topics: track.topics,
+        createdAt: track.createdAt,
+      })),
+    };
+    window.localStorage.setItem(PLAYER_STATE_STORAGE_KEY, JSON.stringify(persistedState));
+  } catch {
+    // Playback remains available for this session if browser storage is unavailable.
+  }
+}
 
 function readSavedVolume(): number {
   try {
@@ -25,10 +146,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audioRef.current = new Audio();
   }
 
-  const [queue, setQueue] = useState<Track[]>([]);
-  const [index, setIndex] = useState(-1);
+  const [initialPlayerState] = useState(readSavedPlayerState);
+  const restoredStateRef = useRef(initialPlayerState !== undefined);
+  const pendingSeekRef = useRef(initialPlayerState?.progress ?? 0);
+  const lastSavedStateRef = useRef<{ queue: Track[]; index: number; progressBucket: number } | null>(null);
+  const [queue, setQueue] = useState<Track[]>(() => initialPlayerState?.queue ?? []);
+  const [index, setIndex] = useState(() => initialPlayerState?.index ?? -1);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState(() => initialPlayerState?.progress ?? 0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(readSavedVolume);
   const [muted, setMuted] = useState(false);
@@ -53,9 +178,41 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.src = current.url;
       audio.load();
     }
+    if (restoredStateRef.current) {
+      const restorePosition = () => {
+        const position = pendingSeekRef.current;
+        if (position > 0 && Number.isFinite(audio.duration)) {
+          audio.currentTime = Math.min(position, Math.max(0, audio.duration - 0.25));
+        }
+        pendingSeekRef.current = 0;
+        restoredStateRef.current = false;
+        lastSavedStateRef.current = { queue, index, progressBucket: Math.floor(position) };
+        setProgress(audio.currentTime || position);
+      };
+      if (audio.readyState >= 1) restorePosition();
+      else audio.addEventListener("loadedmetadata", restorePosition, { once: true });
+      return () => audio.removeEventListener("loadedmetadata", restorePosition);
+    }
     audio.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
+
+  // Preserve the queue and current position between page loads. A restored
+  // session remains paused until the user explicitly presses Play.
+  useEffect(() => {
+    if (restoredStateRef.current) return;
+    if (!current || index < 0 || queue.length === 0) {
+      lastSavedStateRef.current = null;
+      writeSavedPlayerState(undefined);
+      return;
+    }
+    const progressBucket = Math.floor(progress);
+    const previous = lastSavedStateRef.current;
+    const sameQueue = previous?.queue.length === queue.length && previous.queue.every((track, trackIndex) => track.id === queue[trackIndex]?.id);
+    if (sameQueue && previous?.index === index && previous.progressBucket === progressBucket) return;
+    lastSavedStateRef.current = { queue, index, progressBucket };
+    writeSavedPlayerState({ queue, index, progress });
+  }, [queue, index, current, progress]);
 
   // Sync volume / mute.
   useEffect(() => {
@@ -84,6 +241,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   );
 
   const next = useCallback(() => {
+    restoredStateRef.current = false;
+    pendingSeekRef.current = 0;
     setIndex((cur) => {
       const n = pickNextIndex(cur);
       return n === -1 ? cur : n;
@@ -96,6 +255,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [pickNextIndex, index]);
 
   const previous = useCallback(() => {
+    restoredStateRef.current = false;
+    pendingSeekRef.current = 0;
     const audio = audioRef.current;
     if (audio && audio.currentTime > 3) {
       audio.currentTime = 0;
@@ -146,19 +307,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const playQueue = useCallback((tracks: Track[], startIndex = 0) => {
     if (tracks.length === 0) return;
     const target = Math.max(0, Math.min(startIndex, tracks.length - 1));
-    if (current?.id === tracks[target].id && audioRef.current?.paused) {
+    const sameTrack = current?.id === tracks[target].id;
+    restoredStateRef.current = false;
+    if (sameTrack && audioRef.current?.paused) {
       void audioRef.current.play().catch(() => {});
+    } else if (!sameTrack) {
+      pendingSeekRef.current = 0;
+      setProgress(0);
     }
     setQueue(tracks);
     setIndex(target);
   }, [current?.id]);
 
   const playTrack = useCallback((track: Track) => {
+    restoredStateRef.current = false;
+    pendingSeekRef.current = 0;
+    setProgress(0);
     setQueue([track]);
     setIndex(0);
   }, []);
 
   const addToQueue = useCallback((track: Track) => {
+    restoredStateRef.current = false;
     setQueue((q) => {
       if (q.some((t) => t.id === track.id)) return q;
       return [...q, track];
@@ -167,6 +337,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const togglePlay = useCallback(() => {
+    restoredStateRef.current = false;
     const audio = audioRef.current;
     if (!audio || !current) return;
     if (audio.paused) {
