@@ -67,17 +67,17 @@ function QueueTrack({ track, active = false, onRemove, onMoveUp, onMoveDown }: {
   onMoveUp?: () => void;
   onMoveDown?: () => void;
 }) {
-  return <div className={`flex items-center gap-3 rounded-lg p-2 ${active ? 'bg-primary/10' : 'hover:bg-accent/40'}`}>
+  return <div className={`grid w-full min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg p-2 ${active ? 'bg-primary/10' : 'hover:bg-accent/40'}`}>
     <TrackArtwork track={track} className="size-11" />
-    <div className="min-w-0 flex-1">
-      <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`}>{track.title}</p>
+    <div className="min-w-0 overflow-hidden">
+      <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>
       <p className="truncate text-xs text-muted-foreground"><ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist ?? track.album ?? (track.kind === 'audiobook' ? 'Audiobook' : track.kind === 'podcast' ? 'Podcast episode' : 'Unknown artist')} />{track.duration ? ` · ${formatDuration(track.duration)}` : ''}</p>
     </div>
-    <div className="flex shrink-0 items-center">
+    <div className="flex w-max shrink-0 items-center justify-self-end">
       {active && <span className="mr-1 text-xs font-medium text-primary">Playing</span>}
-      {onMoveUp && <Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} earlier`} onClick={onMoveUp} className="size-8"><ChevronUp className="size-4" /></Button>}
-      {onMoveDown && <Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} later`} onClick={onMoveDown} className="size-8"><ChevronDown className="size-4" /></Button>}
-      {onRemove && <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${track.title} from queue`} onClick={onRemove} className="size-8 text-muted-foreground hover:text-destructive"><X className="size-4" /></Button>}
+      {onMoveUp && <Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} earlier`} onClick={onMoveUp} className="size-8 shrink-0"><ChevronUp className="size-4" /></Button>}
+      {onMoveDown && <Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} later`} onClick={onMoveDown} className="size-8 shrink-0"><ChevronDown className="size-4" /></Button>}
+      {onRemove && <Button type="button" variant="ghost" size="icon" aria-label={`Remove ${track.title} from queue`} onClick={onRemove} className="size-8 shrink-0 text-muted-foreground hover:text-destructive"><X className="size-4" /></Button>}
     </div>
   </div>;
 }
