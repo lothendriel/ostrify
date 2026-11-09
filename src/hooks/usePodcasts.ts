@@ -74,6 +74,7 @@ export function parsePodcastFavorites(event: NostrEvent | undefined): PodcastFav
     });
   }
   const favorites = new Map<string, PodcastFavorite>();
+  const structuredShowIdentities = new Set(event.tags.flatMap(([name, id, , , , identity]) => name === "ostrify-show" && id && identity ? [identity] : []));
   for (const [name, value] of event.tags) {
     if (name === "p" && value && /^[0-9a-f]{64}$/i.test(value)) {
       const id = `nostr:${value}`;
@@ -83,9 +84,21 @@ export function parsePodcastFavorites(event: NostrEvent | undefined): PodcastFav
     if (name === "url" && value) {
       const safeUrl = sanitizeUrl(value);
       if (!safeUrl) continue;
-      const data = metadata.get(value);
-      const id = data?.feedId ? `podcast-index:${data.feedId}` : `feed:${safeUrl}`;
-      favorites.set(id, { id, source: "podcast-index", feedId: data?.feedId, feedUrl: safeUrl, title: data?.title ?? safeUrl, publisher: data?.publisher, image: data?.image });
+      const parsedUrl = new URL(safeUrl);
+      const legacyFeedId = parsedUrl.searchParams.get("ostrify_feed_id");
+      const legacyTitle = parsedUrl.searchParams.get("ostrify_title");
+      const legacyPublisher = parsedUrl.searchParams.get("ostrify_publisher");
+      const legacyImage = sanitizeUrl(parsedUrl.searchParams.get("ostrify_image"));
+      parsedUrl.searchParams.delete("ostrify_feed_id");
+      parsedUrl.searchParams.delete("ostrify_title");
+      parsedUrl.searchParams.delete("ostrify_publisher");
+      parsedUrl.searchParams.delete("ostrify_image");
+      const feedUrl = parsedUrl.toString();
+      if (structuredShowIdentities.has(value) || structuredShowIdentities.has(feedUrl)) continue;
+      const data = metadata.get(value) ?? metadata.get(feedUrl);
+      const feedId = data?.feedId ?? (legacyFeedId && /^\d{1,12}$/.test(legacyFeedId) ? Number(legacyFeedId) : undefined);
+      const id = feedId ? `podcast-index:${feedId}` : `feed:${feedUrl}`;
+      favorites.set(id, { id, source: "podcast-index", feedId, feedUrl, title: data?.title ?? legacyTitle ?? feedUrl, publisher: data?.publisher ?? legacyPublisher ?? undefined, image: data?.image ?? legacyImage });
     }
   }
   for (const [name, id, title, publisher, image, feedId, episodeId] of event.tags) {
