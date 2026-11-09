@@ -67,7 +67,7 @@ export function ServiceWorkerUpdateNotice() {
         registration.addEventListener("updatefound", handleUpdateFound);
         showWaitingUpdate();
         checkForUpdates();
-        updateCheckTimer = window.setInterval(checkForUpdates, 60 * 60 * 1000);
+        updateCheckTimer = window.setInterval(checkForUpdates, 15 * 60 * 1000);
       })
       .catch(() => {
         // PWA updates are an enhancement; the app remains usable if registration fails.
