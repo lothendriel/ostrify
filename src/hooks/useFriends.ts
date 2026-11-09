@@ -123,8 +123,9 @@ export function useFriends() {
       if (!ownRelays.length) throw new Error('Set up your NIP-17 DM relays first so invitations and replies can be recovered.');
       const requestToken = token ?? crypto.randomUUID().replaceAll('-', '');
       if (!/^[0-9a-f]{32}$/.test(requestToken)) throw new Error('Invalid invitation.');
-      const profileUrl = `https://ostrify.shakespeare.wtf/friends/${nip19.npubEncode(user.pubkey)}?invite=1`;
-      const content = action === 'request' ? `I’d like to connect with you on Ostrify! Visit my profile to review my friend request: ${profileUrl}` : action === 'accept' ? 'I accepted your Ostrify friend request! Visit https://ostrify.shakespeare.wtf/friends' : action === 'decline' ? 'I declined your Ostrify friend request.' : 'I removed our Ostrify friendship.';
+      const appUrl = 'https://ostrify.studio314.us';
+      const profileUrl = `${appUrl}/friends/${nip19.npubEncode(user.pubkey)}?invite=1`;
+      const content = action === 'request' ? `I’d like to connect with you on Ostrify! Visit my profile to review my friend request: ${profileUrl}` : action === 'accept' ? `I accepted your Ostrify friend request! Visit ${appUrl}/friends` : action === 'decline' ? 'I declined your Ostrify friend request.' : 'I removed our Ostrify friendship.';
       const unsigned = { kind: 14, pubkey: user.pubkey, created_at: Math.floor(Date.now() / 1000), content, tags: [['p', peer], [APP_TAG, action, requestToken]] };
       const rumor: Rumor = { ...unsigned, id: getEventHash(unsigned) };
       const recipientWrap = await wrapMessage(user, rumor, peer);
