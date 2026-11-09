@@ -66,13 +66,22 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
     },
   });
   const publisherTracks = publisherTrackQuery.data ?? [];
+  const metadata = author.data?.metadata;
+  const name = metadata?.name || metadata?.display_name || genUserName(pubkey);
+  const artistNames = [metadata?.name, metadata?.display_name].filter((value): value is string => !!value).map(value => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, ''));
+  const isThisArtist = (track: Track) => {
+    if (track.artistPubkey) return track.artistPubkey === pubkey;
+    const trackArtist = track.artist?.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    if (trackArtist) return artistNames.includes(trackArtist);
+    return track.kind === 'music';
+  };
+  const artistPublisherTracks = publisherTracks.filter(isThisArtist);
+  const otherPublisherTracks = publisherTracks.filter((track) => !isThisArtist(track));
   const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey);
-  const tracks = [...new Map([...publisherTracks, ...artistPublishedTracks].map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
+  const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
   const player = usePlayer();
 
-  const metadata = author.data?.metadata;
-  const name = metadata?.name || metadata?.display_name || genUserName(pubkey);
   const banner = sanitizeUrl(metadata?.banner);
   const picture = sanitizeUrl(metadata?.picture);
   const verified = !!metadata?.nip05;
@@ -121,7 +130,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
           <div className="text-center sm:text-left min-w-0">
             <div className="flex items-center gap-1.5 justify-center sm:justify-start text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               {verified && <BadgeCheck className="size-4 text-primary" />}
-              Nostr music profile
+              Nostr artist & publisher
             </div>
             <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight break-words my-2">
               {name}
@@ -130,7 +139,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
               <p className="text-muted-foreground line-clamp-2 max-w-xl">{metadata.about}</p>
             )}
             <p className="text-sm text-muted-foreground mt-2">
-              {isLoading ? "Loading…" : `${tracks.length} track${tracks.length === 1 ? "" : "s"}`}
+              {isLoading ? "Loading…" : `${tracks.length + otherPublisherTracks.length} track${tracks.length + otherPublisherTracks.length === 1 ? "" : "s"}`}
             </p>
           </div>
         </div>
@@ -158,7 +167,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
       </div>
 
       <div className="px-3 sm:px-6 space-y-8 pb-4">
-        {publisherTracks.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold tracking-tight">Published by this account</h2><p className="text-sm text-muted-foreground mt-1">These tracks were published by this account; the listed artist may be someone else.</p></div><TrackSections tracks={publisherTracks} heading="" /></section>}
+        {artistPublisherTracks.length > 0 && <TrackSections tracks={artistPublisherTracks} heading="" />}
+        {otherPublisherTracks.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold tracking-tight">Other music published by this account</h2><p className="text-sm text-muted-foreground mt-1">These tracks are published by this account but credit a different artist.</p></div><TrackSections tracks={otherPublisherTracks} heading="" /></section>}
         {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
             {Array.from({ length: 5 }).map((_, i) => (

@@ -60,7 +60,7 @@ export function ArtistLink({ pubkey, artistId, artistPubkey, fallbackName, isUnv
 
   return (
     <Link
-      to={`/${npub}`}
+      to={`/artist/${npub}`}
       onClick={(e) => {
         if (stopPropagation) e.stopPropagation();
       }}

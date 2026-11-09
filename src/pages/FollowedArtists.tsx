@@ -26,7 +26,7 @@ function ArtistTile({ pubkey }: { pubkey: string }) {
 
   return (
     <Link
-      to={`/${npub}`}
+      to={`/artist/${npub}`}
       className="group flex flex-col items-center text-center p-4 rounded-lg bg-card hover:bg-accent/10 transition-colors"
     >
       <Avatar className="size-28 mb-3 shadow-lg">
