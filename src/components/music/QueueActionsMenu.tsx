@@ -1,4 +1,4 @@
-import { ListEnd, ListPlus } from 'lucide-react';
+import { ListEnd, ListMusic, ListPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePlayer } from '@/hooks/usePlayer';
@@ -19,7 +19,7 @@ export function QueueActionsMenu({ track }: { track: Track }) {
         className="rounded-full text-muted-foreground hover:text-foreground"
         onClick={event => event.stopPropagation()}
       >
-        <ListPlus className="size-4" />
+        <ListMusic className="size-4" />
       </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
