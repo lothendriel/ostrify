@@ -36,7 +36,10 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
         "group grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/10 cursor-pointer",
         isCurrent && "bg-accent/10",
       )}
-      onClick={handlePlay}
+      onClick={(event) => {
+        if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem]")) return;
+        handlePlay();
+      }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {

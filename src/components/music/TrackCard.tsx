@@ -32,7 +32,10 @@ export function TrackCard({ track, queue, showPlaylistAction = false, showLikeAc
   return (
     <div
       className="group relative p-3 rounded-lg bg-card hover:bg-accent/10 transition-colors cursor-pointer"
-      onClick={handlePlay}
+      onClick={(event) => {
+        if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem]")) return;
+        handlePlay(event);
+      }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
