@@ -7,6 +7,7 @@ import { useNostrPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTrackUrl } from "./usePodcasts";
 import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER } from '@/lib/musicPlaylists';
+import { queryLibraryEvents } from '@/lib/libraryQuery';
 
 export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
@@ -47,25 +48,37 @@ export function usePlaylists() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const queryClient = useQueryClient();
   const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+  const queryKey = ["playlists", user?.pubkey ?? "", readRelayKey];
 
   return useQuery({
-    queryKey: ["playlists", user?.pubkey ?? "", readRelayKey],
+    queryKey,
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
+    placeholderData: (previousData: Playlist[] | undefined, previousQuery) =>
+      previousQuery?.queryKey[1] === user?.pubkey ? previousData : undefined,
     queryFn: async (c) => {
       if (!user) return [] as Playlist[];
       if (!readRelayKey) return [] as Playlist[];
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(12000)]);
-      const events = await nostr.query(
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
+      const { events, complete } = await queryLibraryEvents(
+        nostr,
+        readRelayKey.split("|"),
         [{ kinds: [PLAYLIST_KIND], authors: [user.pubkey], limit: 100 }],
-        { signal, relays: readRelayKey.split("|") },
+        signal,
       );
       const playlists = events
         .filter(event => event.pubkey === user.pubkey && isOstrifyMusicPlaylist(event))
         .map(parsePlaylist)
         .filter((p): p is Playlist => p !== null);
+      if (!complete) {
+        const cached = queryClient.getQueryData<Playlist[]>(queryKey) ?? [];
+        const byId = new Map(playlists.map(playlist => [playlist.id, playlist]));
+        for (const playlist of cached) if (!byId.has(playlist.id)) byId.set(playlist.id, playlist);
+        playlists.splice(0, playlists.length, ...byId.values());
+      }
       // Liked songs first, then newest.
       playlists.sort((a, b) => {
         if (a.isLiked) return -1;

@@ -5,6 +5,7 @@ import { useAppContext } from "./useAppContext";
 import { useNostrPublish } from "./useNostrPublish";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { wavlakeArtistId, wavlakeArtistUrl } from "./useWavlake";
+import { queryLibraryEvents } from '@/lib/libraryQuery';
 
 function artistRefs(event: NostrEvent | undefined): string[] {
   return event?.tags.flatMap(([name, value]) => {
@@ -23,26 +24,30 @@ export function useFollowedArtists() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const queryClient = useQueryClient();
   const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+  const queryKey = ["followed-artists", user?.pubkey ?? "", readRelayKey];
 
   return useQuery({
-    queryKey: ["followed-artists", user?.pubkey ?? "", readRelayKey],
+    queryKey,
+    placeholderData: (previousData: string[] | undefined, previousQuery) =>
+      previousQuery?.queryKey[1] === user?.pubkey ? previousData : undefined,
     queryFn: async (c) => {
       if (!user || !readRelayKey) return [] as string[];
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(12000)]);
-      const events = await nostr.query(
-        [
-          {
-            kinds: [FOLLOW_SET_KIND],
-            authors: [user.pubkey],
-            "#d": [FOLLOWED_ARTISTS_ID],
-            limit: 1,
-          },
-        ],
-        { signal, relays: readRelayKey.split("|") },
+      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
+      const { events, complete } = await queryLibraryEvents(
+        nostr,
+        readRelayKey.split("|"),
+        [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 1 }],
+        signal,
       );
       const event = events.filter(item => item.pubkey === user.pubkey && item.kind === FOLLOW_SET_KIND && item.tags.some(([name, value]) => name === 'd' && value === FOLLOWED_ARTISTS_ID)).sort((a, b) => b.created_at - a.created_at)[0];
-      return artistRefs(event);
+      const current = artistRefs(event);
+      if (!complete) {
+        const cached = queryClient.getQueryData<string[]>(queryKey) ?? [];
+        return [...new Set([...cached, ...current])];
+      }
+      return current;
     },
     enabled: !!user && !!readRelayKey,
   });
@@ -59,6 +64,7 @@ export function useIsFollowingArtist(pubkey: string | undefined): boolean {
 export function useFollowArtistActions() {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
+  const { config } = useAppContext();
   const { mutateAsync: publish } = useNostrPublish();
   const queryClient = useQueryClient();
 
@@ -67,10 +73,11 @@ export function useFollowArtistActions() {
 
   async function fetchCurrent(): Promise<NostrEvent | undefined> {
     if (!user) throw new Error('Log in to follow artists');
-    const events = await nostr.query(
+    const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url);
+    const events = readRelays.length ? await nostr.query(
       [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 10 }],
-      { signal: AbortSignal.timeout(5000) },
-    );
+      { signal: AbortSignal.timeout(5000), relays: readRelays },
+    ) : [];
     return events.sort((a, b) => b.created_at - a.created_at)[0];
   }
 

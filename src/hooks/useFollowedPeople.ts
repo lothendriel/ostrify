@@ -4,6 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAppContext } from '@/hooks/useAppContext';
+import { queryLibraryEvents } from '@/lib/libraryQuery';
 
 const ID = 'ostrify-people';
 const MIGRATION_TAG = 'ostrify-migration';
@@ -46,7 +47,7 @@ export function useFollowedPeople() {
     retry: 1,
     queryFn: async ({ signal }) => {
       if (!user) return null;
-      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
       return newest(events, user.pubkey);
     },
   });

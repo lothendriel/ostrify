@@ -90,8 +90,8 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
       return [...allRelays];
     },
-    // Keep ordinary app queries responsive; library reads can target the
-    // configured read relays without slowing every Nostr feed in the app.
+    // Keep ordinary feeds responsive; saved-library queries use a separate
+    // scoped pool with a modestly longer relay grace period.
     eoseTimeout: 200,
   }));
 
