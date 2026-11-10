@@ -32,7 +32,7 @@ export function usePublicMusicPlaylists(enabled = true) {
         if (result.status !== 'fulfilled') continue;
         for (const event of result.value) {
           const playlist = parsePublicMusicPlaylist(event);
-          if (!playlist) continue;
+          if (!playlist || playlist.references.length === 0) continue;
           const key = `${playlist.pubkey}:${playlist.id}`;
           const existing = byAddress.get(key);
           if (!existing || playlist.createdAt > existing.createdAt) byAddress.set(key, playlist);
