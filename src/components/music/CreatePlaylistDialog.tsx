@@ -75,7 +75,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit playlist" : "Create playlist"}</DialogTitle>
           <DialogDescription>
-            Playlists are stored on Nostr and synced across every client you use.
+            Regular playlists are public on Nostr and appear in Public playlists on Nostr. Ostrify keeps the kind 30003 library copy and publishes a matching kind 34139 music playlist. Liked Songs stay a library-only list.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

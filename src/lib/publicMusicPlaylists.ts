@@ -1,5 +1,7 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import { MUSIC_TRACK_KINDS } from '@/lib/music';
+import { wavlakeTrackId } from '@/hooks/useWavlake';
+import { fountainTrackId } from '@/hooks/usePodcasts';
 import { sanitizeUrl } from '@/lib/sanitize';
 
 export interface PublicMusicPlaylist {
@@ -15,12 +17,20 @@ export interface PublicMusicPlaylist {
 
 export type PlaylistTrackReference =
   | { type: 'event'; id: string }
-  | { type: 'address'; kind: number; pubkey: string; identifier: string };
+  | { type: 'address'; kind: number; pubkey: string; identifier: string }
+  | { type: 'wavlake'; id: string; url: string }
+  | { type: 'fountain'; id: string; url: string };
 
 const TRACK_KINDS = new Set<number>(MUSIC_TRACK_KINDS);
 
 export function parsePlaylistTrackReference(tag: string[]): PlaylistTrackReference | undefined {
   const [name, value] = tag;
+  if (name === 'i' && value) {
+    const id = wavlakeTrackId(value);
+    if (id) return { type: 'wavlake', id, url: value };
+    const fountainId = fountainTrackId(value);
+    if (fountainId) return { type: 'fountain', id: fountainId, url: value };
+  }
   if (name === 'e' && value && /^[0-9a-f]{64}$/i.test(value)) {
     return { type: 'event', id: value.toLowerCase() };
   }

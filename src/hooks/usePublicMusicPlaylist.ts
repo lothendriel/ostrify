@@ -23,6 +23,7 @@ export function usePublicMusicPlaylist(identifier: string | undefined, id: strin
         throw new Error('Invalid playlist publisher identifier');
       }
       const readUrls = [...new Set(config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url))];
+      if (!readUrls.length) return undefined;
       const results = await Promise.allSettled(readUrls.map(url =>
         nostr.relay(url).query(
           [{ kinds: [34139], authors: [pubkey], '#d': [id], limit: 1 }],

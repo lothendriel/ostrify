@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { Music, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { usePlaylist, usePlaylistActions } from "@/hooks/usePlaylists";
+import { usePlaylist, usePlaylistActions, LIKED_SONGS_ID } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { useToast } from "@/hooks/useToast";
@@ -32,6 +33,7 @@ const PlaylistPage = () => {
   const { mutate: publish } = useNostrPublish();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -47,7 +49,7 @@ const PlaylistPage = () => {
 
   const handleDelete = () => {
     if (!playlist) return;
-    // NIP-09 deletion request for the addressable playlist event.
+    // NIP-09 deletion request for the personal bookmark set and public playlist counterpart.
     publish(
       {
         kind: 5,
@@ -55,10 +57,13 @@ const PlaylistPage = () => {
         tags: [
           ["a", `30003:${playlist.event.pubkey}:${playlist.id}`],
           ["e", playlist.event.id],
+          ...(playlist.id !== LIKED_SONGS_ID ? [["a", `34139:${playlist.event.pubkey}:${playlist.id}`], ["d", playlist.id]] : []),
         ],
       },
       {
         onSuccess: () => {
+          void queryClient.invalidateQueries({ queryKey: ["public-music-playlists"] });
+          void queryClient.invalidateQueries({ queryKey: ["playlists"] });
           toast({ title: "Playlist deleted" });
           navigate("/");
         },
