@@ -11,6 +11,7 @@ import PlaylistPage from "./pages/PlaylistPage";
 import LikedSongs from "./pages/LikedSongs";
 import SettingsPage from "./pages/SettingsPage";
 import PodcastsPage from "./pages/PodcastsPage";
+import FountainShowPage from "./pages/FountainShowPage";
 import SavedPodcastsPage from "./pages/SavedPodcastsPage";
 import WavlakePage from "./pages/WavlakePage";
 import MusicDiscovery from "./pages/MusicDiscovery";
@@ -37,6 +38,7 @@ export function AppRouter() {
             <Route path="/playlist/:id" element={<PlaylistPage />} />
             <Route path="/liked" element={<LikedSongs />} />
             <Route path="/podcasts" element={<PodcastsPage />} />
+            <Route path="/podcasts/fountain/:feedGuid" element={<FountainShowPage />} />
             <Route path="/podcast-library" element={<SavedPodcastsPage />} />
             <Route path="/audiobook-library" element={<AudiobookLibraryPage />} />
             <Route path="/audiobook-library/:id" element={<AudiobookLibraryPage />} />

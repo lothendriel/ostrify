@@ -1,7 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
-import { eventToTrack, parsePodcastEpisodeTrack, type Track } from "@/lib/music";
+import { eventToTrack, fountainShowGuid, parsePodcastEpisodeTrack, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
@@ -451,6 +451,85 @@ async function lookupFountainShow(feedGuid: string, signal: AbortSignal): Promis
     }
   }
   return null;
+}
+
+/** Load a Fountain show and its Nostr-referenced playable episodes in small pages. */
+export function useFountainShow(feedGuid: string | undefined) {
+  return useQuery({
+    queryKey: ["fountain-show", feedGuid ?? "", FOUNTAIN_API],
+    enabled: !!feedGuid && EPISODE_GUID_RE.test(feedGuid),
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }): Promise<PodcastShow | null> => {
+      if (!feedGuid || !EPISODE_GUID_RE.test(feedGuid)) return null;
+      return lookupFountainShow(feedGuid, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
+    },
+  });
+}
+
+interface FountainShowEpisodePageParam {
+  until?: number;
+  pendingItemGuids?: string[];
+  hasMoreAtCursor?: boolean;
+}
+
+/** Discover five playable episodes per page from references to one feed GUID. */
+export function useFountainShowEpisodes(feedGuid: string | undefined) {
+  const { nostr } = useNostr();
+  return useInfiniteQuery({
+    queryKey: ["fountain-show-episodes", feedGuid ?? "", FOUNTAIN_API],
+    enabled: !!feedGuid && EPISODE_GUID_RE.test(feedGuid),
+    initialPageParam: {} as FountainShowEpisodePageParam,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+    queryFn: async ({ pageParam, signal: querySignal }) => {
+      if (!feedGuid || !EPISODE_GUID_RE.test(feedGuid)) return { tracks: [] as Track[], nextPage: undefined as FountainShowEpisodePageParam | undefined };
+      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(30000)]);
+      let until = pageParam.until;
+      let pendingItemGuids = [...(pageParam.pendingItemGuids ?? [])];
+      let hasMoreAtCursor = pageParam.hasMoreAtCursor ?? true;
+      const tracks: Track[] = [];
+      let scanCount = 0;
+
+      // Invalid or stale references are skipped while each page resolves at most
+      // five playable episodes. Keep unprocessed references for the next page.
+      while (tracks.length < 5 && scanCount < 10) {
+        if (!pendingItemGuids.length) {
+          if (!hasMoreAtCursor) break;
+          const events = await nostr.query([
+            { kinds: [NOSTR_NOTE_KIND], "#i": [`podcast:guid:${feedGuid}`, `podcast:item:guid:${feedGuid}`], limit: 5, ...(until ? { until } : {}) },
+          ], { signal });
+          if (!events.length) {
+            hasMoreAtCursor = false;
+            break;
+          }
+          until = Math.min(...events.map(event => event.created_at)) - 1;
+          hasMoreAtCursor = events.length === 5;
+          pendingItemGuids = [...new Set(events.flatMap(event => event.tags.flatMap(([name, value]) => {
+            if (name !== "i" || !value?.startsWith("podcast:item:guid:")) return [];
+            const itemGuid = value.slice("podcast:item:guid:".length);
+            const referencedFeedGuid = event.tags.find(([tagName, tagValue]) => tagName === "i" && tagValue?.startsWith("podcast:guid:"))?.[1].slice("podcast:guid:".length);
+            return itemGuid !== feedGuid && referencedFeedGuid === feedGuid && EPISODE_GUID_RE.test(itemGuid) ? [itemGuid] : [];
+          })))];
+          scanCount += 1;
+          if (!pendingItemGuids.length && !hasMoreAtCursor) break;
+          if (!pendingItemGuids.length) continue;
+        }
+
+        const batch = pendingItemGuids.splice(0, Math.min(FOUNTAIN_SHOWS_PER_LOOKUP_BATCH, 5 - tracks.length));
+        const resolved = await Promise.all(batch.map(itemGuid => lookupFountainEpisode(itemGuid, feedGuid, signal).catch((error: unknown) => {
+          if (signal.aborted) throw error;
+          return null;
+        })));
+        for (const track of resolved) {
+          if (track && !tracks.some(existing => existing.id === track.id)) tracks.push({ ...track, showId: `fountain:show:id:${feedGuid}` });
+        }
+      }
+
+      const nextPage = pendingItemGuids.length || hasMoreAtCursor ? { until, pendingItemGuids, hasMoreAtCursor } : undefined;
+      return { tracks, nextPage };
+    },
+    getNextPageParam: lastPage => lastPage.nextPage,
+  });
 }
 
 /** NIP-73 show GUIDs discovered in Nostr notes, resolved to Fountain records. */

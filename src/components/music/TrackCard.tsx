@@ -1,6 +1,7 @@
 import { Play, Pause } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import type { Track } from "@/lib/music";
+import { fountainShowGuid, type Track } from "@/lib/music";
 import { usePlayer } from "@/hooks/usePlayer";
 import { TrackArtwork } from "./TrackArtwork";
 import { ArtistLink } from "./ArtistLink";
@@ -18,6 +19,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
+  const fountainGuid = track.source === "fountain" ? fountainShowGuid(track.showId) : undefined;
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -50,7 +52,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
       </button>
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 truncate text-sm text-muted-foreground">
-          <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
+          {fountainGuid ? <Link to={`/podcasts/fountain/${encodeURIComponent(fountainGuid)}`} onClick={event => event.stopPropagation()} className="hover:text-foreground hover:underline focus-visible:underline">{track.artist || "Fountain show"}</Link> : <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />}
         </div>
         {showLikeAction && <LikeButton trackId={track.id} size={18} />}
         {showPlaylistAction && <AddToPlaylistMenu trackId={track.id} />}

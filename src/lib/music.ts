@@ -3,6 +3,11 @@ import { nip19 } from "nostr-tools";
 import { sanitizeUrl } from "./sanitize";
 
 /** A universal playable audio item (music track or podcast episode). */
+export function fountainShowGuid(showId: string | undefined): string | undefined {
+  const guid = showId?.startsWith("fountain:show:id:") ? showId.slice("fountain:show:id:".length) : undefined;
+  return guid && /^[^\s]{1,512}$/.test(guid) ? guid : undefined;
+}
+
 export interface Track {
   /** Stable id used by the player and playlists. */
   id: string;
