@@ -90,9 +90,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
       return [...allRelays];
     },
-    // Don't discard slow relays after another relay reaches EOSE: saved library
-    // events are replaceable and a fast, empty relay can otherwise hide them.
-    eoseTimeout: 0,
+    // Keep ordinary app queries responsive; library reads can target the
+    // configured read relays without slowing every Nostr feed in the app.
+    eoseTimeout: 200,
   }));
 
   // Derive the current signer from the active login. This mirrors the
