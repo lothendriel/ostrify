@@ -14,6 +14,11 @@ const LIBRARY_ID = 'ostrify-audiobook-library-v1';
 const LIBRARY_ALT = 'Encrypted Ostrify audiobook library';
 const EMPTY_LIBRARY: AudiobookLibraryState = { books: {}, favoriteIds: [], collections: [] };
 
+interface RemoteLibraryResult {
+  library: AudiobookLibraryState | null;
+  complete: boolean;
+}
+
 function mergeLibraries(local: AudiobookLibraryState, remote: AudiobookLibraryState): AudiobookLibraryState {
   const collections = new Map(remote.collections.map(collection => [collection.id, collection]));
   for (const collection of local.collections) {
@@ -32,6 +37,7 @@ function mergeLibraries(local: AudiobookLibraryState, remote: AudiobookLibrarySt
 const baselineKey = (pubkey: string) => `ostrify-audiobook-library-sync-baseline:${pubkey}`;
 let processedRemoteVersion: string | null = null;
 let syncBaseline: string | null = null;
+let syncCanPublish = false;
 let syncInFlight = false;
 
 function readSavedBaseline(pubkey: string): string | null {
@@ -91,8 +97,8 @@ export function useAudiobookLibrarySync() {
     enabled: !!user && !!relayKey,
     staleTime: 0,
     refetchOnWindowFocus: true,
-    queryFn: async ({ signal }): Promise<AudiobookLibraryState | null> => {
-      if (!user) return null;
+    queryFn: async ({ signal }): Promise<RemoteLibraryResult> => {
+      if (!user) return { library: null, complete: false };
       if (!user.signer.nip44) throw new Error('Your Nostr signer must support NIP-44 encryption to sync this private library.');
       const { events, complete } = await queryLibraryEvents(
         nostr,
@@ -101,9 +107,8 @@ export function useAudiobookLibrarySync() {
         AbortSignal.any([signal, AbortSignal.timeout(8000)]),
       );
       const latest = events.filter(event => event.pubkey === user.pubkey && event.kind === LIBRARY_KIND && event.tags.some(([name, value]) => name === 'd' && value === LIBRARY_ID)).sort((left, right) => right.created_at - left.created_at)[0];
-      if (!latest && !complete) throw new Error('Could not confirm whether your audiobook library exists on the selected relays.');
-      if (!latest) return null;
-      return parseRemoteLibrary(latest, user.pubkey, (peer, ciphertext) => user.signer.nip44!.decrypt(peer, ciphertext));
+      if (!latest) return { library: null, complete };
+      return { library: await parseRemoteLibrary(latest, user.pubkey, (peer, ciphertext) => user.signer.nip44!.decrypt(peer, ciphertext)), complete };
     },
   });
 
@@ -113,38 +118,47 @@ export function useAudiobookLibrarySync() {
     if (!user) {
       processedRemoteVersion = null;
       syncBaseline = null;
+      syncCanPublish = false;
       setSyncReadyFor(null);
       return;
     }
     if (!query.isSuccess || !query.dataUpdatedAt || query.isError || (processedRemoteVersion === `${user.pubkey}:${query.dataUpdatedAt}` && syncReadyFor === user.pubkey)) return;
     const local = getAudiobookLibrarySnapshot();
-    const remoteSerialized = query.data ? serializeLibrary(query.data) : serializeLibrary(EMPTY_LIBRARY);
     const savedBaseline = readSavedBaseline(user.pubkey);
-    if (query.data) {
+    if (query.data.library) {
+      const remoteLibrary = query.data.library;
+      const remoteLibrarySerialized = serializeLibrary(remoteLibrary);
       const localSerialized = serializeLibrary(local);
-      if (savedBaseline && savedBaseline !== remoteSerialized && localSerialized === savedBaseline) {
+      if (savedBaseline && savedBaseline !== remoteLibrarySerialized && localSerialized === savedBaseline) {
         // Local state still matches the previous sync, so the remote copy changed on another device.
-        replaceAudiobookLibrary(query.data);
-        saveBaseline(user.pubkey, remoteSerialized);
-      } else if (localSerialized !== remoteSerialized) {
+        replaceAudiobookLibrary(remoteLibrary);
+        saveBaseline(user.pubkey, remoteLibrarySerialized);
+      } else if (localSerialized !== remoteLibrarySerialized) {
         // Merge concurrent additions so an initial device migration doesn't discard either library.
-        const merged = mergeLibraries(local, query.data);
+        const merged = mergeLibraries(local, remoteLibrary);
         replaceAudiobookLibrary(merged);
-        saveBaseline(user.pubkey, remoteSerialized);
+        saveBaseline(user.pubkey, remoteLibrarySerialized);
       }
-    }
-    syncBaseline = savedBaseline ?? remoteSerialized;
-    if (query.data && !savedBaseline) saveBaseline(user.pubkey, remoteSerialized);
-    if (!query.data && savedBaseline && savedBaseline !== serializeLibrary(EMPTY_LIBRARY)) {
-      // Avoid overwriting a remote library on an incomplete/empty relay response.
+      syncBaseline = savedBaseline ?? remoteLibrarySerialized;
+      if (!savedBaseline) saveBaseline(user.pubkey, remoteLibrarySerialized);
+      else if (localSerialized === savedBaseline) syncBaseline = remoteLibrarySerialized;
+      syncCanPublish = true;
+    } else if (query.data.complete) {
+      // Only treat absence as authoritative when at least one relay completed its response.
+      syncBaseline = serializeLibrary(EMPTY_LIBRARY);
+      saveBaseline(user.pubkey, syncBaseline);
+      syncCanPublish = true;
+    } else {
+      // Keep already-synced local data and suppress publishing while relay results are incomplete.
       syncBaseline = serializeLibrary(getAudiobookLibrarySnapshot());
+      syncCanPublish = false;
     }
     processedRemoteVersion = `${user.pubkey}:${query.dataUpdatedAt}`;
     setSyncReadyFor(user.pubkey);
   }, [user?.pubkey, query.data, query.dataUpdatedAt, query.isSuccess, syncReadyFor, query.isError]);
 
   useEffect(() => {
-    if (!user || syncReadyFor !== user.pubkey || !query.isSuccess || !relayKey || syncInFlight) return;
+    if (!user || syncReadyFor !== user.pubkey || !query.isSuccess || !relayKey || !syncCanPublish || syncInFlight) return;
     const serialized = serializeLibrary(getAudiobookLibrarySnapshot());
     if (serialized === syncBaseline || !user.signer.nip44 || !writeRelayKey) return;
 
@@ -175,6 +189,7 @@ export function useAudiobookLibrarySync() {
     isLoading: !!user && query.isLoading,
     isError: query.isError,
     error: query.error,
+    isPartial: query.data?.complete === false,
     hasReadRelays: !!relayKey,
     supportsEncryption: !!user?.signer.nip44,
     hasWriteRelays: !!writeRelayKey,

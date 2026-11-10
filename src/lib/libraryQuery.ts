@@ -30,8 +30,10 @@ export async function queryLibraryEvents(
           events.add(message[2]);
         } else if (message[0] === 'EOSE') {
           completedRelays += 1;
+          // One completed relay is enough to establish that the query returned a
+          // complete response; other selected relays may be offline or slow.
+          complete = true;
           if (completedRelays === relays.length) {
-            complete = true;
             if (graceTimer) clearTimeout(graceTimer);
             controller.abort();
           } else if (completedRelays === 1) {
