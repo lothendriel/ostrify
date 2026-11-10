@@ -54,12 +54,13 @@ const PODCAST_LIBRARY_QUERY_KEY = "podcast-favorites";
 
 export interface PodcastFavorite {
   id: string;
-  source: "nostr" | "podcast-index";
+  source: "nostr" | "podcast-index" | "fountain";
   title: string;
   publisher?: string;
   image?: string;
   feedId?: number;
   feedUrl?: string;
+  feedGuid?: string;
   pubkey?: string;
   identity?: string;
   episode?: boolean;
@@ -114,11 +115,12 @@ export function parsePodcastFavorites(event: NostrEvent | undefined): PodcastFav
     const safeIdentity = text(identity) ?? "";
     favorites.set(id, {
       id,
-      source: safeIdentity.startsWith("nostr:") ? "nostr" : "podcast-index",
+      source: safeIdentity.startsWith("nostr:") ? "nostr" : safeIdentity.startsWith("fountain:") ? "fountain" : "podcast-index",
       title: text(title) ?? "Podcast",
       publisher: text(publisher),
       image: sanitizeUrl(image),
       feedUrl: safeIdentity.startsWith("https://") ? safeIdentity : undefined,
+      feedGuid: safeIdentity.startsWith("fountain:") ? safeIdentity.slice("fountain:".length) : undefined,
       feedId: parsedFeedId,
       pubkey: safeIdentity.startsWith("nostr:") ? safeIdentity.slice(6) : undefined,
       identity: safeIdentity,
@@ -695,6 +697,20 @@ export function useIsPodcastFavorite(id: string) {
   return favorites.data.some(item => item.id === id);
 }
 
+export function fountainShowFavorite(show: PodcastShow): PodcastFavorite {
+  const feedGuid = show.feedGuid ?? fountainShowGuid(show.id);
+  return {
+    id: show.id,
+    source: "fountain",
+    title: show.title,
+    publisher: show.publisher,
+    image: show.image,
+    feedUrl: show.feedUrl,
+    feedGuid,
+    identity: feedGuid ? `fountain:${feedGuid}` : undefined,
+  };
+}
+
 export function usePodcastFavoriteActions() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
@@ -719,9 +735,9 @@ export function usePodcastFavoriteActions() {
       const tags: string[][] = existing?.tags.filter(([name]) => name !== "p" && name !== "url" && name !== "ostrify" && name !== "ostrify-episode" && name !== "ostrify-show").map(tag => [...tag]) ?? [];
       for (const favorite of next) {
         if (favorite.source === "nostr" && favorite.pubkey) tags.push(["p", favorite.pubkey]);
-        else if (favorite.feedUrl && !favorite.episode) tags.push(["url", favorite.feedUrl]);
+        else if (favorite.source === "podcast-index" && favorite.feedUrl && !favorite.episode) tags.push(["url", favorite.feedUrl]);
         if (favorite.episode) tags.push(["ostrify-episode", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : "", favorite.episodeId ? String(favorite.episodeId) : ""]);
-        else tags.push(["ostrify-show", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.identity ?? (favorite.source === "nostr" ? `nostr:${favorite.pubkey ?? ""}` : favorite.feedUrl ?? ""), favorite.feedId ? String(favorite.feedId) : ""]);
+        else tags.push(["ostrify-show", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.identity ?? (favorite.source === "nostr" ? `nostr:${favorite.pubkey ?? ""}` : favorite.source === "fountain" ? `fountain:${favorite.feedGuid ?? ""}` : favorite.feedUrl ?? ""), favorite.feedId ? String(favorite.feedId) : ""]);
       }
       tags.unshift(["d", "favorite-podcasts"]);
       const event = await publish({ kind: PODCAST_FAVORITES_KIND, content: existing?.content ?? "", tags });

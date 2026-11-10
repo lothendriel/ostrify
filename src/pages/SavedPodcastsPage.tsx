@@ -4,17 +4,18 @@ import { useSeoMeta } from '@unhead/react';
 import { ArrowLeft, Heart, Mic, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { usePodcastFavoriteActions, usePodcastFavorites, usePodcastIndexFeed, type PodcastFavorite } from '@/hooks/usePodcasts';
+import { useFountainShow, usePodcastFavoriteActions, usePodcastFavorites, usePodcastIndexFeed, type PodcastFavorite } from '@/hooks/usePodcasts';
 import { useTracksByIds } from '@/hooks/useTracksByIds';
 import { usePlayer } from '@/hooks/usePlayer';
 import { QueueActionsMenu } from '@/components/music/QueueActionsMenu';
 
 function SavedShowCard({ show, onRemove, pending }: { show: PodcastFavorite; onRemove: () => void; pending: boolean }) {
   const rssDetails = usePodcastIndexFeed(show.source === 'podcast-index' && !show.feedId ? show.feedUrl : undefined);
-  const title = rssDetails.data?.title ?? show.title;
-  const image = rssDetails.data?.image ?? show.image;
-  const subtitle = rssDetails.data?.publisher ?? show.publisher;
-  const to = show.source === 'nostr' && show.pubkey ? `/${nip19.npubEncode(show.pubkey)}` : `/podcasts?source=directory&show=${encodeURIComponent(show.id)}`;
+  const fountainDetails = useFountainShow(show.source === 'fountain' ? show.feedGuid : undefined);
+  const title = fountainDetails.data?.title ?? rssDetails.data?.title ?? show.title;
+  const image = fountainDetails.data?.image ?? rssDetails.data?.image ?? show.image;
+  const subtitle = fountainDetails.data?.publisher ?? rssDetails.data?.publisher ?? show.publisher;
+  const to = show.source === 'nostr' && show.pubkey ? `/${nip19.npubEncode(show.pubkey)}` : show.source === 'fountain' && show.feedGuid ? `/podcasts/fountain/${encodeURIComponent(show.feedGuid)}` : `/podcasts?source=directory&show=${encodeURIComponent(show.id)}`;
   return <article className="group overflow-hidden rounded-xl border border-border/60 bg-secondary/30 transition-colors hover:bg-secondary/60"><Link to={to} className="block focus-visible:outline-2 focus-visible:outline-primary"><div className="aspect-square overflow-hidden bg-gradient-to-br from-fuchsia-800 to-purple-950">{image ? <img src={image} alt="" loading="lazy" className="size-full object-cover transition-transform group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center"><Mic className="size-16 text-white/70" /></div>}</div><div className="p-4"><h3 className="truncate font-semibold group-hover:underline">{title}</h3><p className="mt-1 truncate text-sm text-muted-foreground">{subtitle ?? 'Podcast'}</p></div></Link><div className="px-2 pb-2"><Button type="button" variant="ghost" size="sm" aria-label={`Remove ${show.title} from saved podcasts`} disabled={pending} onClick={onRemove}><Trash2 className="size-4" /> Remove</Button></div></article>;
 }
 

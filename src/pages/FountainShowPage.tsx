@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowLeft, Mic, Play } from "lucide-react";
+import { ArrowLeft, Heart, Mic, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackCard } from "@/components/music/TrackCard";
-import { useFountainRssEpisodes, useFountainShow } from "@/hooks/usePodcasts";
+import { fountainShowFavorite, useFountainRssEpisodes, useFountainShow, usePodcastFavoriteActions, usePodcastFavorites } from "@/hooks/usePodcasts";
 import { usePlayer } from "@/hooks/usePlayer";
 import { sanitizeUrl } from "@/lib/sanitize";
 
@@ -14,10 +14,14 @@ export default function FountainShowPage() {
   const feedGuid = routeGuid;
   const show = useFountainShow(feedGuid);
   const episodes = useFountainRssEpisodes(show.data);
+  const favorites = usePodcastFavorites();
+  const favoriteActions = usePodcastFavoriteActions();
   const player = usePlayer();
   const [visibleEpisodeCount, setVisibleEpisodeCount] = useState(5);
   const tracks = useMemo(() => episodes.data?.slice(0, visibleEpisodeCount) ?? [], [episodes.data, visibleEpisodeCount]);
   const image = sanitizeUrl(show.data?.image);
+  const favorite = show.data ? fountainShowFavorite(show.data) : undefined;
+  const isSaved = favorite ? favorites.data.some(item => item.id === favorite.id) : false;
   const showLoadFailed = show.isError;
   const showIsLoading = show.isLoading;
 
@@ -29,7 +33,7 @@ export default function FountainShowPage() {
     <Link to="/podcasts?source=fountain" className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to Fountain episodes</Link>
     {show.isLoading ? <div className="flex flex-col gap-5 rounded-xl border bg-card p-6 sm:flex-row sm:items-center"><Skeleton className="size-32 shrink-0 rounded-xl" /><div className="w-full space-y-3"><Skeleton className="h-4 w-32" /><Skeleton className="h-8 w-2/3" /><Skeleton className="h-4 w-1/2" /></div></div> : show.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center"><p className="text-destructive">Couldn’t load Fountain show details.</p><Button className="mt-4" variant="outline" onClick={() => void show.refetch()}>Try again</Button></div> : <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-fuchsia-900/70 via-purple-950 to-card p-6 sm:flex-row sm:items-center">
       <div className="size-32 shrink-0 overflow-hidden rounded-xl bg-secondary">{image ? <img src={image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-muted-foreground" /></div>}</div>
-      <div className="min-w-0 flex-1"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">Fountain podcast show</p><h1 className="mt-2 break-words text-3xl font-bold sm:text-4xl">{show.data?.title ?? "Fountain show"}</h1>{show.data?.publisher && <p className="mt-1 text-muted-foreground">{show.data.publisher}</p>}{show.data?.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.data.description}</p>}<p className="mt-3 text-xs text-muted-foreground">Episodes from the show’s public Fountain RSS feed. The feed may not contain the complete catalog.</p>{show.data?.feedUrl && <a href={show.data.feedUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-primary hover:underline">Open RSS feed</a>}</div>
+      <div className="min-w-0 flex-1"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">Fountain podcast show</p><h1 className="mt-2 break-words text-3xl font-bold sm:text-4xl">{show.data?.title ?? "Fountain show"}</h1>{show.data?.publisher && <p className="mt-1 text-muted-foreground">{show.data.publisher}</p>}{show.data?.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.data.description}</p>}<p className="mt-3 text-xs text-muted-foreground">Episodes from the show’s public Fountain RSS feed. The feed may not contain the complete catalog.</p>{favorite && <Button type="button" variant={isSaved ? "secondary" : "outline"} size="sm" className="mt-3" disabled={!favorites.isEnabled || favorites.isLoading || favoriteActions.toggleFavorite.isPending} aria-pressed={isSaved} onClick={() => favoriteActions.toggleFavorite.mutate({ favorite, saved: !isSaved })}><Heart className="size-4" fill={isSaved ? "currentColor" : "none"} />{!favorites.isEnabled ? "Log in to save show" : favorites.isLoading ? "Checking saved state…" : isSaved ? "Saved to library" : "Save show"}</Button>}{show.data?.feedUrl && <a href={show.data.feedUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-primary hover:underline">Open RSS feed</a>}</div>
     </header>}
 
     <section className="space-y-4">
