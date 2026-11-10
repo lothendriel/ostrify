@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import SearchPage from "./pages/SearchPage";
 import CategoryPage from "./pages/CategoryPage";
 import PlaylistPage from "./pages/PlaylistPage";
+import PublicMusicPlaylistPage from "./pages/PublicMusicPlaylistPage";
 import LikedSongs from "./pages/LikedSongs";
 import SettingsPage from "./pages/SettingsPage";
 import PodcastsPage from "./pages/PodcastsPage";
@@ -36,6 +37,7 @@ export function AppRouter() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/category/:id" element={<CategoryPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
+            <Route path="/music-playlist/:pubkey" element={<PublicMusicPlaylistPage />} />
             <Route path="/liked" element={<LikedSongs />} />
             <Route path="/podcasts" element={<PodcastsPage />} />
             <Route path="/podcasts/fountain/:feedGuid" element={<FountainShowPage />} />
