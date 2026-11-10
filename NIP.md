@@ -101,6 +101,18 @@ and `p` tags identifying followed pubkeys. This list is independent of both
 NIP-02 kind `3` follows and mutual Ostrify friend requests. Reads constrain
 `authors` to the list owner; existing metadata and encrypted content are preserved.
 
+### Private audiobook library — NIP-78 application data (kind `30078`)
+
+The user's saved audiobook favorites and collections are synced in a replaceable
+kind `30078` event with `d=ostrify-audiobook-library-v1` and an NIP-31 `alt` tag.
+The JSON library state (catalog IDs, display metadata, favorites, and collections)
+is NIP-44 encrypted to the author's own pubkey before publishing. Its contents are
+not public; relays store ciphertext and the event author can decrypt it with a
+NIP-44-capable signer. Events are queried only by the logged-in author's pubkey.
+Browser-only saves are merged into the remote copy on first sync. Use only on
+relays suitable for private application data; relay availability, retention, and
+account signer support affect cross-device recovery.
+
 ### Ostrify directory — NIP-78 application data (kind `30078`)
 
 An optional public listing uses `d=ostrify-directory-v1`, `t=ostrify-directory-v1`

@@ -129,6 +129,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     void queryClient.invalidateQueries({ queryKey: ['playlists'] });
     void queryClient.invalidateQueries({ queryKey: ['followed-artists'] });
     void queryClient.invalidateQueries({ queryKey: ['podcast-favorites'] });
+    void queryClient.invalidateQueries({ queryKey: ['audiobook-library-remote'] });
   }, [currentLogin?.id, queryClient]);
 
   // Invalidate Nostr queries when relay metadata changes.

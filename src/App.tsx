@@ -55,6 +55,7 @@ function LibraryRefreshSync() {
         client.invalidateQueries({ queryKey: ['playlists'] }),
         client.invalidateQueries({ queryKey: ['followed-artists'] }),
         client.invalidateQueries({ queryKey: ['podcast-favorites'] }),
+        client.invalidateQueries({ queryKey: ['audiobook-library-remote'] }),
         client.invalidateQueries({ queryKey: ['ostrify-followed-people'] }),
         client.invalidateQueries({ queryKey: ['ostrify-friends'] }),
         client.invalidateQueries({ queryKey: ['friend-invite-follows'] }),

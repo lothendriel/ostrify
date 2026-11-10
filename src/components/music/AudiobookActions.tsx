@@ -64,7 +64,7 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create audiobook collection</DialogTitle>
-          <DialogDescription>Collections are saved in this browser and include this book.</DialogDescription>
+          <DialogDescription>Collections stay in this browser while signed out and sync privately across devices when you are signed in.</DialogDescription>
         </DialogHeader>
         <form onSubmit={event => { event.preventDefault(); createCollection(); }} className="space-y-4">
           <Input autoFocus value={collectionTitle} onChange={event => setCollectionTitle(event.target.value)} placeholder="Collection name" aria-label="Collection name" maxLength={80} required />

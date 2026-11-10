@@ -8,11 +8,19 @@ import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { FriendsActivitySheet } from "./FriendsActivitySheet";
 import { NotificationsBell } from "./NotificationsBell";
+import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
+
+function AudiobookLibrarySyncService() {
+  useAudiobookLibrarySync();
+  return null;
+}
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
+    <>
+    <AudiobookLibrarySyncService />
     <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
       <div className="flex-1 flex min-h-0 gap-0 md:gap-2 md:p-2">
         {/* Desktop sidebar */}
@@ -57,5 +65,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
       <PlayerBar />
     </div>
+    </>
   );
 }

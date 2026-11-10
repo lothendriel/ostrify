@@ -3,6 +3,7 @@ import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { audiobookPath, useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
+import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
 
 function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; onRemove?: () => void; removeLabel?: string }) {
   return <article className="group flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3 hover:bg-secondary/60">
@@ -19,6 +20,7 @@ function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; 
 export default function AudiobookLibraryPage() {
   const { id } = useParams<{ id: string }>();
   const library = useAudiobookLibrary();
+  const sync = useAudiobookLibrarySync();
   const collection = library.collections.find(item => item.id === id);
   const collectionBooks = id ? library.booksInCollection(id) : [];
   const favoriteIds = new Set(library.favoriteBooks.map(book => book.id));
@@ -33,7 +35,16 @@ export default function AudiobookLibraryPage() {
     <header className="rounded-xl bg-gradient-to-br from-rose-950 via-violet-950 to-card p-6 sm:p-8">
       <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-rose-200"><Heart className="size-4" /> Your audiobook library</p>
       <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{collection?.title ?? 'Saved Audiobooks'}</h1>
-      <p className="mt-2 text-muted-foreground">{collection ? `${collectionBooks.length} books in this collection` : 'Favorites and collections saved in this browser.'}</p>
+      <p className="mt-2 text-muted-foreground">{collection ? `${collectionBooks.length} books in this collection` : 'Favorites and collections sync privately across devices when you sign in.'}</p>
+      {!id && <div className="mt-4 rounded-lg border border-white/15 bg-black/20 p-4 text-sm text-white/90">
+        {!sync.isSignedIn ? <p>Sign in with a Nostr account to sync your saved audiobooks privately across devices. Your browser-only saves are kept when you sign in.</p>
+          : !sync.supportsEncryption ? <p>Your signer does not support NIP-44 encryption, which is needed to keep this library private while syncing. Your saved books remain available in this browser.</p>
+            : !sync.hasReadRelays ? <p>Enable at least one read relay in Settings to load your private audiobook library.</p>
+              : !sync.hasWriteRelays ? <p>Enable at least one write relay in Settings to publish audiobook library updates.</p>
+                : sync.isLoading ? <p>Checking your encrypted audiobook library on your relays…</p>
+                : sync.isError ? <div><p>Could not load your encrypted library: {sync.error instanceof Error ? sync.error.message : 'Relay query failed.'}</p><Button className="mt-2" size="sm" variant="secondary" onClick={() => void sync.refetch()}>Try again</Button></div>
+                  : <p>Your library syncs as private, NIP-44-encrypted data on your read relays. Other clients cannot read its contents.</p>}
+      </div>}
       {collection && <Link to="/audiobook-library" className="mt-4 inline-block text-sm text-primary underline">← All saved audiobooks</Link>}
     </header>
 

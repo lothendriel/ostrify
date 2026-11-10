@@ -43,7 +43,7 @@ Some key behaviors:
 - **Relay selection:** read and write relay choices apply to Ostrify; the app does not overwrite your NIP-65 relay list.
 - **Public libraries:** Nostr playlists, followed artists, followed people, and directory listings are public relay data. Profile privacy settings tell Ostrify which sections to hide; they do not erase existing events or prevent other clients from reading them.
 - **Listening status:** optional, off by default, and controlled per device. When enabled, Ostrify publishes a public NIP-38 status while audio is playing. Relay copies may persist after a status expires or is cleared.
-- **Local data:** audiobook favorites and collections, player volume, queue, playback position, history, and notification state are stored in the browser. Those items do not automatically sync to another device.
+- **Audiobook libraries:** favorites and collections sync across devices as NIP-44-encrypted NIP-78 app data when signed in with a NIP-44-capable signer and read relays. Relay operators store ciphertext, not the library contents. Existing browser-only saves are merged during the initial sync. Player volume, queue, playback position, history, and notification state remain local to the browser.
 - **External catalogs:** Wavlake, LibriVox, Project Gutenberg/Internet Archive, Fountain, and Podcast Index provide catalog or media data. Their availability and terms are independent of Ostrify.
 
 ## Run locally

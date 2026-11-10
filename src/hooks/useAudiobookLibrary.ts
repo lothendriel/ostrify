@@ -1,7 +1,10 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { sanitizeUrl } from '@/lib/sanitize';
 
 const STORAGE_KEY = 'ostrify-audiobook-library-v1';
+const STORAGE_OWNER_KEY = 'ostrify-audiobook-library-owner-v1';
+const accountStorageKey = (pubkey: string) => `${STORAGE_KEY}:${pubkey}`;
 
 export type AudiobookSource = 'librivox' | 'gutenberg';
 
@@ -24,7 +27,7 @@ export interface AudiobookCollection {
   audiobookIds: string[];
 }
 
-interface AudiobookLibraryState {
+export interface AudiobookLibraryState {
   books: Record<string, SavedAudiobook>;
   favoriteIds: string[];
   collections: AudiobookCollection[];
@@ -34,7 +37,7 @@ const EMPTY_LIBRARY: AudiobookLibraryState = { books: {}, favoriteIds: [], colle
 const EMPTY_SAVED_BOOKS: SavedAudiobook[] = [];
 const listeners = new Set<() => void>();
 
-function parseLibrary(value: string | null): AudiobookLibraryState {
+export function parseAudiobookLibrary(value: string | null): AudiobookLibraryState {
   if (!value) return EMPTY_LIBRARY;
   try {
     const parsed: unknown = JSON.parse(value);
@@ -88,18 +91,57 @@ function parseLibrary(value: string | null): AudiobookLibraryState {
   }
 }
 
-function readStoredLibrary(): AudiobookLibraryState {
+function readStoredLibrary(key = STORAGE_KEY): AudiobookLibraryState {
   try {
-    return typeof localStorage === 'undefined' ? EMPTY_LIBRARY : parseLibrary(localStorage.getItem(STORAGE_KEY));
+    return typeof localStorage === 'undefined' ? EMPTY_LIBRARY : parseAudiobookLibrary(localStorage.getItem(key));
   } catch {
     return EMPTY_LIBRARY;
   }
 }
 
+let activeOwner: string | null = null;
 let snapshot = readStoredLibrary();
+
+export function activateAudiobookLibraryOwner(pubkey: string | undefined): void {
+  const nextOwner = pubkey ?? null;
+  if (activeOwner === nextOwner) return;
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (activeOwner) localStorage.setItem(accountStorageKey(activeOwner), JSON.stringify(snapshot));
+    else if (!localStorage.getItem(STORAGE_OWNER_KEY)) localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+
+    if (nextOwner) {
+      const key = accountStorageKey(nextOwner);
+      const saved = localStorage.getItem(key);
+      if (saved) snapshot = parseAudiobookLibrary(saved);
+      else {
+        // Migrate legacy browser-only data only once, not from another signed-in account.
+        const previousOwner = localStorage.getItem(STORAGE_OWNER_KEY);
+        snapshot = previousOwner && previousOwner !== nextOwner ? EMPTY_LIBRARY : readStoredLibrary();
+        localStorage.setItem(key, JSON.stringify(snapshot));
+      }
+      localStorage.setItem(STORAGE_OWNER_KEY, nextOwner);
+    } else {
+      snapshot = readStoredLibrary();
+    }
+    activeOwner = nextOwner;
+  } catch {
+    activeOwner = nextOwner;
+    snapshot = EMPTY_LIBRARY;
+  }
+  listeners.forEach(listener => listener());
+}
 
 function getSnapshot(): AudiobookLibraryState {
   return snapshot;
+}
+
+export function getAudiobookLibrarySnapshot(): AudiobookLibraryState {
+  return snapshot;
+}
+
+export function replaceAudiobookLibrary(state: AudiobookLibraryState): void {
+  updateLibrary(() => state);
 }
 
 function getServerSnapshot(): AudiobookLibraryState {
@@ -109,8 +151,9 @@ function getServerSnapshot(): AudiobookLibraryState {
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
-    if (event.key === STORAGE_KEY || event.key === null) {
-      snapshot = event.key === null ? EMPTY_LIBRARY : parseLibrary(event.newValue);
+    const key = activeOwner ? accountStorageKey(activeOwner) : STORAGE_KEY;
+    if (event.key === key) {
+      snapshot = parseAudiobookLibrary(event.newValue);
       listeners.forEach(notify => notify());
     }
   };
@@ -136,7 +179,7 @@ function libraryKey(book: SavedAudiobook): string {
 function updateLibrary(updater: (current: AudiobookLibraryState) => AudiobookLibraryState): void {
   snapshot = updater(snapshot);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    localStorage.setItem(activeOwner ? accountStorageKey(activeOwner) : STORAGE_KEY, JSON.stringify(snapshot));
   } catch {
     // Keep the current session state usable if browser storage is unavailable.
   }
@@ -144,6 +187,10 @@ function updateLibrary(updater: (current: AudiobookLibraryState) => AudiobookLib
 }
 
 export function useAudiobookLibrary() {
+  const { user } = useCurrentUser();
+  useEffect(() => {
+    activateAudiobookLibraryOwner(user?.pubkey);
+  }, [user?.pubkey]);
   const library = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   function toggleFavorite(book: SavedAudiobook): void {
