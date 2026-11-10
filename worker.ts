@@ -16,6 +16,17 @@ const CONTENT_PATH_PREFIX = "/api/fountain/content/";
 const MAX_BODY_LENGTH = 2048;
 const FOUNTAIN_RSS_HOSTS = new Set(["feeds.fountain.fm"]);
 
+function isAllowedFountainRssUrl(url: URL): boolean {
+  return url.protocol === "https:"
+    && FOUNTAIN_RSS_HOSTS.has(url.hostname)
+    && !url.username
+    && !url.password
+    && !url.port
+    && /^\/[A-Za-z0-9]{20}$/.test(url.pathname)
+    && !url.search
+    && !url.hash;
+}
+
 async function podcastIndexHeaders(env: Env): Promise<Headers> {
   const key = env.PODCAST_INDEX_API_KEY;
   const secret = env.PODCAST_INDEX_API_SECRET;
@@ -142,15 +153,29 @@ export default {
       } catch {
         return jsonResponse({ error: "Invalid RSS feed URL" }, 400);
       }
-      if (feedUrl.protocol !== "https:" || !FOUNTAIN_RSS_HOSTS.has(feedUrl.hostname) || feedUrl.username || feedUrl.password || feedUrl.port || !/^\/[A-Za-z0-9]{20}$/.test(feedUrl.pathname) || feedUrl.search || feedUrl.hash) {
+      if (!isAllowedFountainRssUrl(feedUrl)) {
         return jsonResponse({ error: "Only public Fountain RSS feeds are supported" }, 400);
       }
       try {
-        const response = await fetch(feedUrl, {
+        let response = await fetch(feedUrl, {
           headers: { Accept: "application/rss+xml, application/xml, text/xml" },
-          redirect: "error",
+          redirect: "manual",
           signal: AbortSignal.timeout(20000),
         });
+        let redirects = 0;
+        while (response.status >= 300 && response.status < 400 && redirects < 3) {
+          const location = response.headers.get("Location");
+          if (!location) break;
+          const redirectUrl = new URL(location, feedUrl);
+          if (!isAllowedFountainRssUrl(redirectUrl)) return jsonResponse({ error: "Fountain RSS redirected to an unsupported URL" }, 502);
+          response = await fetch(redirectUrl, {
+            headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+            redirect: "manual",
+            signal: AbortSignal.timeout(20000),
+          });
+          feedUrl = redirectUrl;
+          redirects += 1;
+        }
         if (!response.ok) return jsonResponse({ error: `Fountain RSS returned ${response.status}` }, response.status >= 400 && response.status < 500 ? response.status : 502);
         const body = await response.text();
         if (body.length > 5_000_000) return jsonResponse({ error: "Fountain RSS feed is too large" }, 413);
