@@ -7,6 +7,10 @@ import type { RelayMetadata } from '@/contexts/AppContext';
 export const APP_RELAYS: RelayMetadata = {
   relays: [
     // --- Music-focused sources (read) ---
+    // DROPS is dedicated to Nostr music tracks and playlists (kinds 36787 and 34139).
+    { url: 'wss://drops.basspistol.org/', read: true, write: false },
+    // Lightning FM's artist catalog uses kind 31337; reads are public.
+    { url: 'wss://relay.lightning.fm/', read: true, write: false },
     // Wavlake is the biggest source of artist-published music tracks.
     { url: 'wss://relay.wavlake.com/', read: true, write: false },
     // Fountain hosts podcasts, music, and NIP-53 streams.
