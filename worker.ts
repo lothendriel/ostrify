@@ -14,6 +14,7 @@ const FOUNTAIN_LOOKUP_URL = `${FOUNTAIN_API}/search/lookup`;
 const CONTENT_ID_RE = /^episode:id:\S{20}$/;
 const CONTENT_PATH_PREFIX = "/api/fountain/content/";
 const MAX_BODY_LENGTH = 2048;
+const FOUNTAIN_RSS_HOSTS = new Set(["feeds.fountain.fm"]);
 
 async function podcastIndexHeaders(env: Env): Promise<Headers> {
   const key = env.PODCAST_INDEX_API_KEY;
@@ -131,6 +132,42 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/fountain/rss") {
+      if (request.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
+      const rawFeedUrl = url.searchParams.get("url");
+      let feedUrl: URL;
+      try {
+        if (!rawFeedUrl) return jsonResponse({ error: "An RSS feed URL is required" }, 400);
+        feedUrl = new URL(rawFeedUrl);
+      } catch {
+        return jsonResponse({ error: "Invalid RSS feed URL" }, 400);
+      }
+      if (feedUrl.protocol !== "https:" || !FOUNTAIN_RSS_HOSTS.has(feedUrl.hostname) || feedUrl.username || feedUrl.password || feedUrl.port || !/^\/[A-Za-z0-9]{20}$/.test(feedUrl.pathname) || feedUrl.search || feedUrl.hash) {
+        return jsonResponse({ error: "Only public Fountain RSS feeds are supported" }, 400);
+      }
+      try {
+        const response = await fetch(feedUrl, {
+          headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+          redirect: "error",
+          signal: AbortSignal.timeout(20000),
+        });
+        if (!response.ok) return jsonResponse({ error: `Fountain RSS returned ${response.status}` }, response.status >= 400 && response.status < 500 ? response.status : 502);
+        const body = await response.text();
+        if (body.length > 5_000_000) return jsonResponse({ error: "Fountain RSS feed is too large" }, 413);
+        return new Response(body, {
+          status: 200,
+          headers: {
+            "Content-Type": response.headers.get("Content-Type") ?? "application/rss+xml; charset=utf-8",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=600, stale-while-revalidate=300",
+            "X-Content-Type-Options": "nosniff",
+          },
+        });
+      } catch {
+        return jsonResponse({ error: "Fountain RSS is temporarily unavailable" }, 502);
+      }
+    }
+
     if (url.pathname === "/api/fountain/lookup") {
       if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
@@ -155,10 +192,12 @@ export default {
       const body = payload as Record<string, unknown>;
       const id = body.id;
       const parent = body.parent;
-      if (typeof id !== "string" || !/^podcast:item:guid:\S{1,512}$/.test(id)) {
-        return jsonResponse({ error: "A valid podcast item GUID is required" }, 400);
+      const isFeedGuid = typeof id === "string" && /^podcast:guid:\S{1,512}$/.test(id);
+      const isItemGuid = typeof id === "string" && /^podcast:item:guid:\S{1,512}$/.test(id);
+      if (!isFeedGuid && !isItemGuid) {
+        return jsonResponse({ error: "A valid podcast feed or item GUID is required" }, 400);
       }
-      if (parent !== undefined && (typeof parent !== "string" || !/^podcast:guid:\S{1,512}$/.test(parent))) {
+      if (parent !== undefined && (!isItemGuid || typeof parent !== "string" || !/^podcast:guid:\S{1,512}$/.test(parent))) {
         return jsonResponse({ error: "Invalid podcast feed GUID" }, 400);
       }
 

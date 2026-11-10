@@ -20,6 +20,7 @@ export interface PodcastShow {
   episodeCount?: number;
   feedGuid?: string;
   feedId?: number;
+  /** Public RSS feed URL resolved from a Fountain show lookup. */
   feedUrl?: string;
   event?: NostrEvent;
 }
@@ -349,6 +350,7 @@ function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): P
     image: sanitizeUrl(text(hit.info.image)),
     description: text(hit.info.description),
     publisher: text(hit.info.publisher),
+    feedUrl: sanitizeUrl(text(hit.info.rss)),
     source: "fountain",
     feedGuid: text(hit._guid) ?? feedGuid,
   };
@@ -466,69 +468,70 @@ export function useFountainShow(feedGuid: string | undefined) {
   });
 }
 
-interface FountainShowEpisodePageParam {
-  until?: number;
-  pendingItemGuids?: string[];
-  hasMoreAtCursor?: boolean;
+function parseRssDuration(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+  }
+  const parts = trimmed.split(":").map(Number);
+  if (parts.length < 2 || parts.length > 3 || parts.some(part => !Number.isFinite(part) || part < 0)) return undefined;
+  const seconds = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+  return seconds > 0 ? seconds : undefined;
 }
 
-/** Discover five playable episodes per page from references to one feed GUID. */
-export function useFountainShowEpisodes(feedGuid: string | undefined) {
-  const { nostr } = useNostr();
-  return useInfiniteQuery({
-    queryKey: ["fountain-show-episodes", feedGuid ?? "", FOUNTAIN_API],
-    enabled: !!feedGuid && EPISODE_GUID_RE.test(feedGuid),
-    initialPageParam: {} as FountainShowEpisodePageParam,
-    staleTime: 5 * 60 * 1000,
+function rssElement(parent: Document | Element, localName: string): Element | null {
+  return parent.getElementsByTagNameNS("*", localName).item(0);
+}
+
+export function parseFountainRss(xml: string, show: PodcastShow): Track[] {
+  const document = new DOMParser().parseFromString(xml, "application/xml");
+  if (document.querySelector("parsererror")) throw new Error("The Fountain RSS feed could not be parsed");
+  const channel = document.querySelector("channel");
+  if (!channel) throw new Error("The Fountain RSS feed is missing its channel");
+  const channelImage = sanitizeUrl(rssElement(channel, "image")?.getAttribute("href") ?? channel.querySelector("image > url")?.textContent ?? show.image);
+  return Array.from(channel.querySelectorAll("item")).flatMap((item, index) => {
+    const title = text(item.querySelector("title")?.textContent);
+    const enclosure = sanitizeUrl(item.querySelector("enclosure")?.getAttribute("url"));
+    if (!title || !enclosure) return [];
+    const guid = text(item.querySelector("guid")?.textContent) ?? enclosure;
+    const fountainLink = sanitizeUrl(item.querySelector("link")?.textContent);
+    const fountainEpisodeId = fountainLink ? /^https:\/\/fountain\.fm\/episode\/([A-Za-z0-9]{20})$/.exec(fountainLink)?.[1] : undefined;
+    const image = sanitizeUrl(rssElement(item, "image")?.getAttribute("href")) ?? channelImage;
+    const published = text(item.querySelector("pubDate")?.textContent);
+    const createdAt = published ? Math.floor(Date.parse(published) / 1000) : 0;
+    const duration = parseRssDuration(rssElement(item, "duration")?.textContent ?? "");
+    return [{
+      id: fountainEpisodeId ? `fountain:episode:id:${fountainEpisodeId}` : `fountain-rss:${show.feedGuid ?? show.id}:${encodeURIComponent(guid)}`,
+      source: "fountain" as const,
+      showId: show.feedGuid ? `fountain:show:id:${show.feedGuid}` : undefined,
+      url: enclosure,
+      title,
+      artist: show.title,
+      album: text(channel.querySelector("title")?.textContent) ?? show.title,
+      image,
+      pubkey: "",
+      duration,
+      kind: "podcast" as const,
+      topics: ["podcast", "fountain"],
+      createdAt: Number.isFinite(createdAt) ? createdAt : index,
+    }];
+  }).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** Read all playable items from the public RSS feed resolved for a Fountain show. */
+export function useFountainRssEpisodes(show: PodcastShow | null | undefined) {
+  return useQuery({
+    queryKey: ["fountain-rss-episodes", show?.feedUrl ?? "", show?.feedGuid ?? "", FOUNTAIN_API],
+    enabled: !!show?.feedUrl && !!show.feedGuid,
+    staleTime: 10 * 60 * 1000,
     retry: 1,
-    queryFn: async ({ pageParam, signal: querySignal }) => {
-      if (!feedGuid || !EPISODE_GUID_RE.test(feedGuid)) return { tracks: [] as Track[], nextPage: undefined as FountainShowEpisodePageParam | undefined };
-      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(30000)]);
-      let until = pageParam.until;
-      let pendingItemGuids = [...(pageParam.pendingItemGuids ?? [])];
-      let hasMoreAtCursor = pageParam.hasMoreAtCursor ?? true;
-      const tracks: Track[] = [];
-      let scanCount = 0;
-
-      // Invalid or stale references are skipped while each page resolves at most
-      // five playable episodes. Keep unprocessed references for the next page.
-      while (tracks.length < 5 && scanCount < 10) {
-        if (!pendingItemGuids.length) {
-          if (!hasMoreAtCursor) break;
-          const events = await nostr.query([
-            { kinds: [NOSTR_NOTE_KIND], "#i": [`podcast:guid:${feedGuid}`, `podcast:item:guid:${feedGuid}`], limit: 5, ...(until ? { until } : {}) },
-          ], { signal });
-          if (!events.length) {
-            hasMoreAtCursor = false;
-            break;
-          }
-          until = Math.min(...events.map(event => event.created_at)) - 1;
-          hasMoreAtCursor = events.length === 5;
-          pendingItemGuids = [...new Set(events.flatMap(event => event.tags.flatMap(([name, value]) => {
-            if (name !== "i" || !value?.startsWith("podcast:item:guid:")) return [];
-            const itemGuid = value.slice("podcast:item:guid:".length);
-            const referencedFeedGuid = event.tags.find(([tagName, tagValue]) => tagName === "i" && tagValue?.startsWith("podcast:guid:"))?.[1].slice("podcast:guid:".length);
-            return itemGuid !== feedGuid && referencedFeedGuid === feedGuid && EPISODE_GUID_RE.test(itemGuid) ? [itemGuid] : [];
-          })))];
-          scanCount += 1;
-          if (!pendingItemGuids.length && !hasMoreAtCursor) break;
-          if (!pendingItemGuids.length) continue;
-        }
-
-        const batch = pendingItemGuids.splice(0, Math.min(FOUNTAIN_SHOWS_PER_LOOKUP_BATCH, 5 - tracks.length));
-        const resolved = await Promise.all(batch.map(itemGuid => lookupFountainEpisode(itemGuid, feedGuid, signal).catch((error: unknown) => {
-          if (signal.aborted) throw error;
-          return null;
-        })));
-        for (const track of resolved) {
-          if (track && !tracks.some(existing => existing.id === track.id)) tracks.push({ ...track, showId: `fountain:show:id:${feedGuid}` });
-        }
-      }
-
-      const nextPage = pendingItemGuids.length || hasMoreAtCursor ? { until, pendingItemGuids, hasMoreAtCursor } : undefined;
-      return { tracks, nextPage };
+    queryFn: async ({ signal }) => {
+      if (!show?.feedUrl || !show.feedGuid) return [] as Track[];
+      const response = await fetch(`${FOUNTAIN_API}/rss?url=${encodeURIComponent(show.feedUrl)}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]) });
+      if (!response.ok) throw new Error(`Fountain RSS returned ${response.status}`);
+      return parseFountainRss(await response.text(), show);
     },
-    getNextPageParam: lastPage => lastPage.nextPage,
   });
 }
 
@@ -550,17 +553,16 @@ export function useFountainPodcastShows() {
         ],
         { signal },
       );
-      const guidsInRelayOrder: string[] = [];
+      const feedGuidSet = new Set<string>();
       for (const event of events) {
         for (const [name, value] of event.tags) {
           if (name !== "i" || !value?.startsWith("podcast:guid:")) continue;
           const guid = value.slice("podcast:guid:".length);
-          if (EPISODE_GUID_RE.test(guid)) {
-            guidsInRelayOrder.push(guid);
-          }
+          const itemGuid = event.tags.find(([tagName, tagValue]) => tagName === "i" && tagValue?.startsWith("podcast:item:guid:"))?.[1].slice("podcast:item:guid:".length);
+          if (EPISODE_GUID_RE.test(guid) && (!itemGuid || itemGuid !== guid)) feedGuidSet.add(guid);
         }
       }
-      const uniqueGuids = [...new Set(guidsInRelayOrder)];
+      const uniqueGuids = [...feedGuidSet];
       const guids = uniqueGuids.slice(0, FOUNTAIN_MAX_REFERENCE_BATCH);
       const shows: PodcastShow[] = [];
       const episodeCounts = new Map<string, number>();
