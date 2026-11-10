@@ -75,7 +75,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit playlist" : "Create playlist"}</DialogTitle>
           <DialogDescription>
-            Regular playlists are public on Nostr and appear in Public playlists on Nostr. Ostrify keeps the kind 30003 library copy and publishes a matching kind 34139 music playlist. Liked Songs stay a library-only list.
+            Regular Ostrify playlists are discoverable by other Ostrify listeners. They remain kind 30003 playlists on Nostr; Liked Songs stay a library-only list.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { usePlaylist, usePlaylistActions, LIKED_SONGS_ID, rememberPlaylistDeletion, type Playlist } from "@/hooks/usePlaylists";
+import { usePlaylist, usePlaylistActions, rememberPlaylistDeletion, type Playlist } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { useToast } from "@/hooks/useToast";
@@ -49,7 +49,7 @@ const PlaylistPage = () => {
 
   const handleDelete = () => {
     if (!playlist) return;
-    // NIP-09 deletion request for the personal bookmark set and public playlist counterpart.
+    // NIP-09 deletion request for the NIP-51 bookmark set.
     publish(
       {
         kind: 5,
@@ -57,17 +57,16 @@ const PlaylistPage = () => {
         tags: [
           ["a", `30003:${playlist.event.pubkey}:${playlist.id}`],
           ["e", playlist.event.id],
-          ...(playlist.id !== LIKED_SONGS_ID ? [["a", `34139:${playlist.event.pubkey}:${playlist.id}`], ["d", playlist.id]] : []),
         ],
       },
       {
         onSuccess: deletion => {
           rememberPlaylistDeletion(playlist.event.pubkey, playlist.id, deletion.created_at);
-          void queryClient.setQueriesData(
-            { queryKey: ["playlists", playlist.event.pubkey] },
-            (current: Playlist[] | undefined) => current?.filter(item => item.id !== playlist.id),
+          void queryClient.setQueriesData<Playlist[]>(
+            { queryKey: ["playlists"] },
+            current => current?.filter(item => item.id !== playlist.id),
           );
-          void queryClient.invalidateQueries({ queryKey: ["public-music-playlists"] });
+          void queryClient.invalidateQueries({ queryKey: ["ostrify-public-playlists"] });
           void queryClient.invalidateQueries({ queryKey: ["playlists"] });
           toast({ title: "Playlist deleted" });
           navigate("/");
@@ -140,7 +139,7 @@ const PlaylistPage = () => {
             <AlertDialogTitle>Delete this playlist?</AlertDialogTitle>
             <AlertDialogDescription>
               This sends a deletion request to the network. The playlist will be removed from
-              clients that honor deletions.
+              Ostrify and from clients that honor deletions.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

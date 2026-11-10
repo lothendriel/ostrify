@@ -7,7 +7,7 @@ import type { RelayMetadata } from '@/contexts/AppContext';
 export const APP_RELAYS: RelayMetadata = {
   relays: [
     // --- Music-focused sources (read) ---
-    // DROPS is dedicated to Nostr music tracks and playlists (kinds 36787 and 34139).
+    // DROPS is dedicated to Nostr kind 36787 music tracks.
     { url: 'wss://drops.basspistol.org/', read: true, write: false },
     // Lightning FM's artist catalog uses kind 31337; reads are public.
     { url: 'wss://relay.lightning.fm/', read: true, write: false },

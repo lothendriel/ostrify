@@ -37,7 +37,7 @@ export function AppRouter() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/category/:id" element={<CategoryPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
-            <Route path="/music-playlist/:pubkey" element={<PublicMusicPlaylistPage />} />
+            <Route path="/ostrify-playlist/:pubkey" element={<PublicMusicPlaylistPage />} />
             <Route path="/liked" element={<LikedSongs />} />
             <Route path="/podcasts" element={<PodcastsPage />} />
             <Route path="/podcasts/fountain/:feedGuid" element={<FountainShowPage />} />

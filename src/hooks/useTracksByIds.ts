@@ -13,7 +13,12 @@ export function useTracksByIds(ids: string[] | undefined) {
     queryKey: ["tracks-by-ids", key],
     queryFn: async (c) => {
       if (!ids?.length) return { tracks: [] as Track[], unavailable: 0 };
-      const eventIds = ids.filter((id) => /^[0-9a-f]{64}$/i.test(id));
+      const addressRefs = ids.flatMap((id) => {
+        const match = id.match(/^(\d+):([0-9a-f]{64}):(.+)$/i);
+        return match ? [{ id, kind: Number(match[1]), pubkey: match[2].toLowerCase(), identifier: match[3] }] : [];
+      });
+      const addressIds = new Set(addressRefs.map(reference => reference.id));
+      const eventIds = ids.filter((id) => /^[0-9a-f]{64}$/i.test(id) && !addressIds.has(id));
       const catalogIds = [...new Set(ids.filter((id) => !!wavlakeTrackUrl(id)))];
       const fountainIds = [...new Set(ids.filter((id) => id.startsWith("fountain:episode:id:")))];
       const podcastIndexIds = [...new Set(ids.filter((id) => !!podcastIndexTrackUrl(id)))];
@@ -21,6 +26,17 @@ export function useTracksByIds(ids: string[] | undefined) {
       const eventsPromise = eventIds.length
         ? nostr.query([{ ids: eventIds }], { signal: AbortSignal.any([c.signal, AbortSignal.timeout(12000)]) }).catch(() => [])
         : Promise.resolve([]);
+      const addressGroups = new Map<string, { kind: number; pubkey: string; identifiers: Set<string> }>();
+      for (const reference of addressRefs) {
+        const groupKey = `${reference.kind}:${reference.pubkey}`;
+        const group = addressGroups.get(groupKey) ?? { kind: reference.kind, pubkey: reference.pubkey, identifiers: new Set<string>() };
+        group.identifiers.add(reference.identifier);
+        addressGroups.set(groupKey, group);
+      }
+      const addressEventsPromise = Promise.all([...addressGroups.values()].map(group => nostr.query(
+        [{ kinds: [group.kind], authors: [group.pubkey], '#d': [...group.identifiers], limit: group.identifiers.size }],
+        { signal: AbortSignal.any([c.signal, AbortSignal.timeout(12000)]) },
+      ).catch(() => []))).then(results => results.flat());
       const externalPromises = Promise.all(fountainIds.map((id) => fetchFountainTrack(
         id, AbortSignal.any([c.signal, AbortSignal.timeout(12000)]),
       ).catch(() => null)));
@@ -42,11 +58,17 @@ export function useTracksByIds(ids: string[] | undefined) {
         const track = await fetchPodcastIndexEpisodes(episodeId, AbortSignal.any([c.signal, AbortSignal.timeout(12000)]));
         if (track) byId.set(track.id.toLowerCase(), track);
       }
-      for (const event of await eventsPromise) {
+      for (const event of [...await eventsPromise, ...await addressEventsPromise]) {
         const track = eventToTrack(event);
-        if (track) byId.set(event.id, track);
+        if (!track) continue;
+        byId.set(event.id.toLowerCase(), track);
+        if ([31337, 36787, 32123, 30440].includes(event.kind)) {
+          const identifier = event.tags.find(([name]) => name === 'd')?.[1];
+          if (identifier) byId.set(`${event.kind}:${event.pubkey.toLowerCase()}:${identifier}`, track);
+          if (identifier) byId.set(`${event.pubkey.toLowerCase()}:${identifier}`, track);
+        }
       }
-      const tracks = ids.map((id) => byId.get(id.toLowerCase())).filter((t): t is Track => !!t);
+      const tracks = ids.map((id) => byId.get(id.toLowerCase()) ?? byId.get(id)).filter((t): t is Track => !!t);
       return { tracks, unavailable: ids.length - tracks.length };
     },
     enabled: !!ids?.length,
