@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
@@ -16,11 +17,24 @@ export default function PublicMusicPlaylistPage() {
   const id = searchParams.get('d') ?? undefined;
   const playlistQuery = usePublicMusicPlaylist(identifier, id);
   const playlist = playlistQuery.data;
+  const [isRetrying, setIsRetrying] = useState(false);
   const tracksQuery = usePublicPlaylistTracks(playlist?.references);
   const tracks = tracksQuery.data?.tracks ?? [];
   const authorQuery = useAuthor(playlist?.pubkey);
   const name = authorQuery.data?.metadata?.display_name || authorQuery.data?.metadata?.name || (playlist ? genUserName(playlist.pubkey) : 'Nostr publisher');
   const image = sanitizeUrl(playlist?.image);
+  const retryTracks = async () => {
+    setIsRetrying(true);
+    try {
+      await Promise.all([
+        tracksQuery.refetch(),
+        new Promise<void>(resolve => window.setTimeout(resolve, 600)),
+      ]);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+  const isRetryPending = isRetrying || tracksQuery.isFetching;
   useSeoMeta({ title: `${playlist?.title ?? 'Nostr playlist'} — Ostrify`, description: playlist?.description ?? 'A public music playlist shared on Nostr.' });
 
   if (playlistQuery.isLoading) return <div className="space-y-6 p-6"><Skeleton className="h-56 w-full rounded-xl" /><Skeleton className="h-80 w-full rounded-xl" /></div>;
@@ -38,9 +52,9 @@ export default function PublicMusicPlaylistPage() {
       tracks={tracks}
     />
     <div className="space-y-4 px-3 sm:px-6">
-      {tracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm"><p>Couldn’t load the referenced tracks. They may be unavailable on your relays or their catalog may be temporarily unreachable.</p><button type="button" className="mt-2 font-medium text-primary underline" onClick={() => void tracksQuery.refetch()}>Retry loading tracks</button></div>}
-      {!!tracksQuery.data?.unavailable && <div role="status" className="rounded-lg border border-border bg-secondary/30 p-4 text-sm text-muted-foreground"><p>{tracksQuery.data.unavailable} of {playlist.references.length} referenced {tracksQuery.data.unavailable === 1 ? 'tracks isn’t' : 'tracks aren’t'} available right now. They may be missing from your read relays, removed, or temporarily unreachable; remaining tracks keep their playlist order.</p><button type="button" className="mt-2 font-medium text-primary underline" onClick={() => void tracksQuery.refetch()}>Retry missing tracks</button><p className="mt-2 text-xs">If tracks stay unavailable, try enabling additional read relays in <Link to="/settings" className="underline">Settings</Link>.</p></div>}
-      <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={tracks} isLoading={tracksQuery.isLoading} emptyMessage="The supported track references weren’t found on your read relays or their sources could not be reached. Retry loading above, or try additional read relays." /></section>
+      {tracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm"><p>Couldn’t load the referenced tracks. They may be unavailable on your relays or their catalog may be temporarily unreachable.</p><button type="button" className="mt-2 font-medium text-primary underline disabled:cursor-not-allowed disabled:opacity-60" disabled={isRetryPending} onClick={() => void retryTracks()}>{isRetryPending ? 'Retrying…' : 'Retry loading tracks'}</button>{isRetryPending && <p role="status" className="mt-2 text-muted-foreground">Retrying track lookup on your read relays and supported catalogs…</p>}</div>}
+      {!!tracksQuery.data?.unavailable && <div role="status" className="rounded-lg border border-border bg-secondary/30 p-4 text-sm text-muted-foreground"><p>{tracksQuery.data.unavailable} of {playlist.references.length} referenced {tracksQuery.data.unavailable === 1 ? 'tracks isn’t' : 'tracks aren’t'} available right now. They may be missing from your read relays, removed, or temporarily unreachable; remaining tracks keep their playlist order.</p><button type="button" className="mt-2 font-medium text-primary underline disabled:cursor-not-allowed disabled:opacity-60" disabled={isRetryPending} onClick={() => void retryTracks()}>{isRetryPending ? 'Retrying…' : 'Retry missing tracks'}</button>{isRetryPending && <p role="status" className="mt-2">Retrying track lookup on your read relays and supported catalogs…</p>}<p className="mt-2 text-xs">If tracks stay unavailable, try enabling additional read relays in <Link to="/settings" className="underline">Settings</Link>.</p></div>}
+      <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={tracks} isLoading={tracksQuery.isLoading || isRetryPending} emptyMessage="The supported track references weren’t found on your read relays or their sources could not be reached. Retry loading above, or try additional read relays." /></section>
       <p className="text-xs text-muted-foreground">Public playlist by {name} · Nostr kind 34139</p>
     </div>
   </div>;
