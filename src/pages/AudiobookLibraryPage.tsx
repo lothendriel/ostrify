@@ -42,7 +42,7 @@ export default function AudiobookLibraryPage() {
             : !sync.hasReadRelays ? <p>Enable at least one read relay in Settings to load your private audiobook library.</p>
               : !sync.hasWriteRelays ? <p>Enable at least one write relay in Settings to publish audiobook library updates.</p>
                 : sync.isLoading ? <p>Checking your encrypted audiobook library on your relays…</p>
-                : sync.isError ? <div><p>Could not load your encrypted library: {sync.error instanceof Error ? sync.error.message : 'Relay query failed.'}</p><Button className="mt-2" size="sm" variant="secondary" onClick={() => void sync.refetch()}>Try again</Button></div>
+                : sync.isError ? <div><p>Could not load your encrypted library: {sync.error instanceof Error ? sync.error.message : 'Relay query failed.'}</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => void sync.refetch()}>Try again</Button><Button size="sm" variant="outline" onClick={() => window.location.reload()}>Reload app</Button></div></div>
                   : sync.isPartial ? <p>Your saved library is available on this device, but relays did not finish the latest check. Sync will retry when relay connections recover.</p>
                     : <p>Your library syncs as private, NIP-44-encrypted data on your read relays. Other clients cannot read its contents.</p>}
       </div>}
