@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 
 const PodcastsPage = () => {
   useSeoMeta({ title: "Podcasts — Ostrify" });
-  const [fountainEpisodeLimit, setFountainEpisodeLimit] = useState(10);
+  const [fountainEpisodeLimit, setFountainEpisodeLimit] = useState(15);
   const episodes = usePodcastEpisodes(120, fountainEpisodeLimit);
   const nostrShows = useNostrPodcastShows();
   const fountainShows = useFountainPodcastShows();
@@ -38,26 +38,14 @@ const PodcastsPage = () => {
   const favoriteShowSelection = searchParams.get("show") ? podcastFavorites.data.find(item => item.id === searchParams.get("show") && !item.episode) : undefined;
   const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
   const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
-  const catalogSource = source === "directory" ? "nostr" : source;
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
-  const selectedShows = source === "nostr" ? nostrShows.data ?? [] : fountainShows.data ?? [];
+  const nostrShowList = nostrShows.data ?? [];
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
     return () => clearTimeout(timer);
   }, [search]);
-  const fountainEpisodeCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const episode of episodes.data ?? []) {
-      if (episode.source === "fountain" && episode.showId) counts.set(episode.showId, (counts.get(episode.showId) ?? 0) + 1);
-    }
-    return counts;
-  }, [episodes.data]);
-  const sourceLoading = source === "nostr" ? nostrShows.isLoading : fountainShows.isLoading;
-  const sourceError = source === "nostr" ? nostrShows.isError : fountainShows.isError;
-  const isLoading = episodes.isLoading || sourceLoading;
-
   const perShowEpisodes = useMemo(() => {
     const grouped = new Map<string, Track[]>();
     for (const episode of selectedTracks) {
@@ -68,10 +56,6 @@ const PodcastsPage = () => {
     }
     return grouped;
   }, [selectedTracks]);
-
-  const topShows = useMemo(() => [...selectedShows]
-    .sort((a, b) => (source === "fountain" ? (fountainEpisodeCounts.get(b.id) ?? b.episodeCount ?? 0) - (fountainEpisodeCounts.get(a.id) ?? a.episodeCount ?? 0) : (b.episodeCount ?? perShowEpisodes.get(b.id)?.length ?? 0) - (a.episodeCount ?? perShowEpisodes.get(a.id)?.length ?? 0)))
-    .slice(0, 8), [selectedShows, perShowEpisodes, fountainEpisodeCounts, source]);
 
   return (
     <div className="p-4 sm:p-6 space-y-8">
@@ -116,14 +100,14 @@ const PodcastsPage = () => {
             />
           ) : (
             <>
-              <section className="space-y-4">
+              {source === "nostr" && <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div><h2 className="text-2xl font-bold">Top shows</h2><p className="text-sm text-muted-foreground">{source === "nostr" ? "Shows with the most playable NIP-F4 episodes found on your relays." : "Shows discovered through NIP-73 podcast feed references on Nostr."}</p></div>
-                  <Button variant="outline" onClick={() => setViewAllSource(catalogSource)}>View all {catalogSource === "nostr" ? "Nostr" : "Fountain"} shows <ChevronRight className="size-4" /></Button>
+                  <div><h2 className="text-2xl font-bold">Top shows</h2><p className="text-sm text-muted-foreground">Shows with the most playable NIP-F4 episodes found on your relays.</p></div>
+                  <Button variant="outline" onClick={() => setViewAllSource("nostr")}>View all Nostr shows <ChevronRight className="size-4" /></Button>
                 </div>
-                {sourceError && <p role="alert" className="text-sm text-destructive">Couldn’t load this show catalog. <button className="underline" onClick={() => void (source === "nostr" ? nostrShows.refetch() : fountainShows.refetch())}>Try again</button></p>}
-                {sourceLoading ? <ShowSkeletonGrid /> : topShows.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{topShows.map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div> : <EmptyShows source={catalogSource} />}
-              </section>
+                {nostrShows.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load this show catalog. <button className="underline" onClick={() => void nostrShows.refetch()}>Try again</button></p>}
+                {nostrShows.isLoading ? <ShowSkeletonGrid /> : nostrShowList.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{nostrShowList.slice().sort((a, b) => (b.episodeCount ?? perShowEpisodes.get(b.id)?.length ?? 0) - (a.episodeCount ?? perShowEpisodes.get(a.id)?.length ?? 0)).slice(0, 8).map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div> : <EmptyShows source="nostr" />}
+              </section>}
 
               <section className="space-y-4">
                 {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div>}
