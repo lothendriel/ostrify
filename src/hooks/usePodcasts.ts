@@ -616,7 +616,7 @@ export function podcastIndexTrackId(url: string): string | undefined {
   return match ? `podcast-index:episode:id:${match[1]}` : undefined;
 }
 
-export async function fetchPodcastIndexEpisodes(episodeId: number, signal: AbortSignal): Promise<Track | null> {
+export async function fetchPodcastIndexEpisodes(episodeId: number, signal: AbortSignal, showTitle?: string): Promise<Track | null> {
   if (!Number.isInteger(episodeId) || episodeId < 1) return null;
   const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byid?id=${episodeId}`, { signal });
   if (!response.ok) throw podcastIndexError(response, "Loading saved podcast episode");
@@ -633,7 +633,7 @@ export async function fetchPodcastIndexEpisodes(episodeId: number, signal: Abort
     podcastIndexEpisodeId: episodeId,
     url: enclosure,
     title,
-    artist: text(value.feedTitle),
+    artist: text(value.feedTitle) ?? text(showTitle),
     image: sanitizeUrl(text(value.image) ?? text(value.feedImage)),
     pubkey: "",
     duration: typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0 ? value.duration : undefined,
@@ -643,10 +643,10 @@ export async function fetchPodcastIndexEpisodes(episodeId: number, signal: Abort
   };
 }
 
-export function usePodcastIndexEpisodes(feedId: number | undefined, feedUrl?: string) {
+export function usePodcastIndexEpisodes(feedId: number | undefined, feedUrl?: string, showTitle?: string) {
   const hasFeed = (feedId !== undefined && Number.isInteger(feedId) && feedId > 0) || !!feedUrl;
   return useQuery({
-    queryKey: ["podcast-index", "episodes", feedId ?? feedUrl ?? ""],
+    queryKey: ["podcast-index", "episodes", feedId ?? feedUrl ?? "", showTitle ?? ""],
     enabled: hasFeed,
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }): Promise<Track[]> => {
@@ -672,7 +672,7 @@ export function usePodcastIndexEpisodes(feedId: number | undefined, feedUrl?: st
           podcastIndexEpisodeId: typeof value.id === "number" && Number.isInteger(value.id) ? value.id : undefined,
           url: enclosure,
           title,
-          artist: text(value.feedTitle),
+          artist: text(value.feedTitle) ?? text(showTitle),
           image: sanitizeUrl(text(value.image) ?? text(value.feedImage)),
           pubkey: "",
           duration,

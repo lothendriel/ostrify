@@ -37,7 +37,7 @@ const PodcastsPage = () => {
   const podcastFavoriteActions = usePodcastFavoriteActions();
   const favoriteShowSelection = searchParams.get("show") ? podcastFavorites.data.find(item => item.id === searchParams.get("show") && !item.episode) : undefined;
   const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
-  const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl);
+  const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
   const catalogSource = source === "directory" ? "nostr" : source;
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");
@@ -222,7 +222,7 @@ function EmptyEpisodes({ source }: { source: "nostr" | "fountain" }) {
 }
 
 function PodcastEpisodeList({ tracks, show, favorites, onToggleFavorite, onPlayTrack, saving, userLoggedIn }: { tracks: Track[]; show: PodcastShow; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; onPlayTrack: (track: Track) => void; saving: boolean; userLoggedIn: boolean }) {
-  return <div><div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Category</span><span className="pr-14">Actions</span></div>{tracks.map((track, index) => {
+  return <div><div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Show</span><span className="pr-14">Actions</span></div>{tracks.map((track, index) => {
 const episodeId = track.podcastIndexEpisodeId;
     const favorite: PodcastFavorite | undefined = episodeId ? { id: `podcast-index:episode:id:${episodeId}`, source: "podcast-index", title: track.title, publisher: show.title, image: track.image ?? show.image, feedId: show.feedId, episode: true, episodeId } : undefined;
     const isSaved = false;

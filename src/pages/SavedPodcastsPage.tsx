@@ -29,7 +29,11 @@ export default function SavedPodcastsPage() {
   const savedEpisodes = favorites.data.filter(item => item.episode);
   const rssShow = usePodcastIndexFeed(shows[0]?.source === 'podcast-index' && !shows[0].feedId ? shows[0].feedUrl : undefined);
   const tracksById = new Map((episodes.data?.tracks ?? []).map(track => [track.id, track]));
-  const playable = savedEpisodes.flatMap(item => item.episodeId ? [tracksById.get(`podcast-index:episode:id:${item.episodeId}`)].filter((track): track is NonNullable<typeof track> => !!track) : []);
+  const playable = savedEpisodes.flatMap(item => {
+    if (!item.episodeId) return [];
+    const track = tracksById.get(`podcast-index:episode:id:${item.episodeId}`);
+    return track ? [{ ...track, artist: track.artist ?? item.publisher }] : [];
+  });
   const remove = (favorite: PodcastFavorite) => actions.toggleFavorite.mutate({ favorite, saved: false });
 
   return <div className="space-y-8 p-4 sm:p-6">
@@ -52,7 +56,8 @@ export default function SavedPodcastsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="flex items-center gap-2 text-2xl font-bold"><Heart className="size-5 text-primary" /> Episodes</h2><p className="text-sm text-muted-foreground">Saved episodes remain in your library even if they disappear from search.</p></div><Button type="button" variant="outline" disabled={!playable.length} onClick={() => player.playQueue(playable)}><Play className="size-4" /> Play all</Button></div>
       {episodes.isLoading ? <div className="space-y-2">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-16 rounded-lg" />)}</div> : savedEpisodes.length ? <div className="space-y-2">{savedEpisodes.map(episode => {
         const track = episode.episodeId ? tracksById.get(`podcast-index:episode:id:${episode.episodeId}`) : undefined;
-        return <article key={episode.id} className="flex items-center gap-3 rounded-xl bg-secondary/40 p-3"><div className="size-12 shrink-0 overflow-hidden rounded-md bg-secondary">{episode.image && <img src={episode.image} alt="" className="size-full object-cover" />}</div><button type="button" className="min-w-0 flex-1 text-left" disabled={!track} onClick={() => { if (track) player.playQueue([track]); }}><span className="block truncate font-semibold hover:text-primary">{track?.title ?? episode.title}</span><span className="block truncate text-sm text-muted-foreground">{episode.publisher ?? track?.artist ?? 'Podcast episode'}</span></button>{track && <QueueActionsMenu track={track} />}<Button type="button" variant="ghost" size="icon" aria-label={`Remove ${episode.title} from saved episodes`} disabled={actions.toggleFavorite.isPending} onClick={() => remove(episode)}><Trash2 className="size-4" /></Button></article>;
+        const playableTrack = track ? { ...track, artist: track.artist ?? episode.publisher } : undefined;
+        return <article key={episode.id} className="flex items-center gap-3 rounded-xl bg-secondary/40 p-3"><div className="size-12 shrink-0 overflow-hidden rounded-md bg-secondary">{episode.image && <img src={episode.image} alt="" className="size-full object-cover" />}</div><button type="button" className="min-w-0 flex-1 text-left" disabled={!playableTrack} onClick={() => { if (playableTrack) player.playQueue([playableTrack]); }}><span className="block truncate font-semibold hover:text-primary">{track?.title ?? episode.title}</span><span className="block truncate text-sm text-muted-foreground">{episode.publisher ?? track?.artist ?? 'Podcast episode'}</span></button>{playableTrack && <QueueActionsMenu track={playableTrack} />}<Button type="button" variant="ghost" size="icon" aria-label={`Remove ${episode.title} from saved episodes`} disabled={actions.toggleFavorite.isPending} onClick={() => remove(episode)}><Trash2 className="size-4" /></Button></article>;
       })}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">No episodes saved yet. Save an episode from a show’s page.</p>}
       {!!episodes.data?.unavailable && <p className="text-sm text-muted-foreground">{episodes.data.unavailable} saved episode(s) couldn’t be loaded from Podcast Index.</p>}
     </section>
