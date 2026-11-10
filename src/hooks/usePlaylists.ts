@@ -14,6 +14,35 @@ import { queryLibraryEvents } from '@/lib/libraryQuery';
 
 export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
+const PLAYLIST_DELETION_STORAGE_PREFIX = 'nostr:deleted-playlists:v1:';
+
+type PlaylistDeletionTombstones = Record<string, number>;
+
+function playlistCoordinate(pubkey: string, id: string): string {
+  return `30003:${pubkey}:${id}`;
+}
+
+function readPlaylistDeletionTombstones(pubkey: string): PlaylistDeletionTombstones {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(`${PLAYLIST_DELETION_STORAGE_PREFIX}${pubkey}`) ?? '{}');
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+    return Object.fromEntries(Object.entries(stored).filter(([coordinate, timestamp]) =>
+      coordinate.startsWith(`30003:${pubkey}:`) && typeof timestamp === 'number' && Number.isSafeInteger(timestamp) && timestamp > 0,
+    ));
+  } catch {
+    return {};
+  }
+}
+
+export function rememberPlaylistDeletion(pubkey: string, id: string, timestamp: number): void {
+  const tombstones = readPlaylistDeletionTombstones(pubkey);
+  tombstones[playlistCoordinate(pubkey, id)] = Math.max(timestamp, tombstones[playlistCoordinate(pubkey, id)] ?? 0);
+  try {
+    localStorage.setItem(`${PLAYLIST_DELETION_STORAGE_PREFIX}${pubkey}`, JSON.stringify(tombstones));
+  } catch {
+    // The signed NIP-09 deletion event remains authoritative when local storage is unavailable.
+  }
+}
 
 export interface Playlist {
   id: string; // d-tag
@@ -55,13 +84,27 @@ export function usePlaylists() {
   const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
   const queryKey = ["playlists", user?.pubkey ?? "", readRelayKey];
 
-  return useQuery({
+  return useQuery<Playlist[]>({
     queryKey,
+    select: (playlists: Playlist[]) => {
+      if (!user) return playlists;
+      const tombstones = readPlaylistDeletionTombstones(user.pubkey);
+      return playlists.filter(playlist => {
+        const deletedAt = tombstones[playlistCoordinate(user.pubkey, playlist.id)];
+        return deletedAt === undefined || playlist.event.created_at > deletedAt;
+      });
+    },
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
-    placeholderData: (previousData: Playlist[] | undefined, previousQuery) =>
-      previousQuery?.queryKey[1] === user?.pubkey ? previousData : undefined,
+    placeholderData: (previousData: Playlist[] | undefined, previousQuery) => {
+      if (previousQuery?.queryKey[1] !== user?.pubkey || !user) return undefined;
+      const tombstones = readPlaylistDeletionTombstones(user.pubkey);
+      return previousData?.filter(playlist => {
+        const deletedAt = tombstones[playlistCoordinate(user.pubkey, playlist.id)];
+        return deletedAt === undefined || playlist.event.created_at > deletedAt;
+      });
+    },
     queryFn: async (c) => {
       if (!user) return [] as Playlist[];
       if (!readRelayKey) return [] as Playlist[];
@@ -69,26 +112,68 @@ export function usePlaylists() {
       const { events, complete } = await queryLibraryEvents(
         nostr,
         readRelayKey.split("|"),
-        [{ kinds: [PLAYLIST_KIND], authors: [user.pubkey], limit: 100 }],
+        [
+          { kinds: [PLAYLIST_KIND], authors: [user.pubkey], limit: 100 },
+          { kinds: [5], authors: [user.pubkey], limit: 200 },
+        ],
         signal,
       );
-      const playlists = events
-        .filter(event => event.pubkey === user.pubkey && isOstrifyMusicPlaylist(event))
-        .map(parsePlaylist)
-        .filter((p): p is Playlist => p !== null);
-      if (!complete) {
-        const cached = queryClient.getQueryData<Playlist[]>(queryKey) ?? [];
-        const byId = new Map(playlists.map(playlist => [playlist.id, playlist]));
-        for (const playlist of cached) if (!byId.has(playlist.id)) byId.set(playlist.id, playlist);
-        playlists.splice(0, playlists.length, ...byId.values());
+      const tombstones = readPlaylistDeletionTombstones(user.pubkey);
+      const deletionEvents = events.filter(event => event.kind === 5 && event.pubkey === user.pubkey);
+      const cache = new Map((queryClient.getQueryData<Playlist[]>(queryKey) ?? []).map(playlist => [playlist.id, playlist]));
+      for (const deletion of deletionEvents) {
+        for (const [name, value] of deletion.tags) {
+          if (name === 'a' && value.startsWith(`30003:${user.pubkey}:`)) {
+            const id = value.slice(`30003:${user.pubkey}:`.length);
+            const coordinate = playlistCoordinate(user.pubkey, id);
+            if (id && (!tombstones[coordinate] || deletion.created_at > tombstones[coordinate])) {
+              tombstones[coordinate] = deletion.created_at;
+              rememberPlaylistDeletion(user.pubkey, id, deletion.created_at);
+            }
+          }
+          if (name === 'd' && value && deletion.tags.some(([tagName, coordinate]) => tagName === 'a' && coordinate === `30003:${user.pubkey}:${value}`)) {
+            const coordinate = playlistCoordinate(user.pubkey, value);
+            if (!tombstones[coordinate] || deletion.created_at > tombstones[coordinate]) {
+              tombstones[coordinate] = deletion.created_at;
+              rememberPlaylistDeletion(user.pubkey, value, deletion.created_at);
+            }
+          }
+        }
       }
+      const relayEvents = events.filter(event => event.pubkey === user.pubkey && event.kind === PLAYLIST_KIND && isOstrifyMusicPlaylist(event));
+      const newerRelayEvents = new Map<string, NostrEvent>();
+      for (const event of relayEvents) {
+        const id = event.tags.find(([name]) => name === 'd')?.[1];
+        if (!id) continue;
+        const cachedEvent = cache.get(id)?.event;
+        const current = newerRelayEvents.get(id);
+        const newest = [event, current, cachedEvent].filter((candidate): candidate is NostrEvent => !!candidate).sort((left, right) => right.created_at - left.created_at)[0];
+        if (newest) newerRelayEvents.set(id, newest);
+      }
+      for (const [id, cached] of cache) {
+        if (!newerRelayEvents.has(id)) newerRelayEvents.set(id, cached.event);
+      }
+      const playlists = [...newerRelayEvents.values()].filter(event => {
+        const id = event.tags.find(([name]) => name === 'd')?.[1];
+        if (!id) return false;
+        const deletedAt = tombstones[playlistCoordinate(user.pubkey, id)];
+        return deletedAt === undefined || event.created_at > deletedAt;
+      }).map(parsePlaylist).filter((playlist): playlist is Playlist => playlist !== null);
+      const visiblePlaylists = new Map(playlists.map(playlist => [playlist.id, playlist]));
+      if (!complete) {
+        for (const [id, cached] of cache) {
+          const deletedAt = tombstones[playlistCoordinate(user.pubkey, id)];
+          if (!visiblePlaylists.has(id) && (deletedAt === undefined || cached.event.created_at > deletedAt)) visiblePlaylists.set(id, cached);
+        }
+      }
+      const finalPlaylists = [...visiblePlaylists.values()];
       // Liked songs first, then newest.
-      playlists.sort((a, b) => {
+      finalPlaylists.sort((a, b) => {
         if (a.isLiked) return -1;
         if (b.isLiked) return 1;
         return b.event.created_at - a.event.created_at;
       });
-      return playlists;
+      return finalPlaylists;
     },
     enabled: !!user && !!readRelayKey,
   });
@@ -133,14 +218,16 @@ export function usePlaylistActions() {
   const queryClient = useQueryClient();
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["playlists", user?.pubkey ?? ""] });
+    queryClient.invalidateQueries({ queryKey: ["playlists"] });
 
   const publishPlaylist = async (template: { kind: number; content: string; tags: string[][] }) => {
+    if (!user) throw new Error('User is not logged in');
     const event = await publish(template);
     const playlist = parsePlaylist(event);
-    if (playlist && user) queryClient.setQueryData<Playlist[]>(['playlists', user.pubkey], (current) => [
-      playlist, ...(current ?? []).filter((item) => item.id !== playlist.id),
-    ]);
+    if (playlist) queryClient.setQueriesData<Playlist[]>(
+      { queryKey: ['playlists', user.pubkey] },
+      current => [playlist, ...(current ?? []).filter(item => item.id !== playlist.id)],
+    );
     return event;
   };
 
@@ -201,6 +288,8 @@ export function usePlaylistActions() {
     const cached = queryClient.getQueryData<Playlist[]>(["playlists", user.pubkey]);
     const fromCache = cached?.find((p) => p.id === id);
     if (fromCache) return fromCache;
+    const deletedAt = readPlaylistDeletionTombstones(user.pubkey)[playlistCoordinate(user.pubkey, id)];
+    if (deletedAt !== undefined) return undefined;
     const events = await nostr.query(
       [{ kinds: [PLAYLIST_KIND], authors: [user.pubkey], "#d": [id], limit: 1 }],
       { signal: AbortSignal.timeout(4000) },

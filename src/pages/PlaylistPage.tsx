@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { usePlaylist, usePlaylistActions, LIKED_SONGS_ID } from "@/hooks/usePlaylists";
+import { usePlaylist, usePlaylistActions, LIKED_SONGS_ID, rememberPlaylistDeletion, type Playlist } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { useToast } from "@/hooks/useToast";
@@ -61,12 +61,18 @@ const PlaylistPage = () => {
         ],
       },
       {
-        onSuccess: () => {
+        onSuccess: deletion => {
+          rememberPlaylistDeletion(playlist.event.pubkey, playlist.id, deletion.created_at);
+          void queryClient.setQueriesData(
+            { queryKey: ["playlists", playlist.event.pubkey] },
+            (current: Playlist[] | undefined) => current?.filter(item => item.id !== playlist.id),
+          );
           void queryClient.invalidateQueries({ queryKey: ["public-music-playlists"] });
           void queryClient.invalidateQueries({ queryKey: ["playlists"] });
           toast({ title: "Playlist deleted" });
           navigate("/");
         },
+        onError: () => toast({ title: "Playlist deletion failed", description: "The playlist is still in your library. Please try again.", variant: "destructive" }),
       },
     );
   };
