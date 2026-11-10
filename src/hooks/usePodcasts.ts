@@ -535,76 +535,122 @@ export function useFountainRssEpisodes(show: PodcastShow | null | undefined) {
   });
 }
 
+interface FountainShowsPageParam {
+  feedUntil?: number;
+  itemUntil?: number;
+  taggedUntil?: number;
+  feedDone: boolean;
+  itemDone: boolean;
+  taggedDone: boolean;
+  pendingFeedGuids: string[];
+}
+
 /** NIP-73 show GUIDs discovered in Nostr notes, resolved to Fountain records. */
 export function useFountainPodcastShows() {
   const { nostr } = useNostr();
+  const initialPageParam: FountainShowsPageParam = {
+    feedDone: false,
+    itemDone: false,
+    taggedDone: false,
+    pendingFeedGuids: [],
+  };
   const query = useInfiniteQuery({
     queryKey: ["podcast-shows", "fountain"],
-    initialPageParam: undefined as number | undefined,
+    initialPageParam,
     retry: 1,
     queryFn: async ({ pageParam, signal: querySignal }) => {
-      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(20000)]);
-      const until = pageParam;
-      const events = await nostr.query(
-        [
-          { kinds: [NOSTR_NOTE_KIND], "#k": ["podcast:guid"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(until ? { until } : {}) },
-          { kinds: [NOSTR_NOTE_KIND], "#k": ["podcast:item:guid"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(until ? { until } : {}) },
-          { kinds: [NOSTR_NOTE_KIND], "#t": ["podcast"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(until ? { until } : {}) },
-        ],
-        { signal },
-      );
-      const feedGuidSet = new Set<string>();
-      for (const event of events) {
-        for (const [name, value] of event.tags) {
-          if (name !== "i" || !value?.startsWith("podcast:guid:")) continue;
-          const guid = value.slice("podcast:guid:".length);
-          const itemGuid = event.tags.find(([tagName, tagValue]) => tagName === "i" && tagValue?.startsWith("podcast:item:guid:"))?.[1].slice("podcast:item:guid:".length);
-          if (EPISODE_GUID_RE.test(guid) && (!itemGuid || itemGuid !== guid)) feedGuidSet.add(guid);
-        }
-      }
-      const uniqueGuids = [...feedGuidSet];
-      const guids = uniqueGuids.slice(0, FOUNTAIN_MAX_REFERENCE_BATCH);
+      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(30000)]);
+      let feedUntil = pageParam.feedUntil;
+      let itemUntil = pageParam.itemUntil;
+      let taggedUntil = pageParam.taggedUntil;
+      let feedDone = pageParam.feedDone;
+      let itemDone = pageParam.itemDone;
+      let taggedDone = pageParam.taggedDone;
+      const pendingFeedGuids = [...pageParam.pendingFeedGuids];
       const shows: PodcastShow[] = [];
+      const seenGuids = new Set<string>();
       const episodeCounts = new Map<string, number>();
-      for (const event of events) {
-        const itemReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:item:guid:"))?.[1];
-        const feedReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
-        const itemGuid = itemReference?.slice("podcast:item:guid:".length);
-        const feedGuid = feedReference?.slice("podcast:guid:".length);
-        if (itemGuid && feedGuid && EPISODE_GUID_RE.test(itemGuid) && EPISODE_GUID_RE.test(feedGuid)) {
-          episodeCounts.set(feedGuid, (episodeCounts.get(feedGuid) ?? 0) + 1);
+      let scanCount = 0;
+
+      // Keep scanning older relay results until we find a useful batch of shows
+      // or all three independent Nostr filters have been exhausted.
+      while (shows.length < FOUNTAIN_MAX_REFERENCE_BATCH && scanCount < 5) {
+        if (!pendingFeedGuids.length) {
+          const requests = await Promise.all([
+            feedDone ? Promise.resolve([]) : nostr.query([{ kinds: [NOSTR_NOTE_KIND], "#k": ["podcast:guid"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(feedUntil ? { until: feedUntil } : {}) }], { signal }),
+            itemDone ? Promise.resolve([]) : nostr.query([{ kinds: [NOSTR_NOTE_KIND], "#k": ["podcast:item:guid"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(itemUntil ? { until: itemUntil } : {}) }], { signal }),
+            taggedDone ? Promise.resolve([]) : nostr.query([{ kinds: [NOSTR_NOTE_KIND], "#t": ["podcast"], limit: FOUNTAIN_REFERENCE_SCAN_PAGE, ...(taggedUntil ? { until: taggedUntil } : {}) }], { signal }),
+          ]);
+          const [feedEvents, itemEvents, taggedEvents] = requests;
+          if (!feedEvents.length && !itemEvents.length && !taggedEvents.length) {
+            feedDone = true;
+            itemDone = true;
+            taggedDone = true;
+          }
+          const scannedEvents = [feedEvents, itemEvents, taggedEvents];
+          for (const [index, events] of scannedEvents.entries()) {
+            const oldest = events.length ? Math.min(...events.map(event => event.created_at)) : undefined;
+            const cursor = oldest !== undefined ? oldest - 1 : undefined;
+            if (index === 0) {
+              feedUntil = cursor ?? feedUntil;
+              feedDone = events.length < FOUNTAIN_REFERENCE_SCAN_PAGE;
+            } else if (index === 1) {
+              itemUntil = cursor ?? itemUntil;
+              itemDone = events.length < FOUNTAIN_REFERENCE_SCAN_PAGE;
+            } else {
+              taggedUntil = cursor ?? taggedUntil;
+              taggedDone = events.length < FOUNTAIN_REFERENCE_SCAN_PAGE;
+            }
+            for (const event of events) {
+              const itemReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:item:guid:"))?.[1];
+              const feedReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
+              const itemGuid = itemReference?.slice("podcast:item:guid:".length);
+              const feedGuid = feedReference?.slice("podcast:guid:".length);
+              if (itemGuid && feedGuid && EPISODE_GUID_RE.test(itemGuid) && EPISODE_GUID_RE.test(feedGuid)) {
+                episodeCounts.set(feedGuid, (episodeCounts.get(feedGuid) ?? 0) + 1);
+              }
+              if (!feedGuid || !EPISODE_GUID_RE.test(feedGuid) || (itemGuid && itemGuid === feedGuid)) continue;
+              if (!seenGuids.has(feedGuid)) {
+                seenGuids.add(feedGuid);
+                pendingFeedGuids.push(feedGuid);
+              }
+            }
+          }
+          scanCount += 1;
         }
-      }
-      for (let offset = 0; offset < guids.length; offset += FOUNTAIN_SHOWS_PER_LOOKUP_BATCH) {
-        if (signal.aborted) throw signal.reason;
-        const batch = guids.slice(offset, offset + FOUNTAIN_SHOWS_PER_LOOKUP_BATCH);
-        const resolved = await Promise.all(batch.map((guid) => lookupFountainShow(guid, signal).catch((error: unknown) => {
+
+        if (!pendingFeedGuids.length) continue;
+        const batch = pendingFeedGuids.splice(0, FOUNTAIN_SHOWS_PER_LOOKUP_BATCH);
+        const resolved = await Promise.all(batch.map(guid => lookupFountainShow(guid, signal).catch((error: unknown) => {
           if (signal.aborted) throw error;
           return null;
         })));
         for (const show of resolved) {
-          if (!show) continue;
-          shows.push({ ...show, episodeCount: episodeCounts.get(show.feedGuid ?? "") ?? 0 });
+          if (show) shows.push({ ...show, episodeCount: episodeCounts.get(show.feedGuid ?? "") ?? 0 });
         }
       }
-      const deduped = new Map(shows.map((show) => [show.id, show]));
+
+      const deduped = new Map(shows.map(show => [show.id, show]));
       const pageShows = [...deduped.values()].sort((a, b) => a.title.localeCompare(b.title));
-      const hasMore = uniqueGuids.length > guids.length || events.length >= FOUNTAIN_REFERENCE_SCAN_PAGE * 3;
-      const nextUntil = uniqueGuids.length > guids.length
-        ? Math.min(...events.map((event) => event.created_at))
-        : events.length >= FOUNTAIN_REFERENCE_SCAN_PAGE * 3
-          ? Math.min(...events.map((event) => event.created_at)) - 1
-          : undefined;
-      return { shows: pageShows, nextUntil, hasMore, needsMoreScan: uniqueGuids.length > guids.length };
+      const hasMore = pendingFeedGuids.length > 0 || !feedDone || !itemDone || !taggedDone;
+      const nextPage: FountainShowsPageParam | undefined = hasMore ? {
+        feedUntil,
+        itemUntil,
+        taggedUntil,
+        feedDone,
+        itemDone,
+        taggedDone,
+        pendingFeedGuids,
+      } : undefined;
+      return { shows: pageShows, nextPage };
     },
-    getNextPageParam: (lastPage) => lastPage.nextUntil,
+    getNextPageParam: lastPage => lastPage.nextPage,
     staleTime: 5 * 60 * 1000,
   });
   const showMap = new Map<string, PodcastShow>();
   for (const page of query.data?.pages ?? []) for (const show of page.shows) showMap.set(show.id, show);
   const data = [...showMap.values()].sort((a, b) => a.title.localeCompare(b.title));
-  const lastPage = query.data?.pages.at(-1);
-  return { ...query, data, hasNextPage: lastPage?.hasMore ?? false, needsMoreScan: lastPage?.needsMoreScan ?? false };
+  return { ...query, data, hasNextPage: query.hasNextPage ?? false };
 }
 
 export function usePodcastFavorites() {

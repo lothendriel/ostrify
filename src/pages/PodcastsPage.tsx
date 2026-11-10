@@ -24,6 +24,7 @@ const PodcastsPage = () => {
   const episodes = usePodcastEpisodes(120, fountainEpisodeLimit);
   const nostrShows = useNostrPodcastShows();
   const fountainShows = useFountainPodcastShows();
+  const fountainRssShows = (fountainShows.data ?? []).filter(show => show.feedUrl && show.feedGuid);
   const player = usePlayer();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSource = searchParams.get("source");
@@ -88,12 +89,12 @@ const PodcastsPage = () => {
               onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })}
               userLoggedIn={podcastFavorites.isEnabled}
               source={viewAllSource}
-              shows={viewAllSource === "nostr" ? nostrShows.data ?? [] : fountainShows.data ?? []}
+              shows={viewAllSource === "nostr" ? nostrShows.data ?? [] : fountainRssShows}
               isLoading={viewAllSource === "nostr" ? nostrShows.isLoading : fountainShows.isLoading}
               error={viewAllSource === "nostr" ? nostrShows.isError : fountainShows.isError}
               onBack={() => setViewAllSource(null)}
               onLoadMore={() => void (viewAllSource === "nostr" ? nostrShows.fetchNextPage() : fountainShows.fetchNextPage())}
-              hasMore={viewAllSource === "nostr" ? nostrShows.hasNextPage : fountainShows.hasNextPage || fountainShows.needsMoreScan || fountainShows.isFetching}
+              hasMore={viewAllSource === "nostr" ? nostrShows.hasNextPage : fountainShows.hasNextPage}
               isLoadingMore={viewAllSource === "nostr" ? nostrShows.isFetchingNextPage : fountainShows.isFetchingNextPage}
               loadMoreError={viewAllSource === "nostr" ? nostrShows.isFetchNextPageError : fountainShows.isFetchNextPageError}
               loadMoreLoading={viewAllSource === "fountain" && fountainShows.isFetching}
@@ -103,7 +104,7 @@ const PodcastsPage = () => {
               {source === "fountain" && <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Fountain RSS shows</h2><p className="text-sm text-muted-foreground">Shows found through Nostr references with a public Fountain RSS feed.</p></div><Button variant="outline" onClick={() => void fountainShows.refetch()}>Refresh</Button></div>
                 {fountainShows.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Fountain shows. <button className="underline" onClick={() => void fountainShows.refetch()}>Try again</button></p>}
-                {fountainShows.isLoading ? <ShowSkeletonGrid /> : fountainShows.data?.filter(show => show.feedUrl && show.feedGuid).length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{fountainShows.data.filter(show => show.feedUrl && show.feedGuid).map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div>{fountainShows.hasNextPage && <div className="flex justify-center"><Button variant="outline" disabled={fountainShows.isFetchingNextPage || fountainShows.isFetching} onClick={() => void fountainShows.fetchNextPage()}>{fountainShows.isFetching ? "Loading more Fountain shows…" : "Load more Fountain shows"}</Button></div>}</> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Fountain shows with a public RSS feed were found in the Nostr references currently loaded.</div>}
+                {fountainShows.isLoading && !fountainShows.data?.length ? <ShowSkeletonGrid /> : fountainRssShows.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{fountainRssShows.map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div>{fountainShows.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more Fountain shows. <button className="underline" onClick={() => void fountainShows.fetchNextPage()}>Try again</button></p>}{fountainShows.hasNextPage && <div className="flex flex-col items-center gap-2"><Button variant="outline" disabled={fountainShows.isFetchingNextPage} onClick={() => void fountainShows.fetchNextPage()}>{fountainShows.isFetchingNextPage ? "Searching for more Fountain shows…" : "Load more Fountain shows"}</Button><p className="text-xs text-muted-foreground">{fountainRssShows.length} shows discovered so far</p></div>}</> : fountainShows.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load Fountain shows. <button className="underline" onClick={() => void fountainShows.refetch()}>Try again</button></p> : fountainShows.hasNextPage ? <div className="rounded-xl border border-dashed p-8 text-center"><p className="text-muted-foreground">Searching Nostr for Fountain shows…</p><Button className="mt-4" variant="outline" disabled={fountainShows.isFetchingNextPage} onClick={() => void fountainShows.fetchNextPage()}>{fountainShows.isFetchingNextPage ? "Searching…" : "Search for shows"}</Button></div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Fountain shows with a public RSS feed were found in the Nostr references currently loaded.</div>}
               </section>}
               {source === "nostr" && <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
