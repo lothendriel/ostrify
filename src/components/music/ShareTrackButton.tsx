@@ -10,7 +10,9 @@ import { sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
 
 function defaultMessage(track: Track): string {
-  return `I'm listening to ${track.title} on Ostrify. Check it out!`;
+  const message = `I'm listening to ${track.title} on Ostrify. Check it out!`;
+  const url = sanitizeUrl(track.url);
+  return url ? `${message}\n\n${url}` : message;
 }
 
 function trackTags(track: Track): string[][] {
