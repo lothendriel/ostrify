@@ -53,28 +53,30 @@ function MusicNewsCard({ event }: { event: NostrEvent }) {
   const published = new Date(event.created_at * 1000);
 
   return (
-    <article className="flex min-h-44 flex-col rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/30">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        <Newspaper className="size-4 text-primary" aria-hidden="true" />
-        {event.kind === 30023 ? "Article" : "Nostr post"}
-      </div>
-      <h3 className="mt-3 line-clamp-2 text-lg font-semibold leading-snug">{newsTitle(event)}</h3>
-      <p className="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-muted-foreground">{newsExcerpt(event)}</p>
-      <div className="mt-4 flex items-center justify-between gap-3 border-t pt-3 text-xs text-muted-foreground">
-        <span className="truncate">{authorName}</span>
+    <article className="flex flex-col rounded-xl border bg-card p-3 shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/30">
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 font-medium uppercase tracking-wider">
+          <Newspaper className="size-3.5 text-primary" aria-hidden="true" />
+          {event.kind === 30023 ? "Article" : "Nostr post"}
+        </span>
         <time dateTime={published.toISOString()} className="shrink-0">{published.toLocaleDateString()}</time>
       </div>
-      {link && (
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-flex w-fit items-center gap-1 text-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
-          aria-label={`Read ${newsTitle(event)} on njump.me`}
-        >
-          Read on Nostr <ExternalLink className="size-3.5" aria-hidden="true" />
-        </a>
-      )}
+      <h3 className="mt-2 line-clamp-2 text-base font-semibold leading-snug">{newsTitle(event)}</h3>
+      <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{newsExcerpt(event)}</p>
+      <div className="mt-3 flex items-center justify-between gap-3 border-t pt-2 text-xs">
+        <span className="truncate text-muted-foreground">{authorName}</span>
+        {link && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
+            aria-label={`Read ${newsTitle(event)} on njump.me`}
+          >
+            Read <ExternalLink className="size-3" aria-hidden="true" />
+          </a>
+        )}
+      </div>
     </article>
   );
 }
@@ -114,7 +116,7 @@ export function MusicNewsSection() {
       </div>
       {news.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}
+          {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-32 rounded-xl" />)}
         </div>
       ) : news.isError ? (
         <div role="alert" className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
