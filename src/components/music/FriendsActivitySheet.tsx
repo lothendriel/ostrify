@@ -16,14 +16,14 @@ function FriendActivity({ pubkey, status, close }: { pubkey: string; status?: st
   const { data } = useAuthor(pubkey);
   const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(pubkey);
   const avatar = sanitizeUrl(data?.metadata?.picture);
-  return <article className="rounded-xl border border-border/70 bg-card p-3">
-    <div className="flex items-center gap-3">
-      <div className="size-11 shrink-0 overflow-hidden rounded-full bg-secondary flex items-center justify-center text-sm font-semibold">{avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}</div>
-      <div className="min-w-0 flex-1"><Link to={`/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate font-semibold hover:underline">{name}</Link><p className="truncate text-xs text-muted-foreground">Following on Ostrify</p></div>
+  return <article className="rounded-xl border border-border/70 bg-card p-2.5">
+    <div className="flex items-center gap-2.5">
+      <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">{avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}</div>
+      <div className="min-w-0 flex-1"><Link to={`/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate text-sm font-semibold hover:underline">{name}</Link><p className="truncate text-xs text-muted-foreground">Following on Ostrify</p></div>
     </div>
-    <div className="mt-3 flex items-start gap-2 rounded-lg bg-secondary/60 p-3 text-sm">
-      <Headphones className="mt-0.5 size-4 shrink-0 text-primary" />
-      <p className={status ? 'text-foreground' : 'text-muted-foreground'}>{status ?? 'Not listening right now'}</p>
+    <div className="mt-2 flex items-start gap-2 rounded-lg bg-secondary/60 px-2.5 py-2 text-sm">
+      <Headphones className="mt-0.5 size-3.5 shrink-0 text-primary" />
+      <p className={`line-clamp-2 ${status ? 'text-foreground' : 'text-muted-foreground'}`}>{status ?? 'Not listening right now'}</p>
     </div>
   </article>;
 }
@@ -40,9 +40,9 @@ function FriendsActivityContent({ close, friendCount, open }: { close: () => voi
   const statuses = useFriendStatuses(friendKeys);
   const statusByFriend = new Map((statuses.data ?? []).map(event => [event.pubkey, event.content]));
 
-  return <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-4">
-        {!user ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Sign in to see your friends</p><p className="mt-1 text-sm text-muted-foreground">Your Ostrify friends and their listening activity will appear here.</p></div> : !followedPeople.hasReadRelays ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Friends unavailable</p><p className="mt-1 text-sm text-muted-foreground">Enable a read relay to load your friends list.</p><Button type="button" variant="link" onClick={() => void followedPeople.refetch()}>Try again</Button></div> : followedPeople.isLoading ? <div className="space-y-3" aria-label="Loading friends"><Skeleton className="h-28 w-full" /><Skeleton className="h-28 w-full" /></div> : followedPeople.isError ? <div role="alert" className="rounded-lg border border-destructive/40 p-4 text-sm"><p>Could not load your friends: {followedPeople.error.message}</p><Button type="button" variant="link" className="mt-2 h-auto p-0" onClick={() => void followedPeople.refetch()}>Try again</Button></div> : !friendKeys.length ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">No friends yet</p><p className="mt-1 text-sm text-muted-foreground">Add people on Ostrify to see when they’re listening.</p><Button asChild className="mt-4"><Link to="/friends" onClick={close}>Find friends</Link></Button></div> : <div className="space-y-3">
-          <div className="mb-4 flex items-center justify-between text-sm"><span className="font-semibold">Your friends</span><Link to="/friends" onClick={close} className="text-primary hover:underline">Manage friends</Link></div>
+  return <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3">
+        {!user ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Sign in to see your friends</p><p className="mt-1 text-sm text-muted-foreground">Your Ostrify friends and their listening activity will appear here.</p></div> : !followedPeople.hasReadRelays ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Friends unavailable</p><p className="mt-1 text-sm text-muted-foreground">Enable a read relay to load your friends list.</p><Button type="button" variant="link" onClick={() => void followedPeople.refetch()}>Try again</Button></div> : followedPeople.isLoading ? <div className="space-y-2" aria-label="Loading friends"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : followedPeople.isError ? <div role="alert" className="rounded-lg border border-destructive/40 p-4 text-sm"><p>Could not load your friends: {followedPeople.error.message}</p><Button type="button" variant="link" className="mt-2 h-auto p-0" onClick={() => void followedPeople.refetch()}>Try again</Button></div> : !friendKeys.length ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">No friends yet</p><p className="mt-1 text-sm text-muted-foreground">Add people on Ostrify to see when they’re listening.</p><Button asChild className="mt-4"><Link to="/friends" onClick={close}>Find friends</Link></Button></div> : <div className="space-y-2">
+          <div className="mb-3 flex items-center justify-between text-sm"><span className="font-semibold">Your friends</span><Link to="/friends" onClick={close} className="text-primary hover:underline">Manage friends</Link></div>
           {friendKeys.map(pubkey => <FriendActivity key={pubkey} pubkey={pubkey} status={statusByFriend.get(pubkey)} close={close} />)}
           {statuses.isFetching && <p className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"><LoaderCircle className="size-3 animate-spin" /> Updating activity…</p>}
           {statuses.isError && <p role="status" className="text-xs text-muted-foreground">Listening statuses are temporarily unavailable.</p>}
