@@ -91,10 +91,17 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
 const PodcastsPage = () => {
   useSeoMeta({ title: "Podcasts — Ostrify" });
   const [fountainEpisodeLimit, setFountainEpisodeLimit] = useState(15);
+  const [fountainShowsPage, setFountainShowsPage] = useState(1);
+  const [fountainEpisodesPage, setFountainEpisodesPage] = useState(1);
+  const [pendingFountainEpisodesPage, setPendingFountainEpisodesPage] = useState<number | null>(null);
+  const [fountainEpisodesExhausted, setFountainEpisodesExhausted] = useState(false);
   const episodes = usePodcastEpisodes(120, fountainEpisodeLimit);
   const nostrShows = useNostrPodcastShows();
   const fountainShows = useFountainPodcastShows();
   const fountainRssShows = (fountainShows.data ?? []).filter(show => show.feedUrl && show.feedGuid);
+  const visibleFountainShows = fountainRssShows.slice((fountainShowsPage - 1) * 15, fountainShowsPage * 15);
+  const fountainTracks = (episodes.data ?? []).filter(track => track.source === "fountain");
+  const visibleFountainEpisodes = fountainTracks.slice((fountainEpisodesPage - 1) * 15, fountainEpisodesPage * 15);
   const player = usePlayer();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSource = searchParams.get("source");
@@ -122,7 +129,6 @@ const PodcastsPage = () => {
   const activeShow = selectedShow ?? selectedIndexShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
   const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
-  const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
   const nostrShowList = nostrShows.data ?? [];
   useEffect(() => {
@@ -139,6 +145,42 @@ const PodcastsPage = () => {
     }
     return grouped;
   }, [selectedTracks]);
+
+  useEffect(() => {
+    if (pendingFountainEpisodesPage === null || episodes.isFetching) return;
+    if (fountainTracks.length < fountainEpisodeLimit || fountainEpisodeLimit >= 120) setFountainEpisodesExhausted(true);
+    const availablePages = Math.max(1, Math.ceil(fountainTracks.length / 15));
+    setFountainEpisodesPage(Math.min(pendingFountainEpisodesPage, availablePages));
+    setPendingFountainEpisodesPage(null);
+  }, [episodes.isFetching, fountainTracks.length, pendingFountainEpisodesPage]);
+
+  const nextFountainShowsPage = async () => {
+    if (fountainRssShows.length > fountainShowsPage * 15) {
+      setFountainShowsPage(page => page + 1);
+      return;
+    }
+    if (!fountainShows.hasNextPage || fountainShows.isFetchingNextPage) return;
+    let count = fountainRssShows.length;
+    let hasMore: boolean = fountainShows.hasNextPage;
+    while (count <= fountainShowsPage * 15 && hasMore) {
+      const result = await fountainShows.fetchNextPage();
+      const shows = result.data?.pages.flatMap(page => page.shows) ?? [];
+      count = [...new Map(shows.filter(show => show.feedUrl && show.feedGuid).map(show => [show.id, show])).values()].length;
+      hasMore = Boolean(result.hasNextPage);
+    }
+    if (count > fountainShowsPage * 15) setFountainShowsPage(page => page + 1);
+  };
+
+  const nextFountainEpisodesPage = () => {
+    if (fountainTracks.length > fountainEpisodesPage * 15) {
+      setFountainEpisodesPage(page => page + 1);
+      return;
+    }
+    if (episodes.isFetching || fountainEpisodeLimit >= 120 || fountainEpisodesExhausted) return;
+    const nextPage = fountainEpisodesPage + 1;
+    setPendingFountainEpisodesPage(nextPage);
+    setFountainEpisodeLimit(limit => Math.min(limit + 15, 120));
+  };
 
   return (
     <div className="p-4 sm:p-6 space-y-8">
@@ -186,7 +228,7 @@ const PodcastsPage = () => {
               {source === "fountain" && <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Fountain RSS shows</h2><p className="text-sm text-muted-foreground">Shows found through Nostr references with a public Fountain RSS feed.</p></div><Button variant="outline" onClick={() => void fountainShows.refetch()}>Refresh</Button></div>
                 {fountainShows.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Fountain shows. <button className="underline" onClick={() => void fountainShows.refetch()}>Try again</button></p>}
-                {fountainShows.isLoading && !fountainShows.data?.length ? <ShowSkeletonGrid /> : fountainRssShows.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{fountainRssShows.map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div>{fountainShows.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more Fountain shows. <button className="underline" onClick={() => void fountainShows.fetchNextPage()}>Try again</button></p>}{fountainShows.hasNextPage && <div className="flex flex-col items-center gap-2"><Button variant="outline" disabled={fountainShows.isFetchingNextPage} onClick={() => void fountainShows.fetchNextPage()}>{fountainShows.isFetchingNextPage ? "Searching for more Fountain shows…" : "Load more Fountain shows"}</Button><p className="text-xs text-muted-foreground">{fountainRssShows.length} shows discovered so far</p></div>}</> : fountainShows.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load Fountain shows. <button className="underline" onClick={() => void fountainShows.refetch()}>Try again</button></p> : fountainShows.hasNextPage ? <div className="rounded-xl border border-dashed p-8 text-center"><p className="text-muted-foreground">Searching Nostr for Fountain shows…</p><Button className="mt-4" variant="outline" disabled={fountainShows.isFetchingNextPage} onClick={() => void fountainShows.fetchNextPage()}>{fountainShows.isFetchingNextPage ? "Searching…" : "Search for shows"}</Button></div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Fountain shows with a public RSS feed were found in the Nostr references currently loaded.</div>}
+                {fountainShows.isLoading && !fountainShows.data?.length ? <ShowSkeletonGrid /> : fountainRssShows.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{visibleFountainShows.map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div>{fountainShows.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more Fountain shows. <button className="underline" onClick={() => void nextFountainShowsPage()}>Try again</button></p>}<nav aria-label="Fountain RSS show pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setFountainShowsPage(page => Math.max(1, page - 1))} disabled={fountainShowsPage <= 1 || fountainShows.isFetchingNextPage}>← Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {fountainShowsPage}{!fountainShows.hasNextPage && <span> of {Math.max(1, Math.ceil(fountainRssShows.length / 15))}</span>} <span className="hidden sm:inline">· {fountainRssShows.length} shows discovered</span></p><Button type="button" variant="outline" onClick={() => void nextFountainShowsPage()} disabled={fountainShows.isFetchingNextPage || fountainShowsPage * 15 >= fountainRssShows.length && !fountainShows.hasNextPage}>{fountainShows.isFetchingNextPage ? "Searching…" : fountainRssShows.length <= fountainShowsPage * 15 && fountainShows.hasNextPage ? "Search next page →" : "Next →"}</Button></nav></> : fountainShows.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load Fountain shows. <button className="underline" onClick={() => void fountainShows.refetch()}>Try again</button></p> : fountainShows.hasNextPage ? <div className="rounded-xl border border-dashed p-8 text-center"><p className="text-muted-foreground">Searching Nostr for Fountain shows…</p><Button className="mt-4" variant="outline" disabled={fountainShows.isFetchingNextPage} onClick={() => void fountainShows.fetchNextPage()}>{fountainShows.isFetchingNextPage ? "Searching…" : "Search for shows"}</Button></div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Fountain shows with a public RSS feed were found in the Nostr references currently loaded.</div>}
               </section>}
               {source === "nostr" && <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
@@ -200,7 +242,7 @@ const PodcastsPage = () => {
               <section className="space-y-4">
                 {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><div className="flex gap-2"><Button asChild variant="outline"><Link to="/podcasts/nostr/episodes">See all</Link></Button><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div></div>}
                 {source === "fountain" && <div><h2 className="text-2xl font-bold">Latest Fountain episodes</h2><p className="text-sm text-muted-foreground">Fountain episodes currently referenced on Nostr.</p></div>}
-                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? selectedTracks : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div>{source === "nostr" && <TrackList tracks={selectedTracks} />}{source === "fountain" && fountainTracks.length > 0 && fountainEpisodeLimit < 120 && <div className="flex justify-center pt-2"><Button type="button" variant="outline" disabled={episodes.isFetching} onClick={() => setFountainEpisodeLimit(limit => Math.min(limit + 10, 120))}>{episodes.isFetching ? "Loading more episodes…" : "Load more episodes"}</Button></div>}</> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
+                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? visibleFountainEpisodes : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div>{source === "nostr" && <TrackList tracks={selectedTracks} />}{source === "fountain" && <nav aria-label="Latest Fountain episodes pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setFountainEpisodesPage(page => Math.max(1, page - 1))} disabled={fountainEpisodesPage <= 1 || episodes.isFetching}>← Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {fountainEpisodesPage}{fountainEpisodesExhausted && <span> of {Math.max(1, Math.ceil(fountainTracks.length / 15))}</span>} <span className="hidden sm:inline">· {fountainTracks.length} episodes loaded</span></p><Button type="button" variant="outline" onClick={nextFountainEpisodesPage} disabled={episodes.isFetching || fountainEpisodesExhausted && fountainEpisodesPage * 15 >= fountainTracks.length}>{episodes.isFetching && pendingFountainEpisodesPage !== null ? "Loading…" : "Next →"}</Button></nav>}</> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
               </section>
             </>
           )}
