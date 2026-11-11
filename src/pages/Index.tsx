@@ -6,6 +6,15 @@ import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { Shelf } from "@/components/music/Shelf";
 import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 
+function shuffled<T>(items: readonly T[]): T[] {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
 const Index = () => {
   useSeoMeta({
     title: "Ostrify — Music & Podcasts on Nostr",
@@ -15,11 +24,12 @@ const Index = () => {
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 150 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
 
-  const fresh = useMemo(() => tracks.slice(0, 10), [tracks]);
+  const fresh = useMemo(() => shuffled(tracks).slice(0, 10), [tracks]);
+  const shuffledPodcasts = useMemo(() => shuffled(podcasts).slice(0, 10), [podcasts]);
   const categoryShelves = useMemo(() => {
     return CATEGORIES.map((c) => ({
       category: c,
-      tracks: tracksInCategory(tracks, c.id).slice(0, 10),
+      tracks: shuffled(tracksInCategory(tracks, c.id)).slice(0, 10),
     })).filter((s) => s.tracks.length > 0);
   }, [tracks]);
 
@@ -56,7 +66,7 @@ const Index = () => {
       <Link to="/music" className="block rounded-lg bg-gradient-to-r from-emerald-900 to-teal-950 p-5 hover:brightness-110 transition-colors"><span className="block text-xs uppercase tracking-wider text-emerald-200 font-semibold">More music to discover</span><span className="block text-xl font-bold mt-1">Explore Nostr & Wavlake music →</span><span className="block text-sm text-emerald-100 mt-1">Find relay-published tracks or browse artists, albums, and more.</span></Link>
       <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
 
-      <Shelf title="Podcasts" subtitle="Nostr episodes and Fountain-linked shows" tracks={podcasts.slice(0, 10)} isLoading={podcastsLoading} />
+      <Shelf title="Podcasts" subtitle="Nostr episodes and Fountain-linked shows" tracks={shuffledPodcasts} isLoading={podcastsLoading} />
 
       {categoryShelves.map(({ category, tracks: catTracks }) => (
         <Shelf key={category.id} title={category.label} tracks={catTracks} />
