@@ -11,8 +11,21 @@ import type { Track } from '@/lib/music';
 
 function defaultMessage(track: Track): string {
   const message = `I'm listening to ${track.title} on Ostrify. Check it out!`;
-  const url = sanitizeUrl(track.url);
-  return url ? `${message}\n\n${url}` : message;
+  const audioUrl = sanitizeUrl(track.url);
+  if (!audioUrl) return message;
+
+  const shareUrl = new URL('/listen', window.location.origin);
+  shareUrl.searchParams.set('url', audioUrl);
+  shareUrl.searchParams.set('title', track.title);
+  shareUrl.searchParams.set('kind', track.kind);
+  if (track.artist) shareUrl.searchParams.set('artist', track.artist);
+  if (track.image) {
+    const imageUrl = sanitizeUrl(track.image);
+    if (imageUrl) shareUrl.searchParams.set('image', imageUrl);
+  }
+  if (track.duration && Number.isFinite(track.duration)) shareUrl.searchParams.set('duration', String(track.duration));
+
+  return `${message}\n\n${shareUrl.toString()}`;
 }
 
 function trackTags(track: Track): string[][] {

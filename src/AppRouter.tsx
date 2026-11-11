@@ -27,6 +27,7 @@ import AudiobookLibraryPage from "./pages/AudiobookLibraryPage";
 import { NIP19Page } from "./pages/NIP19Page";
 import { ArtistPage } from "./pages/ArtistPage";
 import NotFound from "./pages/NotFound";
+import ListenPage from "./pages/ListenPage";
 
 export function AppRouter() {
   return (
@@ -37,6 +38,7 @@ export function AppRouter() {
         <AppLayout>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/listen" element={<ListenPage />} />
             <Route path="/music-news" element={<MusicNewsPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/category/:id" element={<CategoryPage />} />
