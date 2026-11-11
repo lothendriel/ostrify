@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { FriendsActivitySheet } from "./FriendsActivitySheet";
 import { NotificationsBell } from "./NotificationsBell";
+import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
 import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
 
@@ -55,6 +56,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
               <NotificationsBell />
+              <DeveloperZapButton />
               <FriendsActivitySheet />
               <LoginArea className="max-w-60" />
             </div>
