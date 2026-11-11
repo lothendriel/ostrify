@@ -85,6 +85,34 @@ function parseTrack(value: unknown): Track | null {
 }
 
 export interface CatalogItem { id: string; type: 'artist' | 'album' | 'track'; title: string; artist?: string; image?: string; track?: Track }
+export interface WavlakeRelease { id: string; type: 'artist' | 'album'; title: string; artist?: string; image?: string }
+
+/** Browse artists or albums discovered through Wavlake's cursor-paginated track catalog. */
+export function useWavlakeCatalogReleases(type: 'artist' | 'album') {
+  return useInfiniteQuery({
+    queryKey: ['wavlake', 'browse-releases', type],
+    initialPageParam: '',
+    queryFn: async ({ pageParam, signal }) => {
+      const params: Record<string, string> = { limit: '50' };
+      if (pageParam) params.cursor = pageParam;
+      const data = object(await fetchApi('tracks', params, signal));
+      if (!data || !Array.isArray(data.tracks)) throw new Error('Invalid Wavlake catalog response');
+      const releases = data.tracks.flatMap((value): WavlakeRelease[] => {
+        const item = object(value);
+        if (!item) return [];
+        const releaseId = id(type === 'artist' ? item.artistId : item.albumId);
+        const title = text(type === 'artist' ? item.artist : item.albumTitle);
+        if (!releaseId || !title) return [];
+        const image = sanitizeUrl(text(type === 'artist' ? item.artistArtUrl : item.albumArtUrl));
+        return [{ id: releaseId, type, title, artist: type === 'album' ? text(item.artist) : undefined, image }];
+      });
+      return { releases, next: text(data.nextCursor) };
+    },
+    getNextPageParam: page => page.next,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
 
 /** Wavlake's track rankings, ordered by sats earned during the last 30 days. */
 export function useWavlakeRankedReleases() {

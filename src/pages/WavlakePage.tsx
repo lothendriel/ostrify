@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
 import { FollowButton } from '@/components/music/FollowButton';
-import { useWavlakeCatalog, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem } from '@/hooks/useWavlake';
+import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
   if (!items.length) return null;
@@ -18,6 +18,19 @@ function CatalogLinks({ items }: { items: CatalogItem[] }) {
       </div>
       <div className="font-semibold truncate">{item.title}</div>
       <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : item.type === 'artist' ? 'Artist' : 'Album'}</div>
+    </Link>
+  ))}</div>;
+}
+
+function ReleaseLinks({ items }: { items: WavlakeRelease[] }) {
+  if (!items.length) return null;
+  return <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{items.map(item => (
+    <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+      <div className="aspect-square rounded-md bg-muted overflow-hidden mb-3 flex items-center justify-center">
+        {item.image ? <img src={item.image} alt="" loading="lazy" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
+      </div>
+      <div className="font-semibold truncate">{item.title}</div>
+      <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : 'Artist'}</div>
     </Link>
   ))}</div>;
 }
@@ -48,37 +61,67 @@ function FeaturedRankings() {
 }
 
 export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
-  const rankings = useWavlakeRankedReleases();
+  const catalog = useWavlakeCatalogReleases(type);
   const [searchParams, setSearchParams] = useSearchParams();
-  const items = rankings.data?.[type === 'artist' ? 'artists' : 'albums'] ?? [];
+  const items = useMemo(() => {
+    const seen = new Set<string>();
+    return (catalog.data?.pages.flatMap(page => page.releases) ?? []).filter(item => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+  }, [catalog.data]);
   const pageCount = Math.max(1, Math.ceil(items.length / 15));
   const parsedPage = Number(searchParams.get('page') ?? '1');
-  const page = Number.isInteger(parsedPage) ? Math.min(Math.max(parsedPage, 1), pageCount) : 1;
+  const requestedPage = Number.isInteger(parsedPage) ? Math.max(parsedPage, 1) : 1;
+  const page = catalog.hasNextPage ? requestedPage : Math.min(requestedPage, pageCount);
   const visibleItems = items.slice((page - 1) * 15, page * 15);
-  const title = type === 'artist' ? 'Artists in top tracks' : 'Albums in top tracks';
+  const title = type === 'artist' ? 'Browse Wavlake artists' : 'Browse Wavlake albums';
+  const kindLabel = type === 'artist' ? 'artists' : 'albums';
 
   useEffect(() => {
-    if (rankings.data && searchParams.get('page') && String(page) !== searchParams.get('page')) {
+    if (catalog.data && searchParams.get('page') && String(page) !== searchParams.get('page')) {
       const next = new URLSearchParams(searchParams);
       if (page === 1) next.delete('page');
       else next.set('page', String(page));
       setSearchParams(next, { replace: true });
     }
-  }, [page, searchParams, setSearchParams]);
+  }, [catalog.data, page, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!catalog.isLoading && !catalog.isFetchingNextPage && catalog.hasNextPage && items.length < 15) {
+      void catalog.fetchNextPage();
+    }
+  }, [catalog.data, catalog.hasNextPage, catalog.isFetchingNextPage, catalog.isLoading, catalog.fetchNextPage, items.length]);
 
   useSeoMeta({ title: `${title} — Wavlake catalog — Ostrify` });
 
+  const goToNextPage = async () => {
+    if (catalog.isFetchingNextPage) return;
+    let allItems = items;
+    while (allItems.length < (page + 1) * 15 && catalog.hasNextPage) {
+      const result = await catalog.fetchNextPage();
+      const releases = result.data?.pages.flatMap(pageData => pageData.releases) ?? [];
+      allItems = [...new Map(releases.map(item => [item.id, item])).values()];
+      if (!result.hasNextPage) break;
+    }
+    if (allItems.length > page * 15) setSearchParams({ page: String(page + 1) });
+  };
+
   return <div className="p-4 sm:p-6 space-y-6">
     <Link to="/music?source=wavlake" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Wavlake catalog</Link>
-    <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Wavlake catalog</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === 'artist' ? 'Artists featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.' : 'Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.'}</p></header>
-    {rankings.isLoading && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
-    {rankings.isError && <p role="alert" className="text-sm text-destructive">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>}
-    {!rankings.isLoading && !rankings.isError && items.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No {type}s are available in the current Wavlake top tracks.</div>}
-    {visibleItems.length > 0 && <><CatalogLinks items={visibleItems} /><nav aria-label="Rankings pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-      <Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}><ChevronLeft className="size-4" /> Previous</Button>
-      <p aria-live="polite" className="text-sm text-muted-foreground">Page {page} of {pageCount} <span className="hidden sm:inline">· {items.length} {type === 'artist' ? 'artists' : 'albums'}</span></p>
-      <Button type="button" variant="outline" onClick={() => setSearchParams({ page: String(page + 1) })} disabled={page >= pageCount}>Next <ChevronRight className="size-4" /></Button>
-    </nav></>}
+    <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Wavlake catalog</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">Browse {kindLabel} found across Wavlake’s track catalog, with the most recently released tracks first. This is a catalog browse, not a top-tracks ranking.</p></header>
+    {catalog.isLoading && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
+    {catalog.isError && <p role="alert" className="text-sm text-destructive">Wavlake catalog is unavailable right now. <button className="underline" onClick={() => void catalog.refetch()}>Try again</button></p>}
+    {!catalog.isLoading && !catalog.isError && items.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No {kindLabel} were found in the Wavlake catalog.</div>}
+    {visibleItems.length > 0 && <><ReleaseLinks items={visibleItems} />
+      {catalog.isFetchingNextPage && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" aria-label={`Loading more ${kindLabel}`}>{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
+      <nav aria-label="Catalog pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}><ChevronLeft className="size-4" /> Previous</Button>
+        <p aria-live="polite" className="text-sm text-muted-foreground">Page {page} <span className="hidden sm:inline">· {items.length} {kindLabel} loaded</span></p>
+        <Button type="button" variant="outline" onClick={() => void goToNextPage()} disabled={page >= pageCount && (!catalog.hasNextPage || catalog.isFetchingNextPage)}>{catalog.isFetchingNextPage ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
+      </nav>
+    </>}
   </div>;
 }
 
