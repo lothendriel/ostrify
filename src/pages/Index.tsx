@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { Shelf } from "@/components/music/Shelf";
+import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 
 function shuffled<T>(items: readonly T[]): T[] {
@@ -63,7 +64,7 @@ const Index = () => {
         </div>
       </section>
 
-      <Link to="/music" className="block rounded-lg bg-gradient-to-r from-emerald-900 to-teal-950 p-5 hover:brightness-110 transition-colors"><span className="block text-xs uppercase tracking-wider text-emerald-200 font-semibold">More music to discover</span><span className="block text-xl font-bold mt-1">Explore Nostr & Wavlake music →</span><span className="block text-sm text-emerald-100 mt-1">Find relay-published tracks or browse artists, albums, and more.</span></Link>
+      <MusicNewsSection />
       <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
 
       <Shelf title="Podcasts" subtitle="Nostr episodes and Fountain-linked shows" tracks={shuffledPodcasts} isLoading={podcastsLoading} />
