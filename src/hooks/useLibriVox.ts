@@ -72,10 +72,11 @@ function makeBook(identifier: string, title: string, author: string, language?: 
   };
 }
 
-export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author') {
+export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author', enabled = true) {
   const normalizedQuery = query.trim();
   return useInfiniteQuery({
     queryKey: ['librivox-catalog', normalizedQuery, searchBy],
+    enabled,
     initialPageParam: 1,
     retry: 1,
     staleTime: 5 * 60 * 1000,

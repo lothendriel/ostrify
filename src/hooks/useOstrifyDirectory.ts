@@ -75,13 +75,13 @@ export function useDirectoryEnrollment() {
 export interface DirectoryPerson { pubkey: string; name: string; picture?: string }
 
 /** This is public discovery, not a trusted-owner lookup: each listing speaks only for its own author. */
-export function useOstrifyDirectory() {
+export function useOstrifyDirectory(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const relays = [...new Set(config.relayMetadata.relays.filter(r => r.read).map(r => r.url))].sort();
   const relayKey = relays.join('|');
   const query = useQuery({
-    queryKey: ['ostrify-directory', relayKey], enabled: !!relayKey, retry: false,
+    queryKey: ['ostrify-directory', relayKey], enabled: enabled && !!relayKey, retry: false,
     queryFn: async ({ signal }): Promise<DirectoryPerson[]> => {
       // Query active AND withdrawn versions under the same indexed topic; querying
       // active only would allow an old opt-in to survive a newer withdrawal.

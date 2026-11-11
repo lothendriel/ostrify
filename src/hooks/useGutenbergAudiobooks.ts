@@ -74,10 +74,11 @@ function makeAudiobook(identifier: string, title: string, creator: string, langu
   };
 }
 
-export function useGutenbergAudiobookCatalog(query: string, searchBy: 'title' | 'author') {
+export function useGutenbergAudiobookCatalog(query: string, searchBy: 'title' | 'author', enabled = true) {
   const normalizedQuery = query.trim();
   return useInfiniteQuery({
     queryKey: ['gutenberg-audiobook-catalog', normalizedQuery, searchBy],
+    enabled,
     initialPageParam: 1,
     staleTime: 5 * 60 * 1000,
     retry: 1,

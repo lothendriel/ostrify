@@ -887,3 +887,54 @@ export function usePodcastIndexSearch(term: string) {
     },
   });
 }
+
+export function usePodcastIndexEpisodeSearch(term: string) {
+  const normalized = term.trim();
+  return useQuery({
+    queryKey: ["podcast-index", "episode-search", normalized],
+    enabled: normalized.length >= 2,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }): Promise<Track[]> => {
+      const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/search/byterm?q=${encodeURIComponent(normalized)}`, { signal });
+      if (!response.ok) throw podcastIndexError(response, "Searching podcast episodes");
+      const data: unknown = await response.json();
+      if (!isRecord(data) || !Array.isArray(data.feeds)) throw new Error("Invalid Podcast Index search response");
+      const feeds = data.feeds.filter((value): value is Record<string, unknown> => {
+        if (!isRecord(value) || typeof value.id !== 'number' || !Number.isInteger(value.id)) return false;
+        const title = text(value.title) ?? '';
+        const publisher = text(value.author) ?? text(value.ownerName) ?? '';
+        return normalized.toLocaleLowerCase().split(/\s+/).every(part => `${title} ${publisher}`.toLocaleLowerCase().includes(part));
+      }).slice(0, 3);
+      const episodeLists = await Promise.all(feeds.map(async feed => {
+        const feedId = feed.id as number;
+        const episodesResponse = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedid?id=${feedId}`, { signal });
+        if (!episodesResponse.ok) throw podcastIndexError(episodesResponse, 'Loading podcast search matches');
+        const episodesData: unknown = await episodesResponse.json();
+        if (!isRecord(episodesData) || !Array.isArray(episodesData.items)) return [] as Track[];
+        return episodesData.items.flatMap((value): Track[] => {
+          if (!isRecord(value)) return [];
+          const enclosure = sanitizeUrl(text(value.enclosureUrl));
+          const title = text(value.title);
+          const id = typeof value.id === "number" && Number.isInteger(value.id) ? value.id : undefined;
+          if (!enclosure || !title || !id || !`${title} ${text(value.feedTitle) ?? ''}`.toLocaleLowerCase().includes(normalized.toLocaleLowerCase())) return [];
+          return [{
+            id: `podcast-index:episode:id:${id}`,
+            source: "podcast-index",
+            podcastIndexEpisodeId: id,
+            showId: `podcast-index:${feedId}`,
+            url: enclosure,
+            title,
+            artist: text(value.feedTitle) ?? text(feed.title),
+            image: sanitizeUrl(text(value.image) ?? text(value.feedImage) ?? text(feed.image)),
+            pubkey: "",
+            duration: typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0 ? value.duration : undefined,
+            kind: "podcast",
+            topics: ["podcast"],
+            createdAt: typeof value.datePublished === "number" && Number.isFinite(value.datePublished) ? value.datePublished : 0,
+          }];
+        });
+      }));
+      return episodeLists.flat().sort((a, b) => b.createdAt - a.createdAt);
+    },
+  });
+}

@@ -148,7 +148,7 @@ function getServerSnapshot(): AudiobookLibraryState {
   return EMPTY_LIBRARY;
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribeAudiobookLibrary(listener: () => void): () => void {
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
     const key = activeOwner ? accountStorageKey(activeOwner) : STORAGE_KEY;
@@ -191,7 +191,7 @@ export function useAudiobookLibrary() {
   useEffect(() => {
     activateAudiobookLibraryOwner(user?.pubkey);
   }, [user?.pubkey]);
-  const library = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const library = useSyncExternalStore(subscribeAudiobookLibrary, getSnapshot, getServerSnapshot);
 
   function toggleFavorite(book: SavedAudiobook): void {
     const key = libraryKey(book);
