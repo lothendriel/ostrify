@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import type { NostrFilter } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { isOstrifyMusicPlaylist } from '@/lib/musicPlaylists';
-import { parsePublicMusicPlaylist, type PublicMusicPlaylist } from '@/lib/publicMusicPlaylists';
+import { clearPlaylistVisibilityOverride, parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, type PublicMusicPlaylist, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
 
-interface PlaylistDiscovery {
-  playlists: PublicMusicPlaylist[];
-  failedRelayCount: number;
+function isNewerPlaylistEvent(candidate: NostrEvent, current: NostrEvent): boolean {
+  return candidate.created_at > current.created_at ||
+    (candidate.created_at === current.created_at && candidate.id < current.id);
 }
 
 function readLocalDeletion(pubkey: string, id: string): number | undefined {
@@ -34,7 +34,7 @@ export function usePublicMusicPlaylists(enabled = true) {
     enabled: enabled && relays.length > 0,
     staleTime: 60_000,
     refetchOnWindowFocus: true,
-    queryFn: async ({ signal }): Promise<PlaylistDiscovery> => {
+    queryFn: async ({ signal }): Promise<PublicMusicPlaylistDiscovery> => {
       const filters: NostrFilter[] = [
         { kinds: [30003], limit: 200 },
         ...(user ? [{ kinds: [5], authors: [user.pubkey], limit: 200 }] : []),
@@ -46,7 +46,16 @@ export function usePublicMusicPlaylists(enabled = true) {
       const failedRelayCount = results.filter(result => result.status === 'rejected').length;
       if (results.every(result => result.status === 'rejected')) throw new Error('Could not query any read relays');
       const byAddress = new Map<string, PublicMusicPlaylist>();
-      const events = [...new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value : []).map(event => [event.id, event])).values()];
+      const eventMap = new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value : []).map(event => [event.id, event]));
+      const visibilityOverrides = user ? readPlaylistVisibilityOverrides(user.pubkey) : {};
+      for (const [coordinate, override] of Object.entries(visibilityOverrides)) {
+        const [kind, pubkey, id] = coordinate.split(':');
+        const eventId = override.event.tags.find(([name]) => name === 'd')?.[1];
+        if (kind === '30003' && pubkey === user?.pubkey && id === eventId && ![...eventMap.values()].some(event => event.pubkey === pubkey && event.kind === 30003 && event.tags.some(([name, value]) => name === 'd' && value === id))) {
+          eventMap.set(override.event.id, override.event);
+        }
+      }
+      const events = [...eventMap.values()];
       const deletionTimes = new Map<string, number>();
       if (user) {
         const knownCoordinates = [...new Set(events.flatMap(event => {
@@ -73,16 +82,32 @@ export function usePublicMusicPlaylists(enabled = true) {
           }
         }
       }
-      const discoveryEvents = events.filter(event => event.kind === 30003 && isOstrifyMusicPlaylist(event));
-      for (const event of discoveryEvents) {
-        const playlist = parsePublicMusicPlaylist(event);
+      const latestByAddress = new Map<string, NostrEvent>();
+      for (const event of events) {
+        if (event.kind !== 30003 || !isOstrifyMusicPlaylist(event)) continue;
+        const id = event.tags.find(([name]) => name === 'd')?.[1];
+        if (!id) continue;
+        const coordinate = `30003:${event.pubkey}:${id}`;
+        if (event.pubkey === user?.pubkey && visibilityOverrides[coordinate] && !eventMap.has(visibilityOverrides[coordinate].event.id)) {
+          latestByAddress.set(coordinate, visibilityOverrides[coordinate].event);
+          continue;
+        }
+        const previous = latestByAddress.get(coordinate);
+        if (!previous || isNewerPlaylistEvent(event, previous)) latestByAddress.set(coordinate, event);
+      }
+      for (const [coordinate, relayEvent] of latestByAddress) {
+        const id = relayEvent.tags.find(([name]) => name === 'd')?.[1];
+        if (!id) continue;
+        const override = relayEvent.pubkey === user?.pubkey ? visibilityOverrides[coordinate] : undefined;
+        const effectiveEvent = override && isNewerPlaylistEvent(override.event, relayEvent) ? override.event : relayEvent;
+        if (user && override && isNewerPlaylistEvent(relayEvent, override.event)) clearPlaylistVisibilityOverride(user.pubkey, id);
+        const playlist = parsePublicMusicPlaylist(effectiveEvent);
         if (!playlist || playlist.trackIds.length === 0) continue;
-        const coordinate = `30003:${playlist.pubkey}:${playlist.id}`;
         const deletedAt = Math.max(deletionTimes.get(coordinate) ?? 0, playlist.pubkey === user?.pubkey ? readLocalDeletion(user.pubkey, playlist.id) ?? 0 : 0);
         if (deletedAt > 0 && playlist.createdAt <= deletedAt) continue;
         const key = `${playlist.pubkey}:${playlist.id}`;
         const existing = byAddress.get(key);
-        if (!existing || playlist.createdAt > existing.createdAt) byAddress.set(key, playlist);
+        if (!existing || isNewerPlaylistEvent(playlist.event, existing.event)) byAddress.set(key, playlist);
       }
       return { playlists: [...byAddress.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, 100), failedRelayCount };
     },

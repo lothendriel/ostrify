@@ -9,6 +9,7 @@ import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTra
 import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { useToast } from './useToast';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, rememberPlaylistVisibility, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
 
 export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
@@ -230,14 +231,34 @@ export function usePlaylistActions() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["playlists"] });
 
-  const publishPlaylist = async (template: { kind: number; content: string; tags: string[][] }) => {
+  const publishPlaylist = async (template: { kind: number; content: string; tags: string[][] }, previousCreatedAt = 0) => {
     if (!user) throw new Error('User is not logged in');
-    const event = await publish(template);
+    const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join('|');
+    const cacheKey = ['playlists', user.pubkey, readRelayKey];
+    const cachedPlaylists = queryClient.getQueryData<Playlist[]>(cacheKey);
+    const id = template.tags.find(([name]) => name === 'd')?.[1];
+    const previousPlaylist = id ? cachedPlaylists?.find(playlist => playlist.id === id) : undefined;
+    const visibilityOverride = id ? readPlaylistVisibilityOverrides(user.pubkey)[`30003:${user.pubkey}:${id}`] : undefined;
+    const previousTimestamp = Math.max(previousCreatedAt, previousPlaylist?.event.created_at ?? 0, visibilityOverride?.event.created_at ?? 0);
+    const event = await publish({ ...template, created_at: Math.max(Math.floor(Date.now() / 1000), previousTimestamp + 1) });
+    await queryClient.cancelQueries({ queryKey: ['ostrify-public-playlists'] });
     const playlist = parsePlaylist(event);
-    if (playlist) queryClient.setQueriesData<Playlist[]>(
-      { queryKey: ['playlists'] },
-      current => current ? [playlist, ...current.filter(item => item.id !== playlist.id)] : current,
-    );
+    if (playlist) {
+      queryClient.setQueriesData<Playlist[]>(
+        { queryKey: ['playlists'] },
+        current => current ? [playlist, ...current.filter(item => item.id !== playlist.id)] : current,
+      );
+      if (!playlist.isLiked) rememberPlaylistVisibility(user.pubkey, playlist.id, { isListed: playlist.isListed, event });
+      const discoveryKey = ['ostrify-public-playlists', readRelayKey, user.pubkey];
+      queryClient.setQueryData<PublicMusicPlaylistDiscovery>(discoveryKey, current => {
+        const discovered = parsePublicMusicPlaylist(event);
+        const key = `${user.pubkey}:${playlist.id}`;
+        const playlists = (current?.playlists ?? []).filter(item => `${item.pubkey}:${item.id}` !== key);
+        if (discovered) playlists.unshift(discovered);
+        playlists.sort((left, right) => right.createdAt - left.createdAt);
+        return { playlists: playlists.slice(0, 100), failedRelayCount: current?.failedRelayCount ?? 0 };
+      });
+    }
     return event;
   };
 
@@ -284,7 +305,7 @@ export function usePlaylistActions() {
       };
       const event = buildPlaylistEvent(playlist);
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event);
+      await publishPlaylist(event, existing.event.created_at);
       void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
     },
     onSuccess: invalidate,
@@ -307,7 +328,7 @@ export function usePlaylistActions() {
       };
       const event = buildPlaylistEvent(playlist);
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event);
+      await publishPlaylist(event, existing.event.created_at);
       void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
     },
     onSuccess: invalidate,
@@ -328,7 +349,7 @@ export function usePlaylistActions() {
       };
       const event = buildPlaylistEvent(playlist);
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event);
+      await publishPlaylist(event, existing.event.created_at);
     },
     onSuccess: invalidate,
   });
@@ -355,6 +376,7 @@ export function usePlaylistActions() {
           event.tags = event.tags.filter(([name, value]) => name !== 't' || value !== MUSIC_PLAYLIST_TOPIC);
           return event;
         })(),
+        existing?.event.created_at ?? 0,
       );
     },
     onSuccess: invalidate,

@@ -5,6 +5,62 @@ import { wavlakeTrackId } from '@/hooks/useWavlake';
 import { fountainTrackId, podcastIndexTrackId } from '@/hooks/usePodcasts';
 import { sanitizeUrl } from '@/lib/sanitize';
 
+export interface PlaylistVisibilityOverride {
+  isListed: boolean;
+  event: NostrEvent;
+}
+
+export interface PublicMusicPlaylistDiscovery {
+  playlists: PublicMusicPlaylist[];
+  failedRelayCount: number;
+}
+
+const VISIBILITY_OVERRIDE_STORAGE_PREFIX = 'nostr:playlist-visibility:v1:';
+
+export function readPlaylistVisibilityOverrides(pubkey: string): Record<string, PlaylistVisibilityOverride> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(`${VISIBILITY_OVERRIDE_STORAGE_PREFIX}${pubkey}`) ?? '{}');
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, PlaylistVisibilityOverride] => {
+      const value: unknown = entry[1];
+      return !!value && typeof value === 'object' && !Array.isArray(value) &&
+        typeof (value as PlaylistVisibilityOverride).isListed === 'boolean' &&
+        !!(value as PlaylistVisibilityOverride).event && typeof (value as PlaylistVisibilityOverride).event === 'object' &&
+        (value as PlaylistVisibilityOverride).event.kind === 30003 &&
+        (value as PlaylistVisibilityOverride).event.pubkey === pubkey &&
+        typeof (value as PlaylistVisibilityOverride).event.created_at === 'number' &&
+        Number.isSafeInteger((value as PlaylistVisibilityOverride).event.created_at) &&
+        /^[0-9a-f]{64}$/i.test((value as PlaylistVisibilityOverride).event.id) &&
+        Array.isArray((value as PlaylistVisibilityOverride).event.tags) &&
+        (value as PlaylistVisibilityOverride).event.tags.every(tag => Array.isArray(tag) && tag.every(part => typeof part === 'string')) &&
+        typeof (value as PlaylistVisibilityOverride).event.content === 'string' &&
+        typeof (value as PlaylistVisibilityOverride).event.sig === 'string';
+    }));
+  } catch {
+    return {};
+  }
+}
+
+export function rememberPlaylistVisibility(pubkey: string, id: string, override: PlaylistVisibilityOverride): void {
+  const overrides = readPlaylistVisibilityOverrides(pubkey);
+  overrides[`30003:${pubkey}:${id}`] = override;
+  try {
+    localStorage.setItem(`${VISIBILITY_OVERRIDE_STORAGE_PREFIX}${pubkey}`, JSON.stringify(overrides));
+  } catch {
+    // The relay-published playlist event remains authoritative when local storage is unavailable.
+  }
+}
+
+export function clearPlaylistVisibilityOverride(pubkey: string, id: string): void {
+  const overrides = readPlaylistVisibilityOverrides(pubkey);
+  delete overrides[`30003:${pubkey}:${id}`];
+  try {
+    localStorage.setItem(`${VISIBILITY_OVERRIDE_STORAGE_PREFIX}${pubkey}`, JSON.stringify(overrides));
+  } catch {
+    // Best-effort cleanup only.
+  }
+}
+
 export interface PublicMusicPlaylist {
   id: string;
   pubkey: string;
