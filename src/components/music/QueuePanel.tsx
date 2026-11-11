@@ -51,7 +51,7 @@ export function QueuePanel() {
         <TabsContent value="history" className="min-h-0 flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="space-y-2 p-4">
-              {player.history.length ? player.history.map((track, index) => <QueueTrack key={`${track.id}-${index}`} track={track} active={current?.id === track.id} />) : <div className="rounded-lg border border-dashed p-8 text-center"><Clock3 className="mx-auto mb-3 size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">Tracks you start playing will appear here.</p></div>}
+              {player.history.length ? player.history.map((track, index) => <QueueTrack key={`${track.id}-${index}`} track={track} active={current?.id === track.id} onPlay={() => player.playQueue([track])} />) : <div className="rounded-lg border border-dashed p-8 text-center"><Clock3 className="mx-auto mb-3 size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">Tracks you start playing will appear here.</p></div>}
             </div>
           </ScrollArea>
         </TabsContent>
@@ -76,9 +76,10 @@ function SheetTriggerButton({ queueLength }: { queueLength: number }) {
   </SheetTrigger>;
 }
 
-function QueueTrack({ track, active = false, onRemove, onMoveUp, onMoveDown }: {
+function QueueTrack({ track, active = false, onPlay, onRemove, onMoveUp, onMoveDown }: {
   track: Track;
   active?: boolean;
+  onPlay?: () => void;
   onRemove?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -86,7 +87,7 @@ function QueueTrack({ track, active = false, onRemove, onMoveUp, onMoveDown }: {
   return <div className={`grid w-full min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg p-2 ${active ? 'bg-primary/10' : 'hover:bg-accent/40'}`}>
     <TrackArtwork track={track} className="size-11" />
     <div className="min-w-0 overflow-hidden">
-      <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>
+      {onPlay ? <button type="button" className={`block w-full truncate text-left text-sm font-medium hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${active ? 'text-primary' : ''}`} title={`Play ${track.title}`} onClick={onPlay}>{track.title}</button> : <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>}
       <p className="truncate text-xs text-muted-foreground"><ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist ?? track.album ?? (track.kind === 'audiobook' ? 'Audiobook' : track.kind === 'podcast' ? 'Podcast episode' : 'Unknown artist')} />{track.duration ? ` · ${formatDuration(track.duration)}` : ''}</p>
     </div>
     <div className="flex w-max shrink-0 items-center justify-self-end">
