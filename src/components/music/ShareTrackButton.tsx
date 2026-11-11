@@ -15,15 +15,11 @@ function defaultMessage(track: Track): string {
 
 function trackTags(track: Track): string[][] {
   if (track.event) {
-    const tags: string[][] = [
-      ['e', track.event.id],
-      ['p', track.event.pubkey],
-    ];
     const identifier = track.event.tags.find(([name]) => name === 'd')?.[1];
     if (track.event.kind >= 30000 && track.event.kind < 40000 && identifier) {
-      tags.push(['a', `${track.event.kind}:${track.event.pubkey}:${identifier}`]);
+      return [['q', `${track.event.kind}:${track.event.pubkey}:${identifier}`, '', track.event.pubkey]];
     }
-    return tags;
+    return [['q', track.event.id, '', track.event.pubkey]];
   }
 
   const url = sanitizeUrl(track.url);
