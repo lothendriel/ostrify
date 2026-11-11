@@ -5,6 +5,7 @@ import { AppLayout } from "./components/music/AppLayout";
 import { ListeningStatusSync } from "./components/music/ListeningStatusSync";
 
 import Index from "./pages/Index";
+import MusicNewsPage from "./pages/MusicNewsPage";
 import SearchPage from "./pages/SearchPage";
 import CategoryPage from "./pages/CategoryPage";
 import PlaylistPage from "./pages/PlaylistPage";
@@ -36,6 +37,7 @@ export function AppRouter() {
         <AppLayout>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/music-news" element={<MusicNewsPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/category/:id" element={<CategoryPage />} />
             <Route path="/playlist/:id" element={<PlaylistPage />} />
