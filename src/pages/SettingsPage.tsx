@@ -84,8 +84,26 @@ const SettingsPage = () => {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Listening activity</CardTitle><CardDescription>Choose whether your current track is public on Nostr. Turning this off asks Ostrify to publish an empty status immediately and stops future sharing. This preference is saved on this device; other relays may retain older copies.</CardDescription></CardHeader>
-        <CardContent className="flex items-center gap-3"><Switch id="listening-sharing" checked={sharing.enabled} disabled={!user} onCheckedChange={value => { try { sharing.setEnabled(value); toast({ title: value ? 'Listening activity is public' : 'Listening activity is private', description: value ? 'Your music status will be shared publicly.' : 'Ostrify clears your current status where possible.' }); } catch (error) { toast({ title: 'Could not update listening privacy', description: error instanceof Error ? error.message : 'Try again.', variant: 'destructive' }); } }} /><label htmlFor="listening-sharing" className="text-sm font-medium">{sharing.enabled ? 'Public listening activity' : 'Keep listening activity private'}</label>{!user && <span className="text-sm text-muted-foreground">Log in to enable</span>}</CardContent>
+        <CardHeader>
+          <CardTitle>Listening activity</CardTitle>
+          <CardDescription id="listening-sharing-description">When sharing is on, Ostrify publishes the name of your current track as a public Nostr status that other people can see. When off, Ostrify stops sharing and asks relays to clear your current status. This preference is saved on this device, and relays or other clients may retain older copies.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Switch
+              id="listening-sharing"
+              aria-describedby="listening-sharing-description"
+              checked={sharing.enabled}
+              disabled={!user}
+              className={sharing.enabled ? 'data-[state=checked]:bg-emerald-600' : 'data-[state=unchecked]:bg-destructive'}
+              onCheckedChange={value => { try { sharing.setEnabled(value); toast({ title: value ? 'Listening activity is public' : 'Listening activity is private', description: value ? 'Your current track will be shared publicly.' : 'Ostrify asks relays to clear your current status where possible.' }); } catch (error) { toast({ title: 'Could not update listening privacy', description: error instanceof Error ? error.message : 'Try again.', variant: 'destructive' }); } }}
+            />
+            <label htmlFor="listening-sharing" className={`text-sm font-semibold ${sharing.enabled ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'}`}>
+              {sharing.enabled ? 'Public — share my current track' : 'Private — do not share my listening activity'}
+            </label>
+          </div>
+          {!user && <p className="text-sm text-muted-foreground">Log in to change this setting.</p>}
+        </CardContent>
       </Card>
 
       <Card>
