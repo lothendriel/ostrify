@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Bell, UserRoundPlus } from 'lucide-react';
+import { Bell, Trash2, UserRoundPlus } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -184,6 +184,13 @@ export function NotificationsBell() {
     setAccountStore({ pubkey: user.pubkey, store: next });
   };
 
+  const clearNotifications = () => {
+    if (!user || store.notifications.length === 0) return;
+    const next = { ...store, notifications: [] };
+    writeStore(user.pubkey, next);
+    setAccountStore({ pubkey: user.pubkey, store: next });
+  };
+
   return <Sheet open={open} onOpenChange={setOpen}>
     <SheetTrigger asChild>
       <Button
@@ -202,7 +209,10 @@ export function NotificationsBell() {
       <SheetHeader className="border-b border-border/70 pr-12">
         <div className="flex items-center justify-between gap-3">
           <SheetTitle className="flex items-center gap-2"><Bell className="size-5 text-primary" /> Ostrify notifications</SheetTitle>
-          {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" onClick={markAllRead}>Mark all read</Button>}
+          <div className="flex shrink-0 items-center gap-1">
+            {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" onClick={markAllRead}>Mark all read</Button>}
+            {store.notifications.length > 0 && <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={clearNotifications}><Trash2 className="mr-1 size-4" /> Clear</Button>}
+          </div>
         </div>
         <SheetDescription>Updates from Ostrify, saved only on this device.</SheetDescription>
       </SheetHeader>
