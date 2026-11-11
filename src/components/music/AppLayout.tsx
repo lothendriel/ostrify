@@ -55,8 +55,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <GlobalSearch />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
-              <NotificationsBell />
               <DeveloperZapButton />
+              <NotificationsBell />
               <FriendsActivitySheet />
               <LoginArea className="max-w-60" />
             </div>
