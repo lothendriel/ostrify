@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { Search as SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,12 @@ import type { Track } from "@/lib/music";
 
 const SearchPage = () => {
   useSeoMeta({ title: "Search — Ostrify" });
-  const [query, setQuery] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get('q') ?? "");
+  useEffect(() => {
+    const value = searchParams.get('q') ?? '';
+    if (value !== query) setQuery(value);
+  }, [searchParams, query]);
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 200 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(60);
 
@@ -20,13 +25,9 @@ const SearchPage = () => {
   const results = useMemo(() => {
     if (!q) return [] as Track[];
     const all = [...tracks, ...podcasts];
-    return all.filter((t) => {
-      return (
-        t.title.toLowerCase().includes(q) ||
-        (t.artist?.toLowerCase().includes(q) ?? false) ||
-        t.topics.some((topic) => topic.includes(q))
-      );
-    });
+    return all.filter((t) =>
+      q.split(/\s+/).every(term => `${t.title} ${t.artist ?? ''} ${t.album ?? ''} ${t.topics.join(' ')}`.toLowerCase().includes(term)),
+    );
   }, [q, tracks, podcasts]);
 
   return (
@@ -35,7 +36,7 @@ const SearchPage = () => {
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
         <Input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { setQuery(e.target.value); setSearchParams(e.target.value.trim() ? { q: e.target.value } : {}, { replace: true }); }}
           placeholder="What do you want to listen to?"
           className="pl-11 h-12 text-base rounded-full bg-secondary border-transparent focus-visible:border-border"
           aria-label="Search"

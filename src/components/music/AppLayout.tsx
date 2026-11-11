@@ -8,6 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
 import { FriendsActivitySheet } from "./FriendsActivitySheet";
 import { NotificationsBell } from "./NotificationsBell";
+import { GlobalSearch } from "./GlobalSearch";
 import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
 
 function AudiobookLibrarySyncService() {
@@ -32,7 +33,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex-1 flex flex-col min-w-0 bg-card md:rounded-lg overflow-hidden">
           {/* Top bar */}
           <header className="h-14 shrink-0 flex items-center justify-between gap-2 px-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2">
               {/* Mobile menu */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
@@ -49,7 +50,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </SheetContent>
               </Sheet>
             </div>
-            <div className="ml-auto flex items-center gap-1">
+            <div className="flex min-w-0 flex-1 justify-center px-1 sm:px-4">
+              <GlobalSearch />
+            </div>
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               <NotificationsBell />
               <FriendsActivitySheet />
               <LoginArea className="max-w-60" />
