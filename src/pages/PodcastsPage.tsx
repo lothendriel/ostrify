@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { Mic, Radio, Globe2, ChevronRight, Play, Search, ArrowLeft, Heart } from "lucide-react";
 import { usePodcastEpisodes, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
@@ -34,10 +35,22 @@ const PodcastsPage = () => {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedShow, setSelectedShow] = useState<PodcastShow | null>(null);
   const podcastSearch = usePodcastIndexSearch(debouncedSearch);
+  const selectedIndexShowId = searchParams.get("show");
+  const cachedPodcastSearches = useQueryClient();
+  const selectedIndexShow = useMemo(() => {
+    if (!selectedIndexShowId) return null;
+    const cachedShow = cachedPodcastSearches.getQueryCache().getAll()
+      .filter(entry => entry.queryKey[0] === "podcast-index" && entry.queryKey[1] === "search")
+      .flatMap(entry => Array.isArray(entry.state.data) ? entry.state.data.filter((show): show is PodcastShow => !!show && typeof show === "object" && "id" in show) : [])
+      .find(show => show.id === selectedIndexShowId);
+    if (cachedShow) return cachedShow;
+    const feedId = /^podcast-index:(\d+)$/.exec(selectedIndexShowId)?.[1];
+    return feedId ? { id: selectedIndexShowId, feedId: Number(feedId), title: 'Podcast show', source: 'podcast-index' as const } : null;
+  }, [cachedPodcastSearches, selectedIndexShowId]);
   const podcastFavorites = usePodcastFavorites();
   const podcastFavoriteActions = usePodcastFavoriteActions();
   const favoriteShowSelection = searchParams.get("show") ? podcastFavorites.data.find(item => item.id === searchParams.get("show") && !item.episode) : undefined;
-  const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
+  const activeShow = selectedShow ?? selectedIndexShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
   const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const fountainTracks = (episodes.data ?? []).filter((track) => track.source === "fountain");

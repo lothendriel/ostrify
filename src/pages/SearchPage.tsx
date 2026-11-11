@@ -60,7 +60,8 @@ function PersonResult({ person }: { person: DirectoryPerson }) {
 }
 
 function PodcastShowResult({ show }: { show: PodcastShow }) {
-  return <ResultCard title={show.title} subtitle={show.publisher ? `${show.publisher} · Podcast show` : `${show.source} podcast show`} image={show.image} href="/podcasts?source=directory" icon={Mic} />;
+  const params = new URLSearchParams({ source: 'directory', show: show.id });
+  return <ResultCard title={show.title} subtitle={show.publisher ? `${show.publisher} · Podcast show` : `${show.source} podcast show`} image={show.image} href={`/podcasts?${params.toString()}`} icon={Mic} />;
 }
 
 const SearchPage = () => {
