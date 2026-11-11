@@ -18,12 +18,6 @@ function defaultMessage(track: Track): string {
   shareUrl.searchParams.set('url', audioUrl);
   shareUrl.searchParams.set('title', track.title);
   shareUrl.searchParams.set('kind', track.kind);
-  if (track.artist) shareUrl.searchParams.set('artist', track.artist);
-  if (track.image) {
-    const imageUrl = sanitizeUrl(track.image);
-    if (imageUrl) shareUrl.searchParams.set('image', imageUrl);
-  }
-  if (track.duration && Number.isFinite(track.duration)) shareUrl.searchParams.set('duration', String(track.duration));
 
   return `${message}\n\n${shareUrl.toString()}`;
 }
@@ -87,14 +81,14 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
       <Share2 className="size-4" />
     </Button>
     <Dialog open={open} onOpenChange={value => { if (!isPending) setOpen(value); }}>
-      <DialogContent>
+      <DialogContent className="min-w-0 overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Share to Nostr</DialogTitle>
           <DialogDescription>
             Edit your post before sharing{sharedTrack ? ` “${sharedTrack.title}”` : ''} with your followers.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={share} className="space-y-4">
+        <form onSubmit={share} className="min-w-0 space-y-4">
           <Textarea
             autoFocus
             value={message}
@@ -103,6 +97,8 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
             placeholder="Write a message about what you’re listening to…"
             maxLength={5000}
             rows={5}
+            wrap="soft"
+            className="block h-36 max-h-48 min-w-0 max-w-full resize-y overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
             disabled={isPending}
           />
           {!user && <p role="status" className="text-sm text-muted-foreground">Sign in with Nostr to publish this post.</p>}
