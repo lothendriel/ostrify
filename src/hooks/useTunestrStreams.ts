@@ -1,5 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
+import type { NostrEvent } from '@nostrify/nostrify';
+import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
@@ -10,7 +12,7 @@ const STREAM_PUBKEYS = [TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY];
 const MUSIC_TAGS = ['music', 'Music', 'MUSIC'];
 // TuneStr's own profile advertises Lightning Relay and nostr.land; Fountain is
 // also a default stream relay in TuneStr's upstream client.
-const TUNESTR_RELAYS = [
+export const TUNESTR_RELAYS = [
   'wss://relay.fountain.fm/',
   'wss://lightningrelay.com/',
   'wss://nostr.land/',
@@ -31,6 +33,9 @@ export interface TunestrStream {
   createdAt: number;
   status: string;
   isLive: boolean;
+  format: 'nip53' | 'n94';
+  event?: NostrEvent;
+  variant?: string;
   track: Track;
 }
 
@@ -49,7 +54,62 @@ function tagValue(event: { tags: string[][] }, name: string): string | undefined
   return event.tags.find(([key]) => key === name)?.[1];
 }
 
-function parseStream(event: { id: string; pubkey: string; created_at: number; kind: number; content: string; tags: string[][] }): TunestrStream | null {
+function parseN94Stream(event: NostrEvent): TunestrStream | null {
+  if (event.kind !== 1053) return null;
+  const hashtags = event.tags.flatMap(([name, value]) => name === 't' && value ? [value.toLowerCase()] : []);
+  const isTuneStr = STREAM_PUBKEYS.includes(event.pubkey) || event.tags.some(([name, value]) => name === 'p' && STREAM_PUBKEYS.includes(value ?? ''));
+  if (!hashtags.includes('music') && !isTuneStr) return null;
+
+  const title = tagValue(event, 'title')?.trim();
+  if (!title) return null;
+  const variants = event.tags.flatMap(([name, ...parts]) => {
+    if (name !== 'variant') return [];
+    const values = parts.flatMap(part => {
+      const separator = part.indexOf(' ');
+      return separator > 0 ? [[part.slice(0, separator), part.slice(separator + 1)]] : [];
+    });
+    const mime = values.find(([key]) => key === 'm')?.[1]?.toLowerCase();
+    const variant = values.find(([key]) => key === 'd')?.[1];
+    return variant && mime === 'video/mp2t' ? [variant] : [];
+  });
+  const variant = variants[0];
+  if (!variant) return null;
+
+  const identifier = nip19.neventEncode({ id: event.id, author: event.pubkey, kind: event.kind });
+  const image = sanitizeUrl(tagValue(event, 'image'));
+  const summary = tagValue(event, 'summary');
+  const track: Track = {
+    id: `tunestr:n94:${event.id}`,
+    event,
+    source: 'tunestr',
+    url: `nostr:${identifier}`,
+    title,
+    artist: 'TuneStr live stream',
+    image,
+    mimeType: 'video/mp4',
+    pubkey: event.pubkey,
+    kind: 'music',
+    topics: hashtags,
+    createdAt: event.created_at,
+  };
+  return {
+    id: `tunestr:n94:${event.id}`,
+    title,
+    summary,
+    image,
+    url: `nostr:${identifier}`,
+    externalUrl: `https://tunestr.io/${identifier}`,
+    createdAt: event.created_at,
+    status: 'live',
+    isLive: true,
+    format: 'n94',
+    event,
+    variant,
+    track,
+  };
+}
+
+function parseStream(event: NostrEvent): TunestrStream | null {
   if (event.kind !== 30311) return null;
   const client = event.tags.find(([name]) => name === 'client')?.[1]?.toLowerCase();
   const taggedMusic = event.tags.some(([name, value]) => name === 't' && MUSIC_TAGS.includes(value));
@@ -90,7 +150,7 @@ function parseStream(event: { id: string; pubkey: string; created_at: number; ki
     topics: event.tags.filter(([name]) => name === 't').map(([, value]) => value.toLowerCase()),
     createdAt: event.created_at,
   };
-  return { id: `tunestr:${event.pubkey}:${d}`, title, summary, image, thumbnailSourceUrl, url, externalUrl: sourceUrl, createdAt: event.created_at, status, isLive, track };
+  return { id: `tunestr:${event.pubkey}:${d}`, title, summary, image, thumbnailSourceUrl, url, externalUrl: sourceUrl, createdAt: event.created_at, status, isLive, format: 'nip53', event, track };
 }
 
 export function useTunestrStreams() {
@@ -126,6 +186,7 @@ export function useTunestrStreams() {
             { kinds: [30311], authors: STREAM_PUBKEYS, limit: PAGE_SIZE, ...timeFilter },
             { kinds: [30311], '#t': MUSIC_TAGS, limit: PAGE_SIZE, ...timeFilter },
             { kinds: [30311], '#p': STREAM_PUBKEYS, limit: PAGE_SIZE, ...timeFilter },
+            { kinds: [1053], '#t': MUSIC_TAGS, limit: PAGE_SIZE, ...timeFilter },
           ];
           const events = await nostr.relay(relay).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
           return { events, ok: true };
@@ -139,9 +200,9 @@ export function useTunestrStreams() {
 
       const byAddress = new Map<string, TunestrStream>();
       for (const event of responses.flatMap(response => response.events)) {
-        const stream = parseStream(event);
+        const stream = event.kind === 1053 ? parseN94Stream(event) : parseStream(event);
         if (!stream) continue;
-        const address = `${stream.track.pubkey}:${tagValue(event, 'd')}`;
+        const address = stream.format === 'n94' ? stream.id : `${stream.track.pubkey}:${tagValue(event, 'd')}`;
         const previous = byAddress.get(address);
         if (!previous || previous.createdAt < stream.createdAt) byAddress.set(address, stream);
       }

@@ -13,6 +13,7 @@ import { useMusicDiscovery } from '@/hooks/useMusicDiscovery';
 import { useTunestrStreams, type TunestrStream } from '@/hooks/useTunestrStreams';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { N94StreamPlayer } from '@/components/music/N94StreamPlayer';
 
 function cloudflareThumbnail(url: string): string | undefined {
   try {
@@ -35,7 +36,7 @@ function TunestrStreamCard({ stream, onSelect }: { stream: TunestrStream; onSele
   const imageUrl = stream.image ? cloudflareThumbnail(stream.image) ?? stream.image : undefined;
   const thumbnail = imageUrl || cloudflareThumbnail(stream.thumbnailSourceUrl ?? stream.url);
   return <button type="button" className="group overflow-hidden rounded-xl border border-border/70 bg-secondary/30 text-left transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(stream)}>
-    <div className="relative aspect-video bg-black/80">{thumbnail && !imageFailed ? <img src={thumbnail} alt="" loading="lazy" onError={() => setImageFailed(true)} className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center text-white/70"><Video className="size-10" /></div>}<span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold text-white">{stream.isLive ? 'LIVE' : 'Recording'}</span></div>
+    <div className="relative aspect-video bg-black/80">{thumbnail && !imageFailed ? <img src={thumbnail} alt="" loading="lazy" onError={() => setImageFailed(true)} className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center text-white/70"><Video className="size-10" /></div>}<span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold text-white">{stream.isLive ? 'LIVE' : 'Recording'}{stream.format === 'n94' ? ' · N94' : ''}</span></div>
     <div className="p-4"><h3 className="truncate font-semibold">{stream.title}</h3>{stream.summary && <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{stream.summary}</p>}<span className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary"><Video className="size-4" /> Watch in Ostrify</span></div>
   </button>;
 }
@@ -93,7 +94,10 @@ function TunestrVideoDialog({ stream, open, onOpenChange, docked, onDock, onRest
         </div>
         {controls}
       </div>
-      {stream && !failed ? <iframe key={stream.id} src={stream.url} title={stream.title} allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen className="aspect-video w-full border-0 bg-black" onError={() => { if (stream) setFailedStream(stream.id); }} /> : <div className="p-6 text-sm text-muted-foreground">This stream could not be played. It may have ended or the host may not allow browser playback.</div>}
+      {stream && !failed ? stream.format === 'n94' && stream.event && stream.variant
+        ? <N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} />
+        : <iframe key={stream.id} src={stream.url} title={stream.title} allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen className="aspect-video w-full border-0 bg-black" onError={() => { if (stream) setFailedStream(stream.id); }} />
+        : <div className="p-6 text-sm text-muted-foreground">This stream could not be played. It may have ended or the host may not allow browser playback.</div>}
       {!docked && <div className="p-4 pt-0">{stream && <a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open raw stream source</a>}<span className="ml-2 text-xs text-muted-foreground">A raw .m3u8 manifest isn’t directly viewable as a web page.</span></div>}
       </div>
     </DialogContent>
