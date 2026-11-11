@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Music, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Music, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -38,16 +38,47 @@ function CatalogTracks({ artistId }: { artistId?: string }) {
 
 function FeaturedRankings() {
   const rankings = useWavlakeRankedReleases();
-  const [showAllArtists, setShowAllArtists] = useState(false);
-  const [showAllAlbums, setShowAllAlbums] = useState(false);
   if (rankings.isLoading) return <section className="space-y-3"><h2 className="text-2xl font-bold">From Wavlake’s top tracks</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div></section>;
   if (rankings.isError) return <p className="text-sm text-muted-foreground">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>;
   if (!rankings.data?.artists.length && !rankings.data?.albums.length) return <p className="text-sm text-muted-foreground">No ranked artists or albums are available right now.</p>;
-  const artists = showAllArtists ? rankings.data.artists : rankings.data.artists.slice(0, 8);
-  const albums = showAllAlbums ? rankings.data.albums : rankings.data.albums.slice(0, 8);
   return <div className="space-y-8">
-    {rankings.data.artists.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div><CatalogLinks items={artists} />{rankings.data.artists.length > 8 && <Button variant="link" className="px-0" onClick={() => setShowAllArtists(value => !value)}>{showAllArtists ? 'Show less' : 'See all'}</Button>}</section>}
-    {rankings.data.albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div><CatalogLinks items={albums} />{rankings.data.albums.length > 8 && <Button variant="link" className="px-0" onClick={() => setShowAllAlbums(value => !value)}>{showAllAlbums ? 'Show less' : 'See all'}</Button>}</section>}
+    {rankings.data.artists.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div><CatalogLinks items={rankings.data.artists.slice(0, 8)} />{rankings.data.artists.length > 8 && <Button asChild variant="link" className="px-0"><Link to="/wavlake/top-artists">See all</Link></Button>}</section>}
+    {rankings.data.albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div><CatalogLinks items={rankings.data.albums.slice(0, 8)} />{rankings.data.albums.length > 8 && <Button asChild variant="link" className="px-0"><Link to="/wavlake/top-albums">See all</Link></Button>}</section>}
+  </div>;
+}
+
+export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
+  const rankings = useWavlakeRankedReleases();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const items = rankings.data?.[type === 'artist' ? 'artists' : 'albums'] ?? [];
+  const pageCount = Math.max(1, Math.ceil(items.length / 15));
+  const parsedPage = Number(searchParams.get('page') ?? '1');
+  const page = Number.isInteger(parsedPage) ? Math.min(Math.max(parsedPage, 1), pageCount) : 1;
+  const visibleItems = items.slice((page - 1) * 15, page * 15);
+  const title = type === 'artist' ? 'Artists in top tracks' : 'Albums in top tracks';
+
+  useEffect(() => {
+    if (rankings.data && searchParams.get('page') && String(page) !== searchParams.get('page')) {
+      const next = new URLSearchParams(searchParams);
+      if (page === 1) next.delete('page');
+      else next.set('page', String(page));
+      setSearchParams(next, { replace: true });
+    }
+  }, [page, searchParams, setSearchParams]);
+
+  useSeoMeta({ title: `${title} — Wavlake catalog — Ostrify` });
+
+  return <div className="p-4 sm:p-6 space-y-6">
+    <Link to="/music?source=wavlake" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Wavlake catalog</Link>
+    <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Wavlake catalog</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === 'artist' ? 'Artists featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.' : 'Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.'}</p></header>
+    {rankings.isLoading && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
+    {rankings.isError && <p role="alert" className="text-sm text-destructive">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>}
+    {!rankings.isLoading && !rankings.isError && items.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No {type}s are available in the current Wavlake top tracks.</div>}
+    {visibleItems.length > 0 && <><CatalogLinks items={visibleItems} /><nav aria-label="Rankings pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+      <Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}><ChevronLeft className="size-4" /> Previous</Button>
+      <p aria-live="polite" className="text-sm text-muted-foreground">Page {page} of {pageCount} <span className="hidden sm:inline">· {items.length} {type === 'artist' ? 'artists' : 'albums'}</span></p>
+      <Button type="button" variant="outline" onClick={() => setSearchParams({ page: String(page + 1) })} disabled={page >= pageCount}>Next <ChevronRight className="size-4" /></Button>
+    </nav></>}
   </div>;
 }
 
