@@ -1,4 +1,7 @@
 import { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useNostr } from '@nostrify/react';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { useSeoMeta } from '@unhead/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
@@ -22,6 +25,30 @@ function PublisherCard({ pubkey, podcast }: { pubkey: string; podcast: boolean }
     </div>
     <p className="font-semibold truncate">{name}</p><p className="text-sm text-muted-foreground">{podcast ? 'Show publisher' : 'Artist · Publisher'}</p>
   </Link>;
+}
+
+type PublisherMetadata = { name?: string; displayName?: string };
+
+function parsePublisherMetadata(events: NostrEvent[]): Map<string, PublisherMetadata> {
+  const metadataByPubkey = new Map<string, PublisherMetadata>();
+  for (const event of events) {
+    try {
+      const metadata: unknown = JSON.parse(event.content);
+      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
+      const record = metadata as Record<string, unknown>;
+      metadataByPubkey.set(event.pubkey, {
+        name: typeof record.name === 'string' ? record.name.trim() : undefined,
+        displayName: typeof record.display_name === 'string' ? record.display_name.trim() : undefined,
+      });
+    } catch {
+      // Invalid profile metadata is treated as missing.
+    }
+  }
+  return metadataByPubkey;
+}
+
+function isGeneratedPlaceholderName(name: string): boolean {
+  return /^User [0-9a-f]{8}$/i.test(name);
 }
 
 function collectionItems(tracks: Track[]) {
@@ -70,12 +97,32 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
     }).filter(track => track.duration === undefined || track.duration >= 30);
   }, [feed.data]);
   const collections = useMemo(() => collectionItems(tracks), [tracks]);
-  const items = type === 'publishers' ? collections.publishers : collections.albums;
   const [searchParams, setSearchParams] = useSearchParams();
+  const { nostr } = useNostr();
+  const publisherKeys = type === 'publishers' ? collections.publishers.map(([pubkey]) => pubkey) : [];
+  const profiles = useQuery({
+    queryKey: ['music-publisher-profiles', publisherKeys],
+    enabled: type === 'publishers' && publisherKeys.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }) => {
+      const events = await nostr.query([{ kinds: [0], authors: publisherKeys, limit: publisherKeys.length }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      return parsePublisherMetadata(events);
+    },
+  });
+  const publishers = useMemo(() => {
+    if (type !== 'publishers') return collections.publishers;
+    return collections.publishers.filter(([pubkey]) => {
+      const metadata = profiles.data?.get(pubkey);
+      const name = metadata?.displayName || metadata?.name || genUserName(pubkey);
+      return !isGeneratedPlaceholderName(name);
+    });
+  }, [collections.publishers, profiles.data, type]);
+  const items = type === 'publishers' ? publishers : collections.albums;
   const pageCount = Math.max(1, Math.ceil(items.length / 15));
   const requestedPage = Number(searchParams.get('page') ?? '1');
   const page = Number.isInteger(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
-  const visiblePublishers = type === 'publishers' ? collections.publishers.slice((page - 1) * 15, page * 15) : [];
+  const isCollectionLoading = feed.isLoading || (type === 'publishers' && publisherKeys.length > 0 && profiles.isLoading);
+  const visiblePublishers = type === 'publishers' ? publishers.slice((page - 1) * 15, page * 15) : [];
   const visibleAlbums = type === 'albums' ? collections.albums.slice((page - 1) * 15, page * 15) : [];
   const hasVisibleItems = visiblePublishers.length > 0 || visibleAlbums.length > 0;
   const title = type === 'publishers' ? 'Artists & publishers to explore' : 'Albums to explore';
@@ -111,7 +158,7 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
     if (nextCount > page * 15) setSearchParams({ page: String(page + 1) });
   };
 
-  if (feed.isLoading) return <div className="p-4 sm:p-6 space-y-6"><Link to="/music" className="text-sm text-muted-foreground hover:underline">← Nostr music</Link><h1 className="text-3xl font-bold">{title}</h1><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div></div>;
+  if (isCollectionLoading) return <div className="p-4 sm:p-6 space-y-6"><Link to="/music" className="text-sm text-muted-foreground hover:underline">← Nostr music</Link><h1 className="text-3xl font-bold">{title}</h1><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div></div>;
   return <div className="p-4 sm:p-6 space-y-6">
     <Link to="/music" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr music</Link>
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Nostr music</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === 'publishers' ? 'Publishers with the most tracks in the music results currently loaded from your read relays—not a popularity chart.' : 'Albums grouped by title and publisher from music tracks currently loaded from your read relays—not a popularity chart.'}</p></header>
