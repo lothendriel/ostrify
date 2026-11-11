@@ -358,6 +358,43 @@ function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): P
   };
 }
 
+/** Paginate recent Nostr podcast episodes from enabled relays. */
+export function useNostrPodcastEpisodeFeed(enabled = true) {
+  const { nostr } = useNostr();
+  return useInfiniteQuery({
+    queryKey: ["podcast-episodes", "nostr-feed"],
+    enabled,
+    initialPageParam: undefined as number | undefined,
+    retry: 1,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ pageParam, signal: querySignal }) => {
+      const signal = AbortSignal.any([querySignal, AbortSignal.timeout(12000)]);
+      const until = pageParam;
+      const filters = [
+        { kinds: [NOSTR_PODCAST_EPISODE_KIND], limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+        { kinds: [1063], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+        { kinds: [NOSTR_NOTE_KIND], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+      ];
+      const events = await nostr.query(filters, { signal });
+      const tracks: Track[] = [];
+      const seen = new Set<string>();
+      for (const event of events) {
+        const referencesFountain = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
+        if (referencesFountain) continue;
+        const track = event.kind === NOSTR_PODCAST_EPISODE_KIND ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
+        if (!track || seen.has(track.url)) continue;
+        seen.add(track.url);
+        tracks.push({ ...track, kind: "podcast" });
+      }
+      tracks.sort((left, right) => right.createdAt - left.createdAt);
+      const nextUntil = events.length >= NOSTR_SHOW_PAGE_SIZE * 3 ? Math.min(...events.map(event => event.created_at)) - 1 : undefined;
+      return { tracks, nextUntil, hasMore: nextUntil !== undefined };
+    },
+    getNextPageParam: page => page.nextUntil,
+    select: data => data,
+  });
+}
+
 /** Fetch podcast show metadata (NIP-F4 kind:10154) for set of pubkeys. */
 export function useNostrPodcastShows() {
   const { nostr } = useNostr();

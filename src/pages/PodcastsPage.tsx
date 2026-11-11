@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { Mic, Radio, Globe2, ChevronRight, Play, Search, ArrowLeft, Heart } from "lucide-react";
-import { usePodcastEpisodes, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
+import { usePodcastEpisodes, useNostrPodcastEpisodeFeed, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
 import { QueueActionsMenu } from "@/components/music/QueueActionsMenu";
@@ -18,6 +18,75 @@ import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
 import { nip19 } from "nostr-tools";
 import { Input } from "@/components/ui/input";
+
+export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedPage = Number(searchParams.get("page") ?? "1");
+  const page = Number.isInteger(requestedPage) ? Math.max(requestedPage, 1) : 1;
+  const favorites = usePodcastFavorites();
+  const favoriteActions = usePodcastFavoriteActions();
+  const showsQuery = useNostrPodcastShows();
+  const episodesQuery = useNostrPodcastEpisodeFeed(type === "episodes");
+  const shows = useMemo(() => [...new Map(showsQuery.data.map(show => [show.id, show])).values()].sort((a, b) => (b.episodeCount ?? 0) - (a.episodeCount ?? 0) || a.title.localeCompare(b.title)), [showsQuery.data]);
+  const tracks = useMemo(() => {
+    const seen = new Set<string>();
+    return (episodesQuery.data?.pages.flatMap(batch => batch.tracks) ?? []).filter(track => {
+      if (seen.has(track.url)) return false;
+      seen.add(track.url);
+      return true;
+    });
+  }, [episodesQuery.data]);
+  const itemsCount = type === "shows" ? shows.length : tracks.length;
+  const pageCount = Math.max(1, Math.ceil(itemsCount / 15));
+  const visibleShows = type === "shows" ? shows.slice((page - 1) * 15, page * 15) : [];
+  const visibleTracks = type === "episodes" ? tracks.slice((page - 1) * 15, page * 15) : [];
+  const isLoading = type === "shows" ? showsQuery.isLoading : episodesQuery.isLoading;
+  const isError = type === "shows" ? showsQuery.isError : episodesQuery.isError;
+  const hasNextPage = type === "shows" ? showsQuery.hasNextPage : episodesQuery.hasNextPage;
+  const isFetchingNextPage = type === "shows" ? showsQuery.isFetchingNextPage : episodesQuery.isFetchingNextPage;
+  const title = type === "shows" ? "Top Nostr shows" : "All Nostr episodes";
+
+  useSeoMeta({ title: `${title} — Podcasts — Ostrify` });
+  useEffect(() => {
+    if (!hasNextPage && searchParams.get("page") && page > pageCount) setSearchParams({ page: String(pageCount) }, { replace: true });
+  }, [hasNextPage, page, pageCount, searchParams, setSearchParams]);
+
+  const nextPage = async () => {
+    if (itemsCount > page * 15) {
+      setSearchParams({ page: String(page + 1) });
+      return;
+    }
+    if (!hasNextPage || isFetchingNextPage) return;
+    let count = itemsCount;
+    let more: boolean = hasNextPage;
+    while (count <= page * 15 && more) {
+      if (type === "shows") {
+        const result = await showsQuery.fetchNextPage();
+        const uniqueShows = [...new Map((result.data?.pages.flatMap(batch => batch.shows) ?? []).map(show => [show.id, show])).values()];
+        count = uniqueShows.length;
+        more = Boolean(result.hasNextPage);
+      } else {
+        const result = await episodesQuery.fetchNextPage();
+        const uniqueTracks = [...new Map((result.data?.pages.flatMap(batch => batch.tracks) ?? []).map(track => [track.url, track])).values()];
+        count = uniqueTracks.length;
+        more = Boolean(result.hasNextPage);
+      }
+    }
+    if (count > page * 15) setSearchParams({ page: String(page + 1) });
+  };
+
+  return <div className="p-4 sm:p-6 space-y-6">
+    <Link to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr podcasts</Link>
+    <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Nostr podcasts</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === "shows" ? "Shows discovered from NIP-F4 episodes and podcast metadata on your read relays, ordered by episode references." : "Recent playable podcast episodes discovered from your read relays."}</p></header>
+    {isLoading && (type === "shows" ? <ShowSkeletonGrid /> : <TrackSkeletonGrid />)}
+    {isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Nostr {type}. <button type="button" className="underline" onClick={() => void (type === "shows" ? showsQuery.refetch() : episodesQuery.refetch())}>Try again</button></p>}
+    {!isLoading && !isError && !itemsCount && !hasNextPage && <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Nostr {type} were found on your read relays.</div>}
+    {itemsCount === 0 && hasNextPage && <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Nostr {type} in the batches loaded so far. Continue to search older relay results.</div>}
+    {(itemsCount > 0 || hasNextPage) && <>{type === "shows" && visibleShows.length > 0 && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{visibleShows.map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={favorites.data} onToggleFavorite={(favorite, saved) => favoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={favorites.isEnabled} />)}</div>}{type === "episodes" && visibleTracks.length > 0 && <TrackList tracks={visibleTracks} />}
+      <nav aria-label={`${type} pagination`} className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}>← Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{!hasNextPage && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {itemsCount} {type} loaded</span></p><Button type="button" variant="outline" onClick={() => void nextPage()} disabled={!hasNextPage && page >= pageCount || isFetchingNextPage}>{isFetchingNextPage ? "Loading…" : "Next →"}</Button></nav>
+    </>}
+  </div>;
+}
 
 const PodcastsPage = () => {
   useSeoMeta({ title: "Podcasts — Ostrify" });
@@ -122,14 +191,14 @@ const PodcastsPage = () => {
               {source === "nostr" && <section className="space-y-4">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div><h2 className="text-2xl font-bold">Top shows</h2><p className="text-sm text-muted-foreground">Shows with the most playable NIP-F4 episodes found on your relays.</p></div>
-                  <Button variant="outline" onClick={() => setViewAllSource("nostr")}>View all Nostr shows <ChevronRight className="size-4" /></Button>
+                  <Button asChild variant="outline"><Link to="/podcasts/nostr/shows">See all</Link></Button>
                 </div>
                 {nostrShows.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load this show catalog. <button className="underline" onClick={() => void nostrShows.refetch()}>Try again</button></p>}
-                {nostrShows.isLoading ? <ShowSkeletonGrid /> : nostrShowList.length ? <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{nostrShowList.slice().sort((a, b) => (b.episodeCount ?? perShowEpisodes.get(b.id)?.length ?? 0) - (a.episodeCount ?? perShowEpisodes.get(a.id)?.length ?? 0)).slice(0, 8).map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div> : <EmptyShows source="nostr" />}
+                {nostrShows.isLoading ? <ShowSkeletonGrid /> : nostrShowList.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{nostrShowList.slice().sort((a, b) => (b.episodeCount ?? perShowEpisodes.get(b.id)?.length ?? 0) - (a.episodeCount ?? perShowEpisodes.get(a.id)?.length ?? 0)).slice(0, 8).map((show) => <ShowCard key={show.id} show={show} tracks={perShowEpisodes.get(show.id) ?? []} onPlay={(tracks) => player.playQueue(tracks)} favorites={podcastFavorites.data} onToggleFavorite={(favorite, saved) => podcastFavoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={podcastFavorites.isEnabled} />)}</div>{nostrShows.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more shows. <button type="button" className="underline" onClick={() => void nostrShows.fetchNextPage()}>Try again</button></p>}</> : <EmptyShows source="nostr" />}
               </section>}
 
               <section className="space-y-4">
-                {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div>}
+                {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><div className="flex gap-2"><Button asChild variant="outline"><Link to="/podcasts/nostr/episodes">See all</Link></Button><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div></div>}
                 {source === "fountain" && <div><h2 className="text-2xl font-bold">Latest Fountain episodes</h2><p className="text-sm text-muted-foreground">Fountain episodes currently referenced on Nostr.</p></div>}
                 {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? selectedTracks : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div>{source === "nostr" && <TrackList tracks={selectedTracks} />}{source === "fountain" && fountainTracks.length > 0 && fountainEpisodeLimit < 120 && <div className="flex justify-center pt-2"><Button type="button" variant="outline" disabled={episodes.isFetching} onClick={() => setFountainEpisodeLimit(limit => Math.min(limit + 10, 120))}>{episodes.isFetching ? "Loading more episodes…" : "Load more episodes"}</Button></div>}</> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
               </section>
