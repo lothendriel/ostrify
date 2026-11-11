@@ -6,7 +6,7 @@ import { useAppContext } from "./useAppContext";
 import { useNostrPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTrackUrl } from "./usePodcasts";
-import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER } from '@/lib/musicPlaylists';
+import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { useToast } from './useToast';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 
@@ -51,6 +51,8 @@ export interface Playlist {
   trackIds: string[];
   event: NostrEvent;
   isLiked: boolean;
+  /** Whether this playlist appears in Ostrify's public playlist discovery. */
+  isListed: boolean;
 }
 
 function parsePlaylist(event: NostrEvent): Playlist | null {
@@ -71,6 +73,7 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
     }),
     event,
     isLiked: d === LIKED_SONGS_ID,
+    isListed: d !== LIKED_SONGS_ID && !event.tags.some(([name, value]) => name === PLAYLIST_VISIBILITY_TAG && value === 'private'),
   };
 }
 
@@ -188,14 +191,15 @@ export function usePlaylist(id: string | undefined) {
 }
 
 function buildPlaylistEvent(
-  playlist: Partial<Playlist> & { id: string; title: string; trackIds: string[] },
+  playlist: Partial<Playlist> & { id: string; title: string; trackIds: string[]; isListed?: boolean },
 ): { kind: number; content: string; tags: string[][] } {
   const existing = playlist.event;
   const tags: string[][] = existing ? existing.tags.filter(([name, value]) =>
-    !['d', 'title', 'description', 'image'].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && (!!wavlakeTrackId(value) || !!fountainTrackId(value) || !!podcastIndexTrackId(value))) && !(name === 'a' && !!value && /^(31337|36787|32123|30440):[0-9a-f]{64}:.+$/i.test(value))
+    !['d', 'title', 'description', 'image', PLAYLIST_VISIBILITY_TAG].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && (!!wavlakeTrackId(value) || !!fountainTrackId(value) || !!podcastIndexTrackId(value))) && !(name === 'a' && !!value && /^(31337|36787|32123|30440):[0-9a-f]{64}:.+$/i.test(value))
   ).map((tag) => [...tag]) : [];
   tags.unshift(["d", playlist.id], ["title", playlist.title]);
   if (!tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+  if (playlist.id !== LIKED_SONGS_ID) tags.push([PLAYLIST_VISIBILITY_TAG, playlist.isListed === false ? 'private' : 'public']);
   if (playlist.description) tags.push(["description", playlist.description]);
   if (playlist.image) tags.push(["image", playlist.image]);
   for (const id of playlist.trackIds) {
@@ -254,9 +258,9 @@ export function usePlaylistActions() {
   }
 
   const createPlaylist = useMutation({
-    mutationFn: async (input: { title: string; description?: string; image?: string; id?: string }) => {
+    mutationFn: async (input: { title: string; description?: string; image?: string; id?: string; isListed?: boolean }) => {
       const id = input.id ?? `playlist-${crypto.randomUUID().slice(0, 8)}`;
-      const event = buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds: [] });
+      const event = buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds: [], isListed: input.isListed });
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
       await publishPlaylist(event);
       void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
@@ -266,7 +270,7 @@ export function usePlaylistActions() {
   });
 
   const updatePlaylist = useMutation({
-    mutationFn: async (input: { id: string; title: string; description?: string; image?: string }) => {
+    mutationFn: async (input: { id: string; title: string; description?: string; image?: string; isListed?: boolean }) => {
       const existing = await fetchExisting(input.id);
       if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
       const playlist = {
@@ -276,6 +280,7 @@ export function usePlaylistActions() {
         description: input.description,
         image: input.image,
         trackIds: existing.trackIds,
+        isListed: input.isListed ?? existing.isListed,
       };
       const event = buildPlaylistEvent(playlist);
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
@@ -298,6 +303,7 @@ export function usePlaylistActions() {
         description: existing?.description,
         image: existing?.image,
         trackIds: [...trackIds, input.trackId],
+        isListed: existing.isListed,
       };
       const event = buildPlaylistEvent(playlist);
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
@@ -318,6 +324,7 @@ export function usePlaylistActions() {
         description: existing.description,
         image: existing.image,
         trackIds: existing.trackIds.filter((t) => t !== input.trackId),
+        isListed: existing.isListed,
       };
       const event = buildPlaylistEvent(playlist);
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
@@ -343,6 +350,7 @@ export function usePlaylistActions() {
             title: "Liked Songs",
             description: existing?.description ?? "Your favorite tracks on Nostr",
             trackIds: next,
+            isListed: false,
           });
           event.tags = event.tags.filter(([name, value]) => name !== 't' || value !== MUSIC_PLAYLIST_TOPIC);
           return event;

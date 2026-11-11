@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { usePlaylistActions, type Playlist } from "@/hooks/usePlaylists";
 import { useToast } from "@/hooks/useToast";
 
@@ -26,6 +27,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState("");
+  const [isListed, setIsListed] = useState(true);
   const { createPlaylist, updatePlaylist } = usePlaylistActions();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -35,6 +37,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
       setTitle(editing?.title ?? "");
       setDescription(editing?.description ?? "");
       setImage(editing?.image ?? "");
+      setIsListed(editing?.isListed ?? true);
     }
   }, [open, editing]);
 
@@ -47,7 +50,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
 
     if (isEditing) {
       updatePlaylist.mutate(
-        { id: editing.id, title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined },
+        { id: editing.id, title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined, isListed },
         {
           onSuccess: () => {
             toast({ title: "Playlist updated" });
@@ -57,7 +60,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
       );
     } else {
       createPlaylist.mutate(
-        { title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined },
+        { title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined, isListed },
         {
           onSuccess: (id) => {
             toast({ title: "Playlist created" });
@@ -75,7 +78,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit playlist" : "Create playlist"}</DialogTitle>
           <DialogDescription>
-            Regular Ostrify playlists are discoverable by other Ostrify listeners. They remain kind 30003 playlists on Nostr; Liked Songs stay a library-only list.
+            Choose whether this playlist appears in Ostrify’s public playlist discovery. This only controls Ostrify discovery; playlist details remain publicly readable on Nostr.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -99,6 +102,13 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
               placeholder="Optional description"
               rows={3}
             />
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+            <div className="space-y-1">
+              <Label htmlFor="pl-public">Show in Public playlists on Ostrify</Label>
+              <p className="text-sm text-muted-foreground">{isListed ? "Anyone browsing Ostrify can discover this playlist." : "This playlist won’t appear in Ostrify’s public playlist discovery."}</p>
+            </div>
+            <Switch id="pl-public" checked={isListed} onCheckedChange={setIsListed} aria-label="Show in Public playlists on Ostrify" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="pl-image">Cover image URL</Label>

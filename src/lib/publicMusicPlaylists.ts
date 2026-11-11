@@ -1,6 +1,6 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import { MUSIC_TRACK_KINDS } from '@/lib/music';
-import { isOstrifyMusicPlaylist, LIKED_TRACKS_IDENTIFIER } from '@/lib/musicPlaylists';
+import { isOstrifyMusicPlaylist, LIKED_TRACKS_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { wavlakeTrackId } from '@/hooks/useWavlake';
 import { fountainTrackId, podcastIndexTrackId } from '@/hooks/usePodcasts';
 import { sanitizeUrl } from '@/lib/sanitize';
@@ -49,6 +49,7 @@ export function parsePlaylistTrackReference(tag: string[]): PlaylistTrackReferen
 
 export function parsePublicMusicPlaylist(event: NostrEvent): PublicMusicPlaylist | undefined {
   if (event.kind !== 30003 || !isOstrifyMusicPlaylist(event)) return undefined;
+  if (event.tags.some(([name, value]) => name === PLAYLIST_VISIBILITY_TAG && value === 'private')) return undefined;
   const tags = event.tags;
   const id = tags.find(([name]) => name === 'd')?.[1];
   if (!id || id.length > 256 || id === LIKED_TRACKS_IDENTIFIER) return undefined;

@@ -4,6 +4,7 @@ import { fountainTrackId } from '@/hooks/usePodcasts';
 
 export const MUSIC_PLAYLIST_TOPIC = 'ostrify-music-playlist';
 export const LIKED_TRACKS_IDENTIFIER = 'nostr-tunes-liked';
+export const PLAYLIST_VISIBILITY_TAG = 'ostrify-visibility';
 
 /** Known Ostrify lists include older playlists created before the music tag existed. */
 export function isOstrifyMusicPlaylist(event: NostrEvent): boolean {

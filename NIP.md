@@ -69,8 +69,12 @@ referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73
 - Regular playlists use a random `d` tag (`playlist-xxxxxxxx`) and may carry
   optional `title`, `description`, and `image` tags. New and updated Ostrify
   music lists carry `t=ostrify-music-playlist`; older Ostrify identifiers remain
-  recognized. Other bookmark sets are only shown on public music profiles when
-  a supported Wavlake reference or a resolvable audio event is found.
+  recognized. Ostrify playlists are included in its public playlist discovery by
+  default; `ostrify-visibility=private` opts a playlist out of that discovery.
+  This tag is an Ostrify convention, not access control: kind `30003` events and
+  their playlist contents remain public on Nostr. Other bookmark sets are only
+  shown on public music profiles when a supported Wavlake reference or a
+  resolvable audio event is found.
 - Because these are addressable, replaceable events, all reads are filtered by the
   user's `authors` pubkey.
 
