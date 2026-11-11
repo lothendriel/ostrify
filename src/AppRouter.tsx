@@ -16,6 +16,8 @@ import FountainShowPage from "./pages/FountainShowPage";
 import SavedPodcastsPage from "./pages/SavedPodcastsPage";
 import WavlakePage, { RankedReleasesPage } from "./pages/WavlakePage";
 import MusicDiscovery from "./pages/MusicDiscovery";
+import { NostrCollectionsPage } from "./components/music/NostrCollections";
+import { PublicMusicPlaylists } from "./components/music/PublicMusicPlaylists";
 import FollowedArtists from "./pages/FollowedArtists";
 import FriendsPage from "./pages/FriendsPage";
 import MyProfile from "./pages/MyProfile";
@@ -48,6 +50,9 @@ export function AppRouter() {
             <Route path="/audiobooks/gutenberg/:id" element={<AudiobooksPage />} />
             <Route path="/audiobooks/:id" element={<AudiobooksPage />} />
             <Route path="/music" element={<MusicDiscovery />} />
+            <Route path="/music/publishers" element={<NostrCollectionsPage type="publishers" />} />
+            <Route path="/music/albums" element={<NostrCollectionsPage type="albums" />} />
+            <Route path="/music/playlists" element={<PublicMusicPlaylists paginatedPage />} />
             <Route path="/wavlake" element={<MusicDiscovery />} />
             <Route path="/wavlake/top-artists" element={<RankedReleasesPage type="artist" />} />
             <Route path="/wavlake/top-albums" element={<RankedReleasesPage type="album" />} />
