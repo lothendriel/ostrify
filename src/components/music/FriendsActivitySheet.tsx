@@ -12,18 +12,28 @@ import { useFriendStatuses } from '@/hooks/useFriendLibrary';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 
+function parseListeningStatus(status: string | undefined): { title: string; artist?: string } | undefined {
+  if (!status) return undefined;
+  const separator = status.lastIndexOf(' — ');
+  if (separator < 0) return { title: status.trim() };
+  const artist = status.slice(0, separator).trim();
+  const title = status.slice(separator + 3).trim();
+  return title ? { title, artist: artist || undefined } : { title: status.trim() };
+}
+
 function FriendActivity({ pubkey, status, close }: { pubkey: string; status?: string; close: () => void }) {
   const { data } = useAuthor(pubkey);
   const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(pubkey);
   const avatar = sanitizeUrl(data?.metadata?.picture);
-  return <article className="rounded-xl border border-border/70 bg-card p-2.5">
-    <div className="flex items-center gap-2.5">
-      <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">{avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}</div>
-      <div className="min-w-0 flex-1"><Link to={`/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate text-sm font-semibold hover:underline">{name}</Link><p className="truncate text-xs text-muted-foreground">Following on Ostrify</p></div>
-    </div>
-    <div className="mt-2 flex items-start gap-2 rounded-lg bg-secondary/60 px-2.5 py-2 text-sm">
-      <Headphones className="mt-0.5 size-3.5 shrink-0 text-primary" />
-      <p className={`line-clamp-2 ${status ? 'text-foreground' : 'text-muted-foreground'}`}>{status ?? 'Not listening right now'}</p>
+  const listening = parseListeningStatus(status);
+  return <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-2.5">
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">{avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}</div>
+    <div className="min-w-0 flex-1">
+      <Link to={`/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate text-sm font-semibold hover:underline">{name}</Link>
+      <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
+        <Headphones className={`size-3 shrink-0 ${listening ? 'text-primary' : 'text-muted-foreground'}`} aria-hidden="true" />
+        {listening ? <p className="min-w-0 truncate"><span className="font-medium text-foreground">{listening.title}</span>{listening.artist && <span className="text-muted-foreground"> · {listening.artist}</span>}</p> : <p className="truncate text-muted-foreground">Not listening right now</p>}
+      </div>
     </div>
   </article>;
 }
