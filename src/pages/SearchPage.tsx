@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { Search as SearchIcon } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { CATEGORIES, categoryColor } from "@/lib/categories";
@@ -11,12 +9,8 @@ import type { Track } from "@/lib/music";
 
 const SearchPage = () => {
   useSeoMeta({ title: "Search — Ostrify" });
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get('q') ?? "");
-  useEffect(() => {
-    const value = searchParams.get('q') ?? '';
-    if (value !== query) setQuery(value);
-  }, [searchParams, query]);
+  const [searchParams] = useSearchParams();
+  const query = searchParams.get('q') ?? "";
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 200 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(60);
 
@@ -32,18 +26,6 @@ const SearchPage = () => {
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
-      <div className="relative max-w-xl">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setSearchParams(e.target.value.trim() ? { q: e.target.value } : {}, { replace: true }); }}
-          placeholder="What do you want to listen to?"
-          className="pl-11 h-12 text-base rounded-full bg-secondary border-transparent focus-visible:border-border"
-          aria-label="Search"
-          autoFocus
-        />
-      </div>
-
       {q ? (
         <section className="space-y-3">
           <h2 className="text-xl font-bold">

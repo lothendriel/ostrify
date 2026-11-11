@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { BookOpen, Disc3, Mic, Music2, Search, UserRound, X } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import type { Track } from '@/lib/music';
@@ -84,14 +84,24 @@ const ICONS = {
 export function GlobalSearch() {
   const client = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const player = usePlayer();
   const audiobookLibrary = useAudiobookLibrary();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(() => new URLSearchParams(location.search).get('q') ?? '');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>();
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const routeQuery = location.pathname === '/search' ? searchParams.get('q') ?? '' : '';
+    if (routeQuery !== query) {
+      setQuery(routeQuery);
+      setOpen(false);
+    }
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 180);
@@ -273,7 +283,7 @@ export function GlobalSearch() {
     if (suggestion.track) player.playTrack(suggestion.track);
     else if (suggestion.href) navigate(suggestion.href);
     setOpen(false);
-    setQuery('');
+    updateQuery('');
   }
 
   function searchAll() {
@@ -281,6 +291,15 @@ export function GlobalSearch() {
     if (!term) return;
     navigate(`/search?q=${encodeURIComponent(term)}`);
     setOpen(false);
+  }
+
+  function updateQuery(value: string) {
+    setQuery(value);
+    setActiveIndex(-1);
+    if (location.pathname === '/search') {
+      const term = value.trim();
+      navigate(term ? `/search?q=${encodeURIComponent(term)}` : '/search', { replace: true });
+    }
   }
 
   function activateSelectedSuggestion() {
@@ -318,7 +337,7 @@ export function GlobalSearch() {
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <Input
           value={query}
-          onChange={event => { setQuery(event.target.value); setActiveIndex(0); }}
+          onChange={event => updateQuery(event.target.value)}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder="Search songs, podcasts, books, artists, people…"
@@ -332,7 +351,7 @@ export function GlobalSearch() {
           className="h-10 rounded-full bg-secondary pl-9 pr-9 text-sm"
           ref={inputRef}
         />
-        {query && <button type="button" onClick={() => { setQuery(''); setDebouncedQuery(''); setOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" aria-label="Clear search"><X className="size-4" /></button>}
+        {query && <button type="button" onClick={() => { updateQuery(''); setDebouncedQuery(''); setOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" aria-label="Clear search"><X className="size-4" /></button>}
       </div>
       {showDropdown && createPortal(<div id="global-search-suggestions" role="listbox" aria-label="Quick search suggestions" className="fixed z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-xl" style={dropdownStyle}>
         {suggestions.map((suggestion, index) => {
