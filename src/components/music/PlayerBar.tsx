@@ -20,6 +20,7 @@ import { LikeButton } from "./LikeButton";
 import { ArtistLink } from "./ArtistLink";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { QueuePanel } from "./QueuePanel";
+import { ShareTrackButton } from "./ShareTrackButton";
 
 export function PlayerBar() {
   const player = usePlayer();
@@ -124,7 +125,8 @@ export function PlayerBar() {
       </div>
 
       {/* Queue and volume */}
-      <div className="flex shrink-0 items-center gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
+        <ShareTrackButton track={current} />
         <QueuePanel />
         <div className="hidden md:flex items-center gap-2">
           <Button
