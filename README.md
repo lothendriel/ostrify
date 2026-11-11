@@ -1,8 +1,8 @@
 <div align="center">
   <img src="public/ostrify-logo.png" alt="Ostrify logo" width="112" />
   <h1>Ostrify</h1>
-  <p><strong>Your open music library, powered by Nostr.</strong></p>
-  <p>Discover music, podcasts, and audiobooks. Build a library that travels with your Nostr identity.</p>
+  <p><strong>An open music and audiobook library, powered by Nostr.</strong></p>
+  <p>Discover and listen to independent music, podcasts, live streams, and audiobooks. Save your library with your Nostr identity.</p>
   <p>
     <a href="https://ostrify.shakespeare.wtf">Open Ostrify</a>
     ·
@@ -17,43 +17,48 @@
 
 ---
 
-Ostrify is a music and audio discovery app built around [Nostr](https://nostr.com/), an open, decentralized protocol. It brings audio published across Nostr relays into one player, while also making it easy to explore independent music catalogs, podcasts, live streams, and free audiobooks.
+Ostrify is an audio discovery and listening app built on [Nostr](https://nostr.com/), an open, decentralized protocol. It brings music and podcast events from Nostr relays into one player and adds discovery from independent catalogs and open audiobook collections.
 
-No Ostrify account server is needed: sign in with a Nostr-compatible signer, choose your relays, and your Nostr libraries can be read by other compatible clients.
+There is no Ostrify account server. Sign in with a Nostr-compatible signer to publish and sync your own libraries. Your account is your Nostr identity; relay and catalog availability is independent of Ostrify.
 
-## What you can do
+## Features
 
-| Discover | Listen | Make it yours |
-| --- | --- | --- |
-| Music from Nostr relays and the Wavlake catalog | Persistent audio player, queue, playback history, and resume | Like tracks and publish playlists to Nostr |
-| Podcasts from Nostr, Fountain, and Podcast Index | Browse TuneStr live streams and recordings | Follow artists and people with Nostr lists |
-| LibriVox and Gutenberg Open Audiobooks | Play audiobook chapters in sequence | Send private friend invites with NIP-17-compatible signers |
-| LibriVox and Gutenberg Open Audiobooks | Play audiobook chapters in sequence | Save audiobooks and organize local collections |
-| Browse by genre, search, artists, and albums | Optional public listening status | Choose profile visibility and directory participation |
+- **Music:** discover Nostr-published audio and browse or search the Wavlake catalog. Explore artists, albums, genres, and tracks.
+- **Podcasts:** browse podcast events from Nostr, Fountain shows and episodes, and the Podcast Index directory.
+- **Audiobooks:** find volunteer-read LibriVox recordings and titles in the Project Gutenberg Open Audiobook Collection. Playback continues through a book’s available recordings in sequence.
+- **One player:** persistent playback, queue controls, playback history, and resume support.
+- **Personal libraries:** like tracks, publish playlists, follow artists and people, save podcasts, and create audiobook favorites and collections.
+- **Private audiobook sync:** audiobook favorites and collections sync between devices as NIP-44-encrypted NIP-78 data. Use the same Nostr account on each device, a signer that supports NIP-44, and configured read and write relays. Existing browser-only audiobook saves are retained and merged during first sync.
+- **Friends and listening activity:** follow people on Ostrify, send private NIP-17 invites, and optionally share a public NIP-38 music status.
+- **Profile controls:** manage which Ostrify library sections are shown on your public profile and optionally opt in to the public Ostrify directory.
 
-Features depend on relay availability, the formats used by publishers, and any external services being reachable.
+Features depend on relay availability, the event formats used by publishers, signer capabilities, and external catalog services.
 
-## How Ostrify uses Nostr
+## Get started
 
-Ostrify reads supported Nostr audio events from your enabled read relays and uses standard Nostr events for user libraries wherever possible. It does not define new event kinds; Ostrify-specific conventions use existing NIPs with documented tags. See **[NIP.md](NIP.md)** for the event kinds, tags, and extensions in detail.
+1. Open [Ostrify](https://ostrify.shakespeare.wtf) and sign in with a Nostr-compatible signer.
+2. In **Settings → Relays**, choose which relays Ostrify can read from and publish to. These choices are app-specific and do not replace your NIP-65 relay list.
+3. Browse music, podcasts, or audiobooks. Use the save and playlist actions to build your libraries.
+4. To sync saved audiobooks on another device, sign in with the same Nostr identity and use a NIP-44-capable signer. Your library is encrypted before it is published; read and write relays must be enabled.
 
-Some key behaviors:
+### Privacy and storage
 
-- **Sign-in and publishing:** actions such as following, liking, and saving a playlist are signed through your chosen Nostr signer.
-- **Relay selection:** read and write relay choices apply to Ostrify; the app does not overwrite your NIP-65 relay list.
-- **Public libraries:** Nostr playlists, followed artists, followed people, and directory listings are public relay data. Profile privacy settings tell Ostrify which sections to hide; they do not erase existing events or prevent other clients from reading them.
-- **Listening status:** optional, off by default, and controlled per device. When enabled, Ostrify publishes a public NIP-38 status while audio is playing. Relay copies may persist after a status expires or is cleared.
-- **Audiobook libraries:** favorites and collections sync across devices as NIP-44-encrypted NIP-78 app data when signed in with a NIP-44-capable signer and read relays. Relay operators store ciphertext, not the library contents. Existing browser-only saves are merged during the initial sync. Player volume, queue, playback position, history, and notification state remain local to the browser.
-- **External catalogs:** Wavlake, LibriVox, Project Gutenberg/Internet Archive, Fountain, and Podcast Index provide catalog or media data. Their availability and terms are independent of Ostrify.
+- **Public Nostr data:** music playlists, liked tracks, followed artists and people, profile privacy preferences, and directory listings are relay events visible to other Nostr clients. Profile privacy controls affect Ostrify’s profile display; they do not make published events private or remove relay copies.
+- **Private audiobook sync:** Ostrify encrypts audiobook library contents to your own public key with NIP-44 before publishing the kind `30078` event. Relays store the encrypted payload. Your signer must support NIP-44 to decrypt it on each device. Use relays you trust to retain your application data.
+- **Optional public status:** listening status is off by default. When enabled, it publishes your current music status publicly. Ostrify sends a clearing status when possible, but relays may keep older copies.
+- **Local browser data:** playback queue, volume, position, history, notification state, and other playback preferences stay in that browser and do not automatically sync. Audiobook library data is cached per account on-device as well as synced to relays.
+- **No private-key access by Ostrify:** signing and encryption are requested through your selected Nostr signer.
+
+For the event kinds, tags, and Ostrify conventions, see **[NIP.md](NIP.md)**.
 
 ## Run locally
 
 ### Requirements
 
-- Node.js 22 or later is recommended (the project CI uses Node 22).
-- npm.
+- Node.js 22 or later (the project CI uses Node 22)
+- npm
 
-### Start the app
+### Install and start
 
 ```bash
 npm install
@@ -68,26 +73,26 @@ Vite starts the development server at `http://localhost:8080`.
 npm run test
 ```
 
-The test script runs TypeScript checking, ESLint, Vitest, and a production build.
+This script runs TypeScript checking, ESLint, Vitest, and a production build.
 
-## Podcast Index Worker (optional deployment service)
+## Podcast Index and Fountain service
 
-The web app can use a Cloudflare Worker as a small API proxy for Podcast Index. The default URL is configured in `src/hooks/usePodcasts.ts`. To point a build at a different Worker, set `VITE_PODCAST_INDEX_WORKER_URL` in the build environment.
+Podcast Index requires API credentials and a server-side proxy. Ostrify includes a Cloudflare Worker in `worker.ts` that provides Podcast Index and Fountain API routes and serves the built site. The default Podcast Index Worker URL is set in `src/hooks/usePodcasts.ts`; set `VITE_PODCAST_INDEX_WORKER_URL` in the build environment to use another Worker.
 
-The Worker needs Podcast Index credentials configured as Cloudflare secrets:
+Configure the credentials as Cloudflare secrets:
 
 ```bash
 npx wrangler secret put PODCAST_INDEX_API_KEY
 npx wrangler secret put PODCAST_INDEX_API_SECRET
 ```
 
-The Worker is configured by `wrangler.jsonc` and serves the built site as well as its API routes. To build and deploy it, configure Wrangler for your Cloudflare account, then run:
+Configure Wrangler for your Cloudflare account, then build and deploy:
 
 ```bash
 npm run deploy:cloudflare
 ```
 
-Without a configured Worker and credentials, Podcast Index-backed features may be unavailable. The app's Nostr, Wavlake, audiobook, and other sources have their own availability and configuration requirements.
+Without configured Podcast Index credentials and a reachable Worker, Podcast Index-backed search and catalog features may not work. Fountain uses the included Worker routes and can also be affected by upstream availability. Nostr, Wavlake, LibriVox, Project Gutenberg, and Internet Archive have their own availability and terms.
 
 ## Built with
 
@@ -95,27 +100,27 @@ Without a configured Worker and credentials, Podcast Index-backed features may b
 - Vite and Tailwind CSS 4
 - Nostrify and `nostr-tools`
 - TanStack Query
-- Radix UI / shadcn-style accessible components
-- Cloudflare Workers for optional API proxy routes
+- Radix UI and shadcn-style accessible components
+- Cloudflare Workers for optional API routes and static hosting
 
 ## Repository guide
 
-- `src/pages/` — application pages and discovery experiences
-- `src/components/music/` — player, library, navigation, and music components
+- `src/pages/` — discovery, player, profile, and library pages
+- `src/components/music/` — player, navigation, and music components
 - `src/hooks/` — Nostr queries, playback, and external catalog integration
 - `src/lib/` — track parsing, categories, sanitization, and shared helpers
-- `worker.ts` — optional Cloudflare Worker API proxy
+- `worker.ts` — optional Cloudflare Worker API proxy and asset handler
+- `public/service-worker.js` — app-shell caching and update support
 - `NIP.md` — Nostr event formats and Ostrify-specific conventions
-- `CODE_AUDIT.md` — a read-only code audit and improvement suggestions
 
 ## Contributing
 
-Issues and pull requests are welcome. Before opening a pull request, run `npm run test` and include a clear description of the user-facing change. For changes to Nostr event formats or Ostrify-specific tags, update `NIP.md` as well.
+Issues and pull requests are welcome. Before opening a pull request, run `npm run test` and include a clear description of the user-facing change. If you change Nostr event formats or Ostrify-specific tags, update `NIP.md` as well.
 
 ---
 
 <div align="center">
-  <sub>Open protocols. Independent music. Your library.</sub>
+  <sub>Open protocols. Independent audio. Your library.</sub>
   <br />
   <sub><a href="https://shakespeare.diy">Vibed with Shakespeare</a></sub>
 </div>
