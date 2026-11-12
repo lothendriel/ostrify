@@ -664,21 +664,28 @@ export function useFountainRssEpisodes(show: PodcastShow | null | undefined) {
         rssError = error instanceof Error ? error : new Error("Fountain RSS could not be loaded");
       }
 
-      let podcastIndexError: Error | undefined;
+      const fallbackErrors: string[] = [];
+      try {
+        const response = await fetch(`${FOUNTAIN_API}/rss/by-guid?guid=${encodeURIComponent(show.feedGuid)}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(25000)]) });
+        if (!response.ok) throw new Error(`Fountain GUID RSS proxy returned ${response.status}`);
+        const fountainTracks = parseFountainRss(await response.text(), show);
+        if (fountainTracks.length) return fountainTracks;
+        fallbackErrors.push("Fountain GUID RSS feed had no playable episodes");
+      } catch (error) {
+        if (signal.aborted) throw error;
+        fallbackErrors.push(error instanceof Error ? error.message : "Fountain GUID RSS fallback failed");
+      }
+
       try {
         const podcastIndexTracks = await fetchPodcastIndexEpisodesForFeed(show, signal);
         if (podcastIndexTracks?.length) return podcastIndexTracks;
-        if (rssError) throw new Error("No Podcast Index GUID/feed match or playable episodes were available");
+        fallbackErrors.push("No Podcast Index GUID/feed match or playable episodes were available");
       } catch (error) {
         if (signal.aborted) throw error;
-        podcastIndexError = error instanceof Error ? error : new Error("Podcast Index fallback failed");
-        if (!rssError) throw podcastIndexError;
+        fallbackErrors.push(error instanceof Error ? error.message : "Podcast Index fallback failed");
       }
 
-      if (rssError) {
-        const fallbackMessage = podcastIndexError ? `Podcast Index fallback failed: ${podcastIndexError.message}` : "Podcast Index fallback was unavailable";
-        throw new Error(`${rssError.message}; ${fallbackMessage}`);
-      }
+      if (rssError) throw new Error(`${rssError.message}; ${fallbackErrors.join("; ")}`);
       return rssTracks;
     },
   });
