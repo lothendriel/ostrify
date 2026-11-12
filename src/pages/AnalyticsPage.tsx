@@ -151,7 +151,27 @@ export default function AnalyticsPage() {
           <StatCard icon={Users} label="Distinct publishers" value={network.data.creators.toLocaleString()} detail="Authors in sampled events" />
           <StatCard icon={Library} label="Read relays" value={network.data.relays} detail="Included in this snapshot" />
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><StatCard icon={Music2} label="Music events" value={network.data.music.toLocaleString()} detail="Playable tracks found" /><StatCard icon={Mic2} label="Podcast episodes" value={network.data.podcasts.toLocaleString()} detail="Playable episodes found" /><StatCard icon={BookOpen} label="Audiobook items" value={network.data.audiobooks.toLocaleString()} detail="Playable recordings found" /></div>
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <article className="rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">Audio events over 7 days</h3><p className="text-xs text-muted-foreground">Playable events discovered per day</p></div><span className="text-sm font-semibold text-primary">{network.data.tracks.toLocaleString()} sampled</span></div>
+            <div className="mt-5 grid h-36 grid-cols-7 items-end gap-2" role="img" aria-label={`Playable audio events by day over the last seven days: ${network.data.daily.map(day => `${day.label} ${day.total}`).join(", ")}`}>
+              {network.data.daily.map(day => {
+                const maxDay = Math.max(1, ...network.data.daily.map(item => item.total));
+                return <div key={day.key} className="flex h-full flex-col items-center justify-end gap-2"><span className="text-[10px] tabular-nums text-muted-foreground">{day.total || ""}</span><div className="flex h-24 w-full items-end rounded-md bg-secondary/60"><div className="w-full rounded-md bg-gradient-to-t from-violet-700 to-fuchsia-400 transition-[height]" style={{ height: `${day.total ? Math.max(8, day.total / maxDay * 100) : 0}%` }} /></div><span className="text-[10px] text-muted-foreground">{day.label}</span></div>;
+              })}
+            </div>
+          </article>
+          <article className="rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+            <h3 className="font-semibold">Audio mix</h3><p className="text-xs text-muted-foreground">Formats in this relay sample</p>
+            <div className="mt-5 space-y-4">{[
+              { label: "Music", value: network.data.music, icon: Music2, color: "bg-violet-500" },
+              { label: "Podcasts", value: network.data.podcasts, icon: Mic2, color: "bg-fuchsia-500" },
+              { label: "Audiobooks", value: network.data.audiobooks, icon: BookOpen, color: "bg-rose-500" },
+            ].map(item => <div key={item.label}><div className="mb-1.5 flex items-center justify-between text-sm"><span className="flex items-center gap-2"><item.icon className="size-4 text-muted-foreground" />{item.label}</span><span className="font-medium tabular-nums">{item.value.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">{network.data.tracks ? `${Math.round(item.value / network.data.tracks * 100)}%` : "0%"}</span></span></div><div className="h-2 overflow-hidden rounded-full bg-secondary"><div className={`h-full rounded-full ${item.color}`} style={{ width: `${network.data.tracks ? item.value / network.data.tracks * 100 : 0}%` }} /></div></div>)}
+            </div>
+            <p className="mt-5 border-t border-border/60 pt-4 text-xs text-muted-foreground">{network.data.creators.toLocaleString()} unique publishers across {network.data.relays} enabled read {network.data.relays === 1 ? "relay" : "relays"}.</p>
+          </article>
+        </div>
         {network.data.tracks === 0 && <p className="text-sm text-muted-foreground">No playable audio surfaced in this sample. Results depend on relay coverage and event formats.</p>}
       </>}
     </section>

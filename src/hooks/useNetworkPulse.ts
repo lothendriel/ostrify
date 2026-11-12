@@ -31,8 +31,23 @@ export function useNetworkPulse() {
         if (track) tracks.push(track);
       }
       const playable = tracks.filter((track): track is NonNullable<typeof track> => track !== null);
-      const dayAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+      const now = Date.now();
+      const dayAgo = Math.floor(now / 1000) - 24 * 60 * 60;
       const recent = playable.filter(track => track.createdAt >= dayAgo);
+      const daily = Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(now);
+        date.setUTCDate(date.getUTCDate() - (6 - index));
+        const key = date.toISOString().slice(0, 10);
+        const events = playable.filter(track => new Date(track.createdAt * 1000).toISOString().slice(0, 10) === key);
+        return {
+          key,
+          label: date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" }),
+          total: events.length,
+          music: events.filter(track => track.kind === "music").length,
+          podcasts: events.filter(track => track.kind === "podcast").length,
+          audiobooks: events.filter(track => track.kind === "audiobook").length,
+        };
+      });
       return {
         tracks: playable.length,
         lastDay: recent.length,
@@ -40,8 +55,9 @@ export function useNetworkPulse() {
         music: playable.filter(track => track.kind === "music").length,
         podcasts: playable.filter(track => track.kind === "podcast").length,
         audiobooks: playable.filter(track => track.kind === "audiobook").length,
+        daily,
         relays: readRelays.length,
-        sampledAt: Date.now(),
+        sampledAt: now,
       };
     },
   });
