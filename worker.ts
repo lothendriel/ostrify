@@ -14,15 +14,19 @@ const FOUNTAIN_LOOKUP_URL = `${FOUNTAIN_API}/search/lookup`;
 const CONTENT_ID_RE = /^episode:id:\S{20}$/;
 const CONTENT_PATH_PREFIX = "/api/fountain/content/";
 const MAX_BODY_LENGTH = 2048;
-const FOUNTAIN_RSS_HOSTS = new Set(["feeds.fountain.fm"]);
+const FOUNTAIN_RSS_PATHS = new Map<string, RegExp>([
+  ["feeds.fountain.fm", /^\/[A-Za-z0-9]{20}$/],
+  ["serve.podhome.fm", /^\/rss\/[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/],
+]);
 
 function isAllowedFountainRssUrl(url: URL): boolean {
+  const allowedPath = FOUNTAIN_RSS_PATHS.get(url.hostname);
   return url.protocol === "https:"
-    && FOUNTAIN_RSS_HOSTS.has(url.hostname)
+    && allowedPath !== undefined
     && !url.username
     && !url.password
     && !url.port
-    && /^\/[A-Za-z0-9]{20}$/.test(url.pathname)
+    && allowedPath.test(url.pathname)
     && !url.search
     && !url.hash;
 }
