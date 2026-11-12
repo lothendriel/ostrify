@@ -38,16 +38,8 @@ function FriendActivity({ pubkey, status, close }: { pubkey: string; status?: st
   </article>;
 }
 
-function FriendsActivityContent({ close, friendCount, open }: { close: () => void; friendCount: (count: number) => void; open: boolean }) {
-  const { user } = useCurrentUser();
-  const followedPeople = useFollowedPeople();
+function FriendsActivityContent({ close, user, followedPeople, statuses }: { close: () => void; user: ReturnType<typeof useCurrentUser>["user"]; followedPeople: ReturnType<typeof useFollowedPeople>; statuses: ReturnType<typeof useFriendStatuses> }) {
   const friendKeys = followedPeople.people;
-  useEffect(() => {
-    if (!user || !open || !followedPeople.hasReadRelays) return;
-    void followedPeople.refetch();
-  }, [user, open, followedPeople.hasReadRelays, followedPeople.refetch]);
-  useEffect(() => friendCount(friendKeys.length), [friendKeys.length, friendCount]);
-  const statuses = useFriendStatuses(friendKeys);
   const statusByFriend = new Map((statuses.data ?? []).map(event => [event.pubkey, event.content]));
 
   return <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3">
@@ -62,13 +54,23 @@ function FriendsActivityContent({ close, friendCount, open }: { close: () => voi
 
 export function FriendsActivitySheet() {
   const [open, setOpen] = useState(false);
-  const [friendCount, setFriendCount] = useState(0);
+  const [liveFriendCount, setLiveFriendCount] = useState(0);
+  const { user } = useCurrentUser();
+  const followedPeople = useFollowedPeople();
+  const friendKeys = followedPeople.people;
+  const statuses = useFriendStatuses(friendKeys);
+  const friendCount = statuses.data?.length ?? 0;
+  useEffect(() => {
+    if (!user || !open || !followedPeople.hasReadRelays) return;
+    void followedPeople.refetch();
+  }, [user, open, followedPeople.hasReadRelays, followedPeople.refetch]);
+  useEffect(() => setLiveFriendCount(friendCount), [friendCount]);
 
   return <Sheet open={open} onOpenChange={setOpen}>
     <SheetTrigger asChild>
       <Button type="button" variant="ghost" size="icon" className="relative rounded-full" aria-label="Friends listening activity" title="Friends activity">
         <Users className="size-5" />
-        {friendCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{friendCount > 9 ? '9+' : friendCount}</span>}
+        {liveFriendCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{liveFriendCount > 9 ? '9+' : liveFriendCount}</span>}
       </Button>
     </SheetTrigger>
     <SheetContent side="right" className="w-[min(24rem,90vw)] gap-0 p-0 sm:max-w-md">
@@ -76,7 +78,7 @@ export function FriendsActivitySheet() {
         <SheetTitle className="flex items-center gap-2"><Users className="size-5 text-primary" /> Friends activity</SheetTitle>
         <SheetDescription>Friends and their current public listening status.</SheetDescription>
       </SheetHeader>
-      {open && <FriendsActivityContent close={() => setOpen(false)} friendCount={setFriendCount} open={open} />}
+      {open && <FriendsActivityContent close={() => setOpen(false)} user={user} followedPeople={followedPeople} statuses={statuses} />}
     </SheetContent>
   </Sheet>;
 }
