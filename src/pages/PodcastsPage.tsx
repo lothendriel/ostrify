@@ -213,7 +213,7 @@ const PodcastsPage = () => {
   const podcastFavorites = usePodcastFavorites();
   const podcastFavoriteActions = usePodcastFavoriteActions();
   const favoriteShowSelection = searchParams.get("show") ? podcastFavorites.data.find(item => item.id === searchParams.get("show") && !item.episode) : undefined;
-  const activeShow = selectedShow ?? selectedIndexShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null);
+  const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null) ?? selectedIndexShow;
   const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
