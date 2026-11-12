@@ -10,17 +10,39 @@ import {
   Volume1,
   VolumeX,
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { usePlayer } from "@/hooks/usePlayer";
-import { formatDuration } from "@/lib/music";
+import { formatDuration, fountainShowGuid, type Track } from "@/lib/music";
 import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
 import { ArtistLink } from "./ArtistLink";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { QueuePanel } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
+
+function PodcastShowLink({ track }: { track: Track }) {
+  const fountainGuid = fountainShowGuid(track.showId);
+  const podcastIndexShowId = track.showId && /^podcast-index:\d{1,12}$/.test(track.showId) ? track.showId : undefined;
+  let to: string;
+
+  if (fountainGuid) {
+    to = `/podcasts/fountain/${encodeURIComponent(fountainGuid)}`;
+  } else if (podcastIndexShowId) {
+    to = `/podcasts?source=directory&show=${encodeURIComponent(podcastIndexShowId)}`;
+  } else {
+    try {
+      to = track.pubkey ? `/${nip19.npubEncode(track.pubkey)}` : "/podcasts";
+    } catch {
+      to = "/podcasts";
+    }
+  }
+
+  return <Link to={to} className="hover:text-foreground hover:underline focus-visible:underline" title="Open this podcast show">{track.artist || "Podcast show"}</Link>;
+}
 
 export function PlayerBar() {
   const player = usePlayer();
@@ -38,7 +60,7 @@ export function PlayerBar() {
             <div className="min-w-0 hidden sm:block">
               <div className="truncate font-medium text-sm">{current.title}</div>
               <div className="truncate text-xs text-muted-foreground">
-                <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />
+                {current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
               </div>
             </div>
             {current.source !== 'librivox' && current.source !== 'fountain' && current.kind === 'podcast' && <div className="hidden sm:flex items-center">
