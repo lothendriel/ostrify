@@ -570,25 +570,49 @@ function normalizePodcastFeedUrl(value: string | undefined): string | undefined 
   }
 }
 
-async function fetchPodcastIndexEpisodesForFeed(feedUrl: string, show: PodcastShow, signal: AbortSignal): Promise<Track[] | null> {
-  const exactFeedUrl = normalizePodcastFeedUrl(feedUrl);
-  if (!exactFeedUrl) return null;
+async function fetchPodcastIndexEpisodesForFeed(show: PodcastShow, signal: AbortSignal): Promise<Track[] | null> {
+  const exactFeedUrl = normalizePodcastFeedUrl(show.feedUrl);
+  const podcastGuid = show.feedGuid?.trim();
+  if (!exactFeedUrl || !podcastGuid) return null;
 
-  const feedResponse = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/podcasts/byfeedurl?url=${encodeURIComponent(exactFeedUrl)}`, { signal });
-  if (!feedResponse.ok) throw podcastIndexError(feedResponse, "Looking up Fountain RSS feed in Podcast Index");
-  const feedData: unknown = await feedResponse.json();
-  if (!isRecord(feedData) || !Array.isArray(feedData.feeds)) throw new Error("Invalid Podcast Index feed response");
-  const feed = feedData.feeds.find((candidate): candidate is Record<string, unknown> => {
-    if (!isRecord(candidate)) return false;
-    const candidateUrl = normalizePodcastFeedUrl(text(candidate.url));
-    return !!candidateUrl && candidateUrl === exactFeedUrl;
-  });
+  let feed: Record<string, unknown> | undefined;
+  let guidLookupError: Error | undefined;
+  try {
+    const guidResponse = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/podcasts/byguid?guid=${encodeURIComponent(podcastGuid)}`, { signal });
+    if (!guidResponse.ok) throw podcastIndexError(guidResponse, "Looking up Fountain podcast GUID in Podcast Index");
+    const guidData: unknown = await guidResponse.json();
+    if (!isRecord(guidData)) throw new Error("Invalid Podcast Index GUID response");
+    const guidFeed = isRecord(guidData.feed) ? guidData.feed : Array.isArray(guidData.feeds) ? guidData.feeds.find(isRecord) : undefined;
+    const returnedGuid = text(guidFeed?.podcastGuid);
+    if (guidFeed && (!returnedGuid || returnedGuid.toLocaleLowerCase() === podcastGuid.toLocaleLowerCase())) feed = guidFeed;
+  } catch (error) {
+    if (signal.aborted) throw error;
+    guidLookupError = error instanceof Error ? error : new Error("Podcast Index GUID lookup failed");
+  }
+
+  if (!feed) {
+    try {
+      const feedResponse = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/podcasts/byfeedurl?url=${encodeURIComponent(exactFeedUrl)}`, { signal });
+      if (!feedResponse.ok) throw podcastIndexError(feedResponse, "Looking up Fountain RSS feed in Podcast Index");
+      const feedData: unknown = await feedResponse.json();
+      if (!isRecord(feedData) || !Array.isArray(feedData.feeds)) throw new Error("Invalid Podcast Index feed response");
+      feed = feedData.feeds.find((candidate): candidate is Record<string, unknown> => {
+        if (!isRecord(candidate)) return false;
+        const candidateUrl = normalizePodcastFeedUrl(text(candidate.url));
+        return !!candidateUrl && candidateUrl === exactFeedUrl;
+      });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      const feedUrlError = error instanceof Error ? error.message : "Podcast Index feed URL lookup failed";
+      if (guidLookupError) throw new Error(`${guidLookupError.message}; ${feedUrlError}`);
+      throw error;
+    }
+  }
   if (!feed) return null;
 
   const feedId = typeof feed.id === "number" && Number.isInteger(feed.id) && feed.id > 0 ? feed.id : undefined;
-  const episodeEndpoint = feedId
-    ? `${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedid?id=${feedId}`
-    : `${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedurl?url=${encodeURIComponent(exactFeedUrl)}`;
+  if (!feedId) return null;
+  const episodeEndpoint = `${PODCAST_INDEX_WORKER}/api/podcast-index/episodes/byfeedid?id=${feedId}`;
   const episodesResponse = await fetch(episodeEndpoint, { signal });
   if (!episodesResponse.ok) throw podcastIndexError(episodesResponse, "Loading Podcast Index episodes");
   const episodesData: unknown = await episodesResponse.json();
@@ -619,7 +643,7 @@ async function fetchPodcastIndexEpisodesForFeed(feedUrl: string, show: PodcastSh
   }).filter((track): track is Track => !!track).sort((left, right) => right.createdAt - left.createdAt);
 }
 
-/** Read playable items from Fountain RSS, using an exact Podcast Index feed match as a fallback. */
+/** Read playable items from Fountain RSS, using Podcast Index GUID then exact feed URL as fallback. */
 export function useFountainRssEpisodes(show: PodcastShow | null | undefined) {
   return useQuery({
     queryKey: ["fountain-rss-episodes", show?.feedUrl ?? "", show?.feedGuid ?? "", FOUNTAIN_API],
@@ -642,9 +666,9 @@ export function useFountainRssEpisodes(show: PodcastShow | null | undefined) {
 
       let podcastIndexError: Error | undefined;
       try {
-        const podcastIndexTracks = await fetchPodcastIndexEpisodesForFeed(show.feedUrl, show, signal);
+        const podcastIndexTracks = await fetchPodcastIndexEpisodesForFeed(show, signal);
         if (podcastIndexTracks?.length) return podcastIndexTracks;
-        if (rssError) throw new Error("No exact Podcast Index feed match or playable episodes were available");
+        if (rssError) throw new Error("No Podcast Index GUID/feed match or playable episodes were available");
       } catch (error) {
         if (signal.aborted) throw error;
         podcastIndexError = error instanceof Error ? error : new Error("Podcast Index fallback failed");

@@ -70,7 +70,7 @@ export default {
     if (url.pathname.startsWith("/api/podcast-index/")) {
       if (request.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
       const route = url.pathname.slice("/api/podcast-index/".length);
-      const allowedRoutes = new Set(["search/byterm", "podcasts/byfeedid", "podcasts/byfeedurl", "episodes/byfeedid", "episodes/byid", "recent/episodes"]);
+      const allowedRoutes = new Set(["search/byterm", "podcasts/byfeedid", "podcasts/byfeedurl", "podcasts/byguid", "episodes/byfeedid", "episodes/byid", "recent/episodes"]);
       if (!allowedRoutes.has(route)) return jsonResponse({ error: "Unknown Podcast Index endpoint" }, 404);
       if (route === "search/byterm") {
         const term = url.searchParams.get("q")?.trim();
@@ -88,6 +88,10 @@ export default {
           return jsonResponse({ error: "Valid HTTPS feed URL required" }, 400);
         }
       }
+      if (route === "podcasts/byguid") {
+        const guid = url.searchParams.get("guid")?.trim();
+        if (!guid || !/^[A-Za-z0-9-]{1,512}$/.test(guid)) return jsonResponse({ error: "Valid podcast GUID required" }, 400);
+      }
       if (route === "recent/episodes") {
         const max = Number(url.searchParams.get("max") ?? "20");
         if (!Number.isInteger(max) || max < 1 || max > 50) return jsonResponse({ error: "Episode limit must be between 1 and 50" }, 400);
@@ -97,6 +101,7 @@ export default {
         if (route === "search/byterm") upstream.searchParams.set("q", url.searchParams.get("q")!.trim());
         else if (route === "podcasts/byfeedid" || route === "episodes/byfeedid" || route === "episodes/byid") upstream.searchParams.set("id", url.searchParams.get("id")!);
         else if (route === "podcasts/byfeedurl" || route === "episodes/byfeedurl") upstream.searchParams.set("url", url.searchParams.get("url")!);
+        else if (route === "podcasts/byguid") upstream.searchParams.set("guid", url.searchParams.get("guid")!.trim());
         else upstream.searchParams.set("max", url.searchParams.get("max") ?? "20");
         if (route === "episodes/byfeedid") upstream.searchParams.set("max", "50");
         const headers = await podcastIndexHeaders(env);
