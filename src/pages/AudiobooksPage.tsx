@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { BackLink } from '@/components/music/BackLink';
 import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Headphones, Play, Pause, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -133,11 +134,11 @@ function BookDetail({ id, source }: { id: string; source: 'librivox' | 'gutenber
 
   useSeoMeta({ title: data ? `${data.title} — Audiobooks — Ostrify` : 'Audiobook — Ostrify' });
 
-  if (source === 'librivox' && !/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks" className="text-primary underline">Browse audiobooks</Link></div>;
-  if (source === 'gutenberg' && !/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(id)) return <div className="p-6">Audiobook not found. <Link to="/audiobooks?source=gutenberg" className="text-primary underline">Browse Gutenberg audiobooks</Link></div>;
+  if (source === 'librivox' && !/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(id)) return <div className="p-6">Audiobook not found. <BackLink to="/audiobooks" className="text-primary underline">Browse audiobooks</BackLink></div>;
+  if (source === 'gutenberg' && !/^[a-z0-9][a-z0-9_-]{0,159}$/i.test(id)) return <div className="p-6">Audiobook not found. <BackLink to="/audiobooks?source=gutenberg" className="text-primary underline">Browse Gutenberg audiobooks</BackLink></div>;
   if (isLoading) return <div className="space-y-4 p-6"><Skeleton className="h-48 w-full" /><Skeleton className="h-48 w-full" /></div>;
   if (isError) return <div role="alert" className="p-6">Couldn’t load this audiobook: {error?.message ?? 'Unknown error'}. <button className="text-primary underline" onClick={() => void (source === 'librivox' ? libriVoxBook.refetch() : gutenbergBook.refetch())}>Try again</button></div>;
-  if (!data) return <div className="p-6">Audiobook not found. <Link to={source === 'gutenberg' ? '/audiobooks?source=gutenberg' : '/audiobooks'} className="text-primary underline">Browse audiobooks</Link></div>;
+  if (!data) return <div className="p-6">Audiobook not found. <BackLink to={source === 'gutenberg' ? '/audiobooks?source=gutenberg' : '/audiobooks'} className="text-primary underline">Browse audiobooks</BackLink></div>;
 
   const isCurrent = data.chapters.some(chapter => chapter.id === player.current?.id);
   const savedBook: SavedAudiobook = {
@@ -155,7 +156,7 @@ function BookDetail({ id, source }: { id: string; source: 'librivox' | 'gutenber
   const sourceUrl = source === 'gutenberg' ? sanitizeUrl(gutenbergBook.data?.sourceUrl) : undefined;
   const providerLabel = source === 'gutenberg' ? 'Project Gutenberg Open Audiobook Collection · Internet Archive' : 'LibriVox audiobook';
 
-  return <div className="space-y-6 p-4 sm:p-6"><Link to={source === 'gutenberg' ? '/audiobooks?source=gutenberg' : '/audiobooks'} className="text-sm text-muted-foreground hover:underline">← {source === 'gutenberg' ? 'Gutenberg audiobooks' : 'Audiobooks'}</Link>
+  return <div className="space-y-6 p-4 sm:p-6"><BackLink to={source === 'gutenberg' ? '/audiobooks?source=gutenberg' : '/audiobooks'} className="text-sm text-muted-foreground hover:underline">← {source === 'gutenberg' ? 'Gutenberg audiobooks' : 'Audiobooks'}</BackLink>
     <div className="flex flex-col gap-6 rounded-xl bg-gradient-to-br from-teal-900/70 via-emerald-950 to-card p-6 sm:flex-row sm:items-end"><BookCover key={data.id} covers={data.covers} title={data.title} className="size-40 shrink-0 overflow-hidden rounded-lg bg-secondary sm:size-48" iconClassName="size-14" /><div><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">{providerLabel}</p><h1 className="mt-2 text-4xl font-bold tracking-tight">{data.title}</h1><p className="mt-2 text-muted-foreground">{data.author}</p><p className="mt-2 text-sm text-muted-foreground">{data.language || 'Language unspecified'} · {data.sectionCount} {data.sectionCount === 1 ? 'recording' : 'recordings'}{data.duration ? ` · ${formatDuration(data.duration)}` : ''}</p></div></div>
     <div className="flex flex-wrap items-center gap-4"><Button className="rounded-full" disabled={!data.chapters.length} onClick={() => { if (isCurrent && player.isPlaying) player.togglePlay(); else player.playQueue(data.chapters, isCurrent ? data.chapters.findIndex(chapter => chapter.id === player.current?.id) : 0); }}>{isCurrent && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}{isCurrent && player.isPlaying ? 'Pause' : 'Play audiobook'}</Button><AudiobookActions book={savedBook} /><p className="text-sm text-muted-foreground">{source === 'gutenberg' && data.chapters.length === 1 ? 'One continuous recording. Audio hosted by Internet Archive.' : 'Recordings play in sequence.'}</p></div>
     {source === 'gutenberg' && <div className="space-y-1 text-sm text-muted-foreground"><p>Audio is served by Internet Archive. Rights and listening availability may vary by country.</p><div className="flex flex-wrap gap-x-4">{sourceUrl && <a className="text-primary underline" href={sourceUrl} target="_blank" rel="noreferrer">Project Gutenberg source</a>}<a className="text-primary underline" href={`https://archive.org/details/${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">Internet Archive item</a>{rightsUrl && <a className="text-primary underline" href={rightsUrl} target="_blank" rel="noreferrer">Rights information</a>}</div></div>}

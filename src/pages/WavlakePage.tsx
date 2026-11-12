@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { BackLink } from '@/components/music/BackLink';
 import { useSeoMeta } from '@unhead/react';
 import { ChevronLeft, ChevronRight, Music, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -109,7 +110,7 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
   };
 
   return <div className="p-4 sm:p-6 space-y-6">
-    <Link to="/music?source=wavlake" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Wavlake catalog</Link>
+    <BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Wavlake catalog</BackLink>
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Wavlake catalog</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">Browse {kindLabel} found across Wavlake’s track catalog, with the most recently released tracks first. This is a catalog browse, not a top-tracks ranking.</p></header>
     {catalog.isLoading && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
     {catalog.isError && <p role="alert" className="text-sm text-destructive">Wavlake catalog is unavailable right now. <button className="underline" onClick={() => void catalog.refetch()}>Try again</button></p>}
@@ -126,16 +127,30 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
 }
 
 export function WavlakeDiscovery() {
-  const [query, setQuery] = useState('');
-  const [debounced, setDebounced] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQuery = searchParams.get('q') ?? '';
+  const [query, setQuery] = useState(initialQuery);
+  const [debounced, setDebounced] = useState(initialQuery.trim());
   useEffect(() => { const timer = setTimeout(() => setDebounced(query.trim()), 400); return () => clearTimeout(timer); }, [query]);
+  useEffect(() => {
+    const urlQuery = searchParams.get('q') ?? '';
+    if (urlQuery !== query) setQuery(urlQuery);
+  }, [query, searchParams]);
+  const updateQuery = (value: string) => {
+    setQuery(value);
+    const next = new URLSearchParams(searchParams);
+    next.set('source', 'wavlake');
+    if (value.trim()) next.set('q', value);
+    else next.delete('q');
+    setSearchParams(next, { replace: true });
+  };
   const search = useWavlakeSearch(debounced);
   const results = search.data ?? [];
   const tracks = results.map(item => item.track).filter((track): track is NonNullable<typeof track> => !!track);
   const links = results.filter(item => item.type !== 'track');
   return <div className="p-4 sm:p-6 space-y-6">
     <div><p className="text-sm font-semibold text-primary uppercase tracking-wider">Explore music</p><h1 className="text-4xl font-bold tracking-tight mt-2">Wavlake catalog</h1><p className="text-muted-foreground mt-2">Browse independent music directly from Wavlake, alongside your Nostr discoveries.</p></div>
-    <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" /><Input className="pl-11 h-12 rounded-full bg-secondary" aria-label="Search Wavlake" placeholder="Search artists, albums, and tracks" value={query} onChange={e => setQuery(e.target.value)} /></div>
+    <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" /><Input className="pl-11 h-12 rounded-full bg-secondary" aria-label="Search Wavlake" placeholder="Search artists, albums, and tracks" value={query} onChange={e => updateQuery(e.target.value)} /></div>
     <p className="text-sm text-muted-foreground">Like tracks and follow artists in Ostrify. Your library is stored publicly on Nostr.</p>
     {query.trim().length >= 2 ? <section className="space-y-4"><h2 className="text-2xl font-bold">Search results</h2>
       {search.isFetching || debounced !== query.trim() ? <Skeleton className="h-24 w-full" /> : search.isError ? <p role="alert" className="text-destructive">Wavlake search is unavailable. <button className="underline" onClick={() => search.refetch()}>Try again</button></p> : <><CatalogLinks items={links} /><TrackList tracks={tracks} emptyMessage={links.length ? 'No playable tracks in these results.' : 'No matching Wavlake results.'} /></>}
@@ -146,9 +161,9 @@ export function WavlakeDiscovery() {
 function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }) {
   const release = useWavlakeRelease(type, itemId);
   if (release.isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
-  if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. <Link to="/wavlake" className="underline">Back to catalog</Link></div>;
+  if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. <BackLink to="/music?source=wavlake" className="underline">Back to catalog</BackLink></div>;
   const { title, artist, image, albums, tracks } = release.data;
-  return <div className="p-4 sm:p-6 space-y-8"><Link to="/wavlake" className="text-sm text-muted-foreground hover:underline">← Wavlake catalog</Link>
+  return <div className="p-4 sm:p-6 space-y-8"><BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:underline">← Wavlake catalog</BackLink>
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
     {type === 'artist' && itemId && <div className="space-y-2"><FollowButton pubkey={`wavlake:${itemId}`} /><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
     {albums.length > 0 && <section className="space-y-4"><h2 className="text-2xl font-bold">Albums</h2><CatalogLinks items={albums} /></section>}

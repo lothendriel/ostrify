@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { BackLink } from "@/components/music/BackLink";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { Mic, Radio, Globe2, ChevronRight, Play, Search, ArrowLeft, Heart } from "lucide-react";
@@ -76,7 +77,7 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
   };
 
   return <div className="p-4 sm:p-6 space-y-6">
-    <Link to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr podcasts</Link>
+    <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr podcasts</BackLink>
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Nostr podcasts</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === "shows" ? "Shows discovered from NIP-F4 episodes and podcast metadata on your read relays, ordered by episode references." : "Recent playable podcast episodes discovered from your read relays."}</p></header>
     {isLoading && (type === "shows" ? <ShowSkeletonGrid /> : <TrackSkeletonGrid />)}
     {isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Nostr {type}. <button type="button" className="underline" onClick={() => void (type === "shows" ? showsQuery.refetch() : episodesQuery.refetch())}>Try again</button></p>}

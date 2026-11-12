@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { BackLink } from "@/components/music/BackLink";
 import { useSeoMeta } from "@unhead/react";
 import { ArrowLeft, Heart, Mic, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,10 +28,10 @@ export default function FountainShowPage() {
 
   useSeoMeta({ title: `${show.data?.title ?? "Fountain show"} — Ostrify` });
 
-  if (!feedGuid) return <section className="p-6"><p className="text-muted-foreground">This Fountain show link is invalid.</p><Link to="/podcasts?source=fountain" className="mt-4 inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to Fountain podcasts</Link></section>;
+  if (!feedGuid) return <section className="p-6"><p className="text-muted-foreground">This Fountain show link is invalid.</p><BackLink to="/podcasts?source=fountain" className="mt-4 inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to Fountain podcasts</BackLink></section>;
 
   return <div className="space-y-6 p-4 sm:p-6">
-    <Link to="/podcasts?source=fountain" className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to Fountain episodes</Link>
+    <BackLink to="/podcasts?source=fountain" className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to Fountain episodes</BackLink>
     {show.isLoading ? <div className="flex flex-col gap-5 rounded-xl border bg-card p-6 sm:flex-row sm:items-center"><Skeleton className="size-32 shrink-0 rounded-xl" /><div className="w-full space-y-3"><Skeleton className="h-4 w-32" /><Skeleton className="h-8 w-2/3" /><Skeleton className="h-4 w-1/2" /></div></div> : show.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center"><p className="text-destructive">Couldn’t load Fountain show details.</p><Button className="mt-4" variant="outline" onClick={() => void show.refetch()}>Try again</Button></div> : <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-fuchsia-900/70 via-purple-950 to-card p-6 sm:flex-row sm:items-center">
       <div className="size-32 shrink-0 overflow-hidden rounded-xl bg-secondary">{image ? <img src={image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-muted-foreground" /></div>}</div>
       <div className="min-w-0 flex-1"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">Fountain podcast show</p><h1 className="mt-2 break-words text-3xl font-bold sm:text-4xl">{show.data?.title ?? "Fountain show"}</h1>{show.data?.publisher && <p className="mt-1 text-muted-foreground">{show.data.publisher}</p>}{show.data?.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.data.description}</p>}<p className="mt-3 text-xs text-muted-foreground">Episodes from the show’s public Fountain RSS feed. The feed may not contain the complete catalog.</p>{favorite && <Button type="button" variant={isSaved ? "secondary" : "outline"} size="sm" className="mt-3" disabled={!favorites.isEnabled || favorites.isLoading || favoriteActions.toggleFavorite.isPending} aria-pressed={isSaved} onClick={() => favoriteActions.toggleFavorite.mutate({ favorite, saved: !isSaved })}><Heart className="size-4" fill={isSaved ? "currentColor" : "none"} />{!favorites.isEnabled ? "Log in to save show" : favorites.isLoading ? "Checking saved state…" : isSaved ? "Saved to library" : "Save show"}</Button>}{show.data?.feedUrl && <a href={show.data.feedUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-primary hover:underline">Open RSS feed</a>}</div>

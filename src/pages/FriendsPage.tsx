@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { BackLink } from '@/components/music/BackLink';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
 import { useQuery } from '@tanstack/react-query';
@@ -91,7 +92,7 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
   const regular = (library.data?.playlists ?? []).filter(item => item.id !== 'nostr-tunes-liked');
   const likedTracks = useTracksByIds(liked?.tracks);
   return <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6">
-    <Link to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</Link>
+    <BackLink to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</BackLink>
     <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-emerald-900/70 via-teal-950 to-card p-6 sm:flex-row sm:items-center sm:p-8">
       <Avatar className="size-24 shrink-0 shadow-lg sm:size-32"><AvatarImage src={picture} alt={name} /><AvatarFallback className="text-3xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
       <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Ostrify profile</p><h1 className="mt-2 break-words text-4xl font-bold tracking-tight">{name}</h1><p className="mt-2 text-sm text-muted-foreground">Public Ostrify music library</p>{metadata?.about && <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">{metadata.about}</p>}</div>

@@ -1,5 +1,5 @@
 import { useSeoMeta } from "@unhead/react";
-import { Link } from "react-router-dom";
+import { BackLink } from "@/components/music/BackLink";
 import { MusicNewsCard } from "@/components/music/MusicNewsSection";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,9 +15,9 @@ export default function MusicNewsPage() {
 
   return (
     <main className="space-y-6 p-4 sm:p-6">
-      <Link to="/" className="text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-primary">
+      <BackLink to="/" className="text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-primary">
         ← Back to home
-      </Link>
+      </BackLink>
       <header>
         <p className="text-sm font-semibold uppercase tracking-wider text-primary">From your Nostr relays</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Music news on Nostr</h1>
