@@ -11,13 +11,15 @@ import { QueueActionsMenu } from "./QueueActionsMenu";
 interface TrackRowProps {
   track: Track;
   index: number;
-  /** All tracks in the current context, so clicking plays the whole list. */
+  /** All tracks in the current context, so clicking plays the whole list by default. */
   queue: Track[];
+  /** Play this row without replacing the current queue. */
+  playTrackOnSelect?: boolean;
   onCreatePlaylist?: () => void;
   onRemove?: () => void;
 }
 
-export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: TrackRowProps) {
+export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCreatePlaylist, onRemove }: TrackRowProps) {
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
@@ -26,7 +28,8 @@ export function TrackRow({ track, index, queue, onCreatePlaylist, onRemove }: Tr
     if (isCurrent) {
       player.togglePlay();
     } else {
-      player.playQueue(queue, queue.findIndex((t) => t.id === track.id));
+      if (playTrackOnSelect) player.playTrack(track);
+      else player.playQueue(queue, queue.findIndex((t) => t.id === track.id));
     }
   };
 

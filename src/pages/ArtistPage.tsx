@@ -27,7 +27,7 @@ function TrackSections({ tracks, heading }: { tracks: Track[]; heading: string }
       <h3 className="text-xl font-semibold tracking-tight">{album.title}</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{album.tracks.map((track) => <TrackCard key={track.id} track={track} />)}</div>
     </section>)}
-    {singles.length > 0 && <section className="space-y-3"><h3 className="text-xl font-semibold">{albums.length > 0 ? "Singles" : "Tracks"}</h3><TrackList tracks={singles} /></section>}
+    {singles.length > 0 && <section className="space-y-3"><h3 className="text-xl font-semibold">{albums.length > 0 ? "Singles" : "Tracks"}</h3><TrackList tracks={singles} playTrackOnSelect /></section>}
   </section>;
 }
 

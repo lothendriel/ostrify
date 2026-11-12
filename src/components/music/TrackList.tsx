@@ -9,9 +9,10 @@ interface TrackListProps {
   onCreatePlaylist?: () => void;
   onRemove?: (track: Track) => void;
   emptyMessage?: string;
+  playTrackOnSelect?: boolean;
 }
 
-export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage }: TrackListProps) {
+export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false }: TrackListProps) {
   if (isLoading) {
     return (
       <div className="space-y-1">
@@ -57,6 +58,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
             track={track}
             index={i}
             queue={tracks}
+            playTrackOnSelect={playTrackOnSelect}
             onCreatePlaylist={onCreatePlaylist}
             onRemove={onRemove ? () => onRemove(track) : undefined}
           />

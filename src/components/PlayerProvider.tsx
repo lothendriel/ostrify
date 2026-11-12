@@ -363,9 +363,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     restoredStateRef.current = false;
     pendingSeekRef.current = 0;
     setProgress(0);
-    setQueue([track]);
+
+    const hasCurrentTrack = index >= 0 && index < queue.length;
+    const existingIndex = queue.findIndex((queuedTrack, queuedIndex) =>
+      queuedIndex > (hasCurrentTrack ? index : -1) && queuedTrack.id === track.id,
+    );
+    if (existingIndex >= 0) {
+      setIndex(existingIndex);
+      return;
+    }
+
+    if (hasCurrentTrack) {
+      const nextIndex = index + 1;
+      setQueue([...queue.slice(0, nextIndex), track, ...queue.slice(nextIndex)]);
+      setIndex(nextIndex);
+      return;
+    }
+
+    setQueue(queue.length > 0 ? [track, ...queue] : [track]);
     setIndex(0);
-  }, []);
+  }, [index, queue]);
 
   const addToQueue = useCallback((tracks: Track[]) => {
     if (tracks.length === 0) return;

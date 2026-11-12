@@ -24,7 +24,7 @@ export interface PlayerState {
 
   /** Replace the queue and start at a given index. */
   playQueue: (tracks: Track[], startIndex?: number) => void;
-  /** Play a single track immediately. */
+  /** Play a track immediately, inserting it after the current track without discarding the queue. */
   playTrack: (track: Track) => void;
   /** Add tracks to the end of the queue. */
   addToQueue: (tracks: Track[]) => void;
