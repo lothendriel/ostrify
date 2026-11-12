@@ -17,6 +17,12 @@ const MAX_BODY_LENGTH = 2048;
 const FOUNTAIN_RSS_PATHS = new Map<string, RegExp>([
   ["feeds.fountain.fm", /^\/[A-Za-z0-9]{20}$/],
   ["serve.podhome.fm", /^\/rss\/[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/],
+  ["feed.bowlafterbowl.com", /^\/feed\.xml$/],
+  ["www.doerfelverse.com", /^\/feeds\/intothedoerfelverse\.xml$/],
+  ["heartmoney.podigee.io", /^\/feed\/mp3$/],
+  ["feeds.megaphone.fm", /^\/WWO3519750118$/],
+  ["feed.podbean.com", /^\/bohdislater5\/feed\.xml$/],
+  ["media.rss.com", /^\/commute-and-compute\/feed\.xml$/],
 ]);
 
 function isAllowedFountainRssUrl(url: URL): boolean {
