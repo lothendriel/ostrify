@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3 } from "lucide-react";
 import { useAudiobookLibrary } from "@/hooks/useAudiobookLibrary";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ const navItems = [
   { to: "/podcasts", label: "Podcasts", icon: Mic },
   { to: "/audiobooks", label: "Audiobooks", icon: BookOpen },
   { to: "/friends", label: "Friends", icon: Users },
+  { to: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {

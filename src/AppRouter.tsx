@@ -29,6 +29,7 @@ import { NIP19Page } from "./pages/NIP19Page";
 import { ArtistPage } from "./pages/ArtistPage";
 import NotFound from "./pages/NotFound";
 import ListenPage from "./pages/ListenPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
 
 export function AppRouter() {
   return (
@@ -69,6 +70,7 @@ export function AppRouter() {
               <Route path="/wavlake/:type/:id" element={<WavlakePage />} />
               <Route path="/artists" element={<FollowedArtists />} />
               <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/my-profile" element={<MyProfile />} />
               <Route path="/artist/:nip19" element={<ArtistPage />} />
               <Route path="/friends/:nip19" element={<FriendsPage />} />

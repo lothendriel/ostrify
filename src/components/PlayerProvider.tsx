@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
+import { recordListeningSeconds, recordListeningStart } from "@/lib/listeningAnalytics";
 import { sanitizeUrl } from "@/lib/sanitize";
 
 const PLAYER_VOLUME_STORAGE_KEY = "ostrify-player-volume";
@@ -282,13 +283,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTime = () => setProgress(audio.currentTime);
+    let lastAnalyticsTime = audio.currentTime;
+    let pendingAnalyticsSeconds = 0;
+    const flushAnalytics = () => {
+      if (current && pendingAnalyticsSeconds > 0) recordListeningSeconds(current, pendingAnalyticsSeconds);
+      pendingAnalyticsSeconds = 0;
+    };
+    const onTime = () => {
+      const position = audio.currentTime;
+      const elapsed = position - lastAnalyticsTime;
+      if (!audio.paused && elapsed > 0 && elapsed <= 15) pendingAnalyticsSeconds += elapsed;
+      else if (elapsed < 0 || elapsed > 15) pendingAnalyticsSeconds = 0;
+      if (pendingAnalyticsSeconds >= 10) flushAnalytics();
+      lastAnalyticsTime = position;
+      setProgress(position);
+    };
     const onDuration = () => setDuration(audio.duration || 0);
     const onPlay = () => {
       setIsPlaying(true);
+      lastAnalyticsTime = audio.currentTime;
+      if (current) recordListeningStart(current);
       recordPlayedTrack(current);
     };
-    const onPause = () => setIsPlaying(false);
+    const onPause = () => {
+      const elapsed = audio.currentTime - lastAnalyticsTime;
+      if (elapsed > 0 && elapsed <= 15) pendingAnalyticsSeconds += elapsed;
+      flushAnalytics();
+      lastAnalyticsTime = audio.currentTime;
+      setIsPlaying(false);
+    };
     const onEnded = () => {
       if (repeat === "one") {
         audio.currentTime = 0;
@@ -311,6 +334,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audio.addEventListener("pause", onPause);
     audio.addEventListener("ended", onEnded);
     return () => {
+      flushAnalytics();
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onDuration);
       audio.removeEventListener("durationchange", onDuration);
