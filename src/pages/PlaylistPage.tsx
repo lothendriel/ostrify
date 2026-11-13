@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
-import { Music, Pencil, Trash2 } from "lucide-react";
+import { ArrowDownAZ, Music, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +26,8 @@ import { CreatePlaylistDialog } from "@/components/music/CreatePlaylistDialog";
 import { useNavigate } from "react-router-dom";
 import type { Track } from "@/lib/music";
 
+type PlaylistSort = "original" | "title" | "artist";
+
 const PlaylistPage = () => {
   const { id } = useParams<{ id: string }>();
   const { data: playlist, isLoading: playlistLoading } = usePlaylist(id);
@@ -36,6 +40,16 @@ const PlaylistPage = () => {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [sort, setSort] = useState<PlaylistSort>("original");
+  const sortedTracks = useMemo(() => {
+    if (sort === "original") return tracks;
+    return [...tracks].sort((left, right) => {
+      const primary = sort === "title"
+        ? left.title.localeCompare(right.title, undefined, { sensitivity: "base", numeric: true })
+        : (left.artist ?? "").localeCompare(right.artist ?? "", undefined, { sensitivity: "base", numeric: true });
+      return primary || left.title.localeCompare(right.title, undefined, { sensitivity: "base", numeric: true });
+    });
+  }, [sort, tracks]);
 
   useSeoMeta({ title: `${playlist?.title ?? "Playlist"} — Ostrify` });
 
@@ -115,7 +129,7 @@ const PlaylistPage = () => {
         image={playlist?.image}
         icon={<Music className="size-16 text-white/70" />}
         gradient="linear-gradient(to bottom, hsl(141 40% 28%), transparent)"
-        tracks={tracks}
+        tracks={sortedTracks}
         actions={
           playlist && (
             <>
@@ -142,13 +156,31 @@ const PlaylistPage = () => {
         }
       />
       <div className="px-3 sm:px-6">
-        {playlist && !playlist.isLiked && tracks.length > 1 && <p className="mb-3 text-xs text-muted-foreground">Reorder tracks by dragging a row, or use its up/down controls. Changes are saved to your Nostr playlist.</p>}
+        {tracks.length > 1 && <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ArrowDownAZ className="size-4 text-muted-foreground" aria-hidden="true" />
+            <Label htmlFor="playlist-sort" className="text-xs text-muted-foreground">Sort by</Label>
+            <Select value={sort} onValueChange={value => setSort(value as PlaylistSort)}>
+              <SelectTrigger id="playlist-sort" className="h-8 w-40" aria-label="Sort playlist tracks">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="original">Original order</SelectItem>
+                <SelectItem value="title">Title</SelectItem>
+                <SelectItem value="artist">Artist</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {sort === "original" && playlist && !playlist.isLiked
+            ? <p className="text-xs text-muted-foreground">Drag rows or use the up/down controls to save a new playlist order.</p>
+            : sort !== "original" && <p className="text-xs text-muted-foreground">Display sort only · saved playlist order is unchanged.</p>}
+        </div>}
         {!!data?.unavailable && <p role="status" className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your playlist. <button type="button" className="text-primary underline disabled:opacity-50" disabled={isFetching} onClick={() => void refetch()}>{isFetching ? 'Retrying…' : 'Try again'}</button></p>}
         <TrackList
-          tracks={tracks}
+          tracks={sortedTracks}
           isLoading={isLoading}
           onRemove={handleRemove}
-          onReorder={playlist && !playlist.isLiked ? handleReorder : undefined}
+          onReorder={sort === "original" && playlist && !playlist.isLiked ? handleReorder : undefined}
           emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "This playlist is empty. Add songs from anywhere using the + menu."}
         />
       </div>
