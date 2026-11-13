@@ -53,6 +53,17 @@ function isGeneratedPlaceholderName(name: string): boolean {
   return /^User [0-9a-f]{8}$/i.test(name);
 }
 
+function shuffleCollectionItems<T>(items: T[], seed: number): T[] {
+  const shuffled = [...items];
+  let state = seed || 1;
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const swapIndex = state % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 function collectionItems(tracks: Track[]) {
   const publisherCounts = new Map<string, number>();
   const releases = new Map<string, { track: Track; count: number }>();
@@ -87,12 +98,16 @@ function WavlakeReleaseCard({ release }: { release: WavlakeRelease }) {
 }
 
 /** Discover publishers and album titles within the supplied results, not a global popularity chart. */
-export function NostrCollections({ tracks, podcast = false, showAllPublishersOption = false, wavlakeArtists = [], wavlakeAlbums = [] }: { tracks: Track[]; podcast?: boolean; showAllPublishersOption?: boolean; wavlakeArtists?: WavlakeRelease[]; wavlakeAlbums?: WavlakeRelease[] }) {
+export function NostrCollections({ tracks, podcast = false, showAllPublishersOption = false, wavlakeArtists = [], wavlakeAlbums = [], shuffleSeed }: { tracks: Track[]; podcast?: boolean; showAllPublishersOption?: boolean; wavlakeArtists?: WavlakeRelease[]; wavlakeAlbums?: WavlakeRelease[]; shuffleSeed?: number }) {
   const { publishers, albums } = useMemo(() => collectionItems(tracks), [tracks]);
-  const nostrPublishersToShow = publishers.slice(0, wavlakeArtists.length > 0 ? 4 : 8);
-  const artistsToShow = wavlakeArtists.slice(0, 8 - nostrPublishersToShow.length);
-  const nostrAlbumsToShow = albums.slice(0, wavlakeAlbums.length > 0 ? 4 : 8);
-  const albumsToShow = wavlakeAlbums.slice(0, 8 - nostrAlbumsToShow.length);
+  const orderedPublishers = useMemo(() => shuffleSeed === undefined ? publishers : shuffleCollectionItems(publishers, shuffleSeed), [publishers, shuffleSeed]);
+  const orderedAlbums = useMemo(() => shuffleSeed === undefined ? albums : shuffleCollectionItems(albums, shuffleSeed ^ 0x9e3779b9), [albums, shuffleSeed]);
+  const orderedWavlakeArtists = useMemo(() => shuffleSeed === undefined ? wavlakeArtists : shuffleCollectionItems(wavlakeArtists, shuffleSeed ^ 0x85ebca6b), [wavlakeArtists, shuffleSeed]);
+  const orderedWavlakeAlbums = useMemo(() => shuffleSeed === undefined ? wavlakeAlbums : shuffleCollectionItems(wavlakeAlbums, shuffleSeed ^ 0xc2b2ae35), [wavlakeAlbums, shuffleSeed]);
+  const nostrPublishersToShow = orderedPublishers.slice(0, orderedWavlakeArtists.length > 0 ? 4 : 8);
+  const artistsToShow = orderedWavlakeArtists.slice(0, 8 - nostrPublishersToShow.length);
+  const nostrAlbumsToShow = orderedAlbums.slice(0, orderedWavlakeAlbums.length > 0 ? 4 : 8);
+  const albumsToShow = orderedWavlakeAlbums.slice(0, 8 - nostrAlbumsToShow.length);
   if (!publishers.length && !albums.length && !artistsToShow.length && !albumsToShow.length) return null;
   return <div className="space-y-8">
     {(publishers.length > 0 || artistsToShow.length > 0) && <section className="space-y-3"><div><h2 className="text-2xl font-bold">{podcast ? 'Shows & publishers to explore' : 'Artists & publishers to explore'}</h2><p className="text-sm text-muted-foreground">{podcast ? 'Publishers with the most episodes in the results loaded here—not a popularity chart. Open a publisher to see their show profile.' : artistsToShow.length > 0 ? 'Publishers with the most Nostr tracks in the results loaded here—not a popularity chart. Also explore artists in the Wavlake catalog.' : 'Publishers with the most tracks in the results loaded here—not a popularity chart. Open a publisher to browse the music released by that account.'}</p></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{nostrPublishersToShow.map(([pubkey]) => <PublisherCard key={`nostr:${pubkey}`} pubkey={pubkey} podcast={podcast} />)}{artistsToShow.map((release) => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>{showAllPublishersOption && publishers.length > 8 && <Button asChild type="button" variant="outline"><Link to="/music/publishers">See all publishers</Link></Button>}</section>}

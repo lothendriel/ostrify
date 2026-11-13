@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useCategoryTracks } from "@/hooks/useCategoryTracks";
@@ -34,6 +34,7 @@ const TRACKS_PER_PAGE = 20;
 const CategoryPage = () => {
   const { id } = useParams<{ id: string }>();
   const [page, setPage] = useState(1);
+  const [collectionShuffle, setCollectionShuffle] = useState<{ categoryId: string; key: number } | null>(null);
   const category = CATEGORIES.find((c) => c.id === id);
   const { data: nostrTracks = [], isLoading, isError, refetch } = useCategoryTracks(id);
   const wavlakeQueries = useWavlakeGenreCatalog(category?.wavlakeGenres ?? []);
@@ -55,6 +56,14 @@ const CategoryPage = () => {
   }, [nostrTracks, wavlakeTracks]);
   const wavlakeArtists = useMemo(() => wavlakeReleases(wavlakeTracks, 'artist'), [wavlakeTracks]);
   const wavlakeAlbums = useMemo(() => wavlakeReleases(wavlakeTracks, 'album'), [wavlakeTracks]);
+  const collectionShuffleKey = collectionShuffle && collectionShuffle.categoryId === id ? collectionShuffle.key : undefined;
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setCollectionShuffle({ categoryId: id ?? '', key: Math.floor(Math.random() * 2 ** 32) });
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [id]);
+
   const pageCount = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
   const visibleTracks = tracks.slice((currentPage - 1) * TRACKS_PER_PAGE, currentPage * TRACKS_PER_PAGE);
@@ -78,7 +87,7 @@ const CategoryPage = () => {
       />
       <div className="px-3 sm:px-6 space-y-8">
         {isError && <p role="alert" className="text-sm text-muted-foreground">Could not load this category from your relays. <button type="button" onClick={() => void refetch()} className="text-primary underline">Try again</button></p>}
-        {(isLoading || isWavlakeLoading) ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artists and albums">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div> : <NostrCollections tracks={nostrTracks} wavlakeArtists={wavlakeArtists} wavlakeAlbums={wavlakeAlbums} />}
+        {(isLoading || isWavlakeLoading) ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artists and albums">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div> : <NostrCollections tracks={nostrTracks} wavlakeArtists={wavlakeArtists} wavlakeAlbums={wavlakeAlbums} shuffleSeed={collectionShuffleKey ?? 0} />}
         {isWavlakeError && <p role="status" className="text-sm text-muted-foreground">Some Wavlake catalog results are unavailable right now. <button type="button" onClick={() => void refetchWavlake()} className="text-primary underline">Try again</button></p>}
         <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2>
         <TrackList
