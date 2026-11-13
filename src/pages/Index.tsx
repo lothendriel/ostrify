@@ -29,7 +29,17 @@ const Index = () => {
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
 
   const fresh = useMemo(() => shuffled(tracks).slice(0, 10), [tracks]);
-  const shuffledPodcasts = useMemo(() => shuffled(podcasts).slice(0, 10), [podcasts]);
+  const shuffledPodcasts = useMemo(() => {
+    const nostrPodcasts = podcasts.filter(track => track.source !== "fountain");
+    const fountainPodcasts = podcasts.filter(track => track.source === "fountain");
+    const selected = [
+      ...shuffled(nostrPodcasts).slice(0, 5),
+      ...shuffled(fountainPodcasts).slice(0, 5),
+    ];
+    const selectedIds = new Set(selected.map(track => track.id));
+    const remaining = shuffled(podcasts.filter(track => !selectedIds.has(track.id)));
+    return shuffled([...selected, ...remaining]).slice(0, 10);
+  }, [podcasts]);
   const categoryShelves = useMemo(() => {
     return CATEGORIES.map((c) => ({
       category: c,
@@ -64,7 +74,7 @@ const Index = () => {
       <MusicNewsSection />
       <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
 
-      <Shelf title="Podcasts" subtitle="Nostr episodes and Fountain-linked shows" tracks={shuffledPodcasts} isLoading={podcastsLoading} />
+      <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} />
 
       {categoryShelves.map(({ category, tracks: catTracks }) => (
         <Shelf key={category.id} title={category.label} tracks={catTracks} />
