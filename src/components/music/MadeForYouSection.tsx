@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Play, Sparkles } from "lucide-react";
+import { Play, RefreshCw, Sparkles } from "lucide-react";
 import { usePlayer } from "@/hooks/usePlayer";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
@@ -14,6 +14,7 @@ import { TrackCard } from "./TrackCard";
 
 export function MadeForYouSection({ candidates, isLoading }: { candidates: Track[]; isLoading: boolean }) {
   const player = usePlayer();
+  const [mixVariation, setMixVariation] = useState(0);
   const playlists = usePlaylists();
   const followedArtists = useFollowedArtists();
   const wavlake = useWavlakeCatalog();
@@ -27,7 +28,8 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
     liked,
     history: player.history,
     followedArtists: followedArtists.data ?? [],
-  }), [mixCandidates, liked, player.history, followedArtists.data]);
+    variation: mixVariation,
+  }), [mixCandidates, liked, player.history, followedArtists.data, mixVariation]);
   const mixTracks = mix.map(item => item.track);
   const tasteCount = liked.length + player.history.filter(track => track.kind === "music").length + (followedArtists.data?.length ?? 0);
   const isPersonalDataLoading = playlists.isLoading || likedTracks.isLoading || followedArtists.isLoading;
@@ -43,9 +45,14 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
             <p className="hidden text-xs text-muted-foreground sm:block">A private mix from your likes, listening, and followed artists.</p>
           </div>
         </div>
-        <Button type="button" size="sm" onClick={() => player.playQueue(mixTracks)} disabled={!mixTracks.length} className="h-8 rounded-full px-4">
-          <Play className="mr-1.5 size-3.5 fill-current" /> Play mix
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="ghost" size="icon" onClick={() => setMixVariation(value => value + 1)} disabled={!mix.length || isLoading || isPersonalDataLoading} aria-label="Refresh Made for You mix" title="Refresh mix" className="size-8 rounded-full text-muted-foreground hover:text-foreground">
+            <RefreshCw className="size-4" />
+          </Button>
+          <Button type="button" size="sm" onClick={() => player.playQueue(mixTracks)} disabled={!mixTracks.length} className="h-8 rounded-full px-4">
+            <Play className="mr-1.5 size-3.5 fill-current" /> Play mix
+          </Button>
+        </div>
       </div>
       {isLoading || isPersonalDataLoading ? (
         <div className="flex gap-2 overflow-hidden p-2" aria-label="Building your mix">

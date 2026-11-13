@@ -3,9 +3,13 @@ import type { Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
 import { recordListeningSeconds, recordListeningStart } from "@/lib/listeningAnalytics";
 import { sanitizeUrl } from "@/lib/sanitize";
+import { useTracks } from "@/hooks/useTracks";
+import { useWavlakeCatalog } from "@/hooks/useWavlake";
+import { buildRadioStation } from "@/lib/radio";
 
 const PLAYER_VOLUME_STORAGE_KEY = "ostrify-player-volume";
 const PLAYER_STATE_STORAGE_KEY = "ostrify-player-state";
+const PLAYER_AUTOPLAY_STORAGE_KEY = "ostrify-player-autoplay";
 const DEFAULT_PLAYER_VOLUME = 0.8;
 const PLAYER_HISTORY_LIMIT = 50;
 
@@ -134,6 +138,14 @@ function writeSavedPlayerState(state: SavedPlayerState | undefined): void {
   }
 }
 
+function readSavedAutoplay(): boolean {
+  try {
+    return typeof window !== "undefined" && window.localStorage.getItem(PLAYER_AUTOPLAY_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 function readSavedVolume(): number {
   try {
     if (typeof window === "undefined") return DEFAULT_PLAYER_VOLUME;
@@ -168,8 +180,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>("off");
-
+  const [autoplay, setAutoplayState] = useState(readSavedAutoplay);
+  const autoplayRef = useRef(autoplay);
+  const setAutoplay = useCallback((enabled: boolean) => {
+    autoplayRef.current = enabled;
+    setAutoplayState(enabled);
+    try {
+      window.localStorage.setItem(PLAYER_AUTOPLAY_STORAGE_KEY, String(enabled));
+    } catch {
+      // The preference remains active for this session if browser storage is unavailable.
+    }
+  }, []);
+  const autoplayBusyRef = useRef(false);
+  const autoplayQueueKeyRef = useRef("");
+  const queueRef = useRef(queue);
+  const indexRef = useRef(index);
   const current = index >= 0 ? queue[index] : undefined;
+  queueRef.current = queue;
+  indexRef.current = index;
+  autoplayRef.current = autoplay;
+  const nostrTracks = useTracks({ limit: 150, enabled: false });
+  const wavlake = useWavlakeCatalog(undefined, false);
   const recordPlayedTrack = useCallback((track: Track | undefined) => {
     if (!track) return;
     setHistory((items) => items[0]?.id === track.id ? items : [track, ...items].slice(0, PLAYER_HISTORY_LIMIT));
@@ -256,17 +287,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     [queue.length, shuffle, repeat],
   );
 
-  const next = useCallback(() => {
-    restoredStateRef.current = false;
-    pendingSeekRef.current = 0;
-    const nextIndex = pickNextIndex(index);
-    if (nextIndex === -1) {
-      setIsPlaying(false);
-      return;
-    }
-    setIndex(nextIndex);
-  }, [pickNextIndex, index]);
-
   const previous = useCallback(() => {
     restoredStateRef.current = false;
     pendingSeekRef.current = 0;
@@ -277,6 +297,55 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     setIndex((cur) => (cur > 0 ? cur - 1 : cur));
   }, []);
+
+  const continueWithAutoplay = useCallback(async () => {
+    const seed = current;
+    const startingQueue = queueRef.current;
+    const startingIndex = indexRef.current;
+    if (!autoplayRef.current || !seed || seed.kind !== "music" || autoplayBusyRef.current) return;
+    if (startingIndex !== startingQueue.length - 1 || autoplayQueueKeyRef.current === startingQueue.map(track => track.id).join("|")) return;
+
+    const queueKey = startingQueue.map(track => track.id).join("|");
+    autoplayQueueKeyRef.current = queueKey;
+    autoplayBusyRef.current = true;
+    try {
+      const [nostrResult, wavlakeResult] = await Promise.allSettled([
+        nostrTracks.refetch({ throwOnError: true }),
+        wavlake.refetch({ throwOnError: true }),
+      ]);
+      if (!autoplayRef.current || queueRef.current.map(track => track.id).join("|") !== queueKey || indexRef.current !== startingIndex) return;
+      const candidates = [
+        ...(nostrResult.status === "fulfilled" ? nostrResult.value.data ?? [] : []),
+        ...(wavlakeResult.status === "fulfilled" ? wavlakeResult.value.data?.pages.flatMap(page => page.tracks) ?? [] : []),
+        ...history.filter(track => track.kind === "music"),
+      ];
+      const excluded = new Set([...startingQueue, ...history].map(track => track.id));
+      const excludedUrls = new Set([...startingQueue, ...history].map(track => track.url));
+      const station = buildRadioStation({ seed, candidates, limit: 16 }).filter(track =>
+        track.id !== seed.id && !excluded.has(track.id) && !excludedUrls.has(track.url),
+      );
+      if (!station.length) return;
+      const nextQueue = [...startingQueue, ...station];
+      pendingSeekRef.current = 0;
+      setQueue(nextQueue);
+      setIndex(startingIndex + 1);
+      setProgress(0);
+    } finally {
+      autoplayBusyRef.current = false;
+    }
+  }, [current, history, nostrTracks.refetch, wavlake.refetch]);
+
+  const next = useCallback(() => {
+    restoredStateRef.current = false;
+    pendingSeekRef.current = 0;
+    const nextIndex = pickNextIndex(index);
+    if (nextIndex === -1) {
+      setIsPlaying(false);
+      void continueWithAutoplay();
+      return;
+    }
+    setIndex(nextIndex);
+  }, [pickNextIndex, index, continueWithAutoplay]);
 
   // Wire up audio element events.
   useEffect(() => {
@@ -322,6 +391,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       const n = pickNextIndex(index);
       if (n === -1) {
         setIsPlaying(false);
+        void continueWithAutoplay();
       } else {
         setIndex(n);
       }
@@ -342,10 +412,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [index, repeat, pickNextIndex, current, recordPlayedTrack]);
+  }, [index, repeat, pickNextIndex, current, recordPlayedTrack, continueWithAutoplay]);
 
   const playQueue = useCallback((tracks: Track[], startIndex = 0) => {
     if (tracks.length === 0) return;
+    autoplayQueueKeyRef.current = "";
     const target = Math.max(0, Math.min(startIndex, tracks.length - 1));
     const sameTrack = current?.id === tracks[target].id;
     restoredStateRef.current = false;
@@ -360,6 +431,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [current?.id]);
 
   const playTrack = useCallback((track: Track) => {
+    autoplayQueueKeyRef.current = "";
     restoredStateRef.current = false;
     pendingSeekRef.current = 0;
     setProgress(0);
@@ -386,6 +458,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const addToQueue = useCallback((tracks: Track[]) => {
     if (tracks.length === 0) return;
+    autoplayQueueKeyRef.current = "";
     restoredStateRef.current = false;
     const hasCurrentTrack = index >= 0 && index < queue.length;
     setQueue((currentQueue) => hasCurrentTrack ? [...currentQueue, ...tracks] : tracks);
@@ -398,6 +471,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playNext = useCallback((tracks: Track[]) => {
     if (tracks.length === 0) return;
+    autoplayQueueKeyRef.current = "";
     restoredStateRef.current = false;
     const hasCurrentTrack = index >= 0 && index < queue.length;
     setQueue((currentQueue) => {
@@ -413,6 +487,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const removeQueueItem = useCallback((queueIndex: number) => {
     if (queueIndex < 0 || queueIndex >= queue.length) return;
+    autoplayQueueKeyRef.current = "";
     restoredStateRef.current = false;
     const remaining = queue.filter((_, itemIndex) => itemIndex !== queueIndex);
     setQueue(remaining);
@@ -501,6 +576,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       muted,
       shuffle,
       repeat,
+      autoplay,
+      setAutoplay,
       playQueue,
       playTrack,
       addToQueue,
@@ -529,6 +606,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       muted,
       shuffle,
       repeat,
+      autoplay,
+      setAutoplay,
       playQueue,
       playTrack,
       addToQueue,

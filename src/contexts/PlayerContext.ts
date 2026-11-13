@@ -21,6 +21,8 @@ export interface PlayerState {
   muted: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  autoplay: boolean;
+  setAutoplay: (enabled: boolean) => void;
 
   /** Replace the queue and start at a given index. */
   playQueue: (tracks: Track[], startIndex?: number) => void;

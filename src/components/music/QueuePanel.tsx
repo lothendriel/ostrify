@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Clock3, ListMusic, ListPlus, Plus, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3, ListMusic, ListPlus, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDuration, type Track } from '@/lib/music';
@@ -76,9 +76,12 @@ export function QueuePanel() {
               <section aria-labelledby="queue-up-next" className="space-y-2">
                 <div className="flex items-center justify-between gap-3 px-1">
                   <h2 id="queue-up-next" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Up next</h2>
-                  <Button type="button" variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive" onClick={() => { player.clearUpcomingQueue(); toast({ title: 'Queue cleared', description: current ? 'Now playing was kept.' : undefined }); }} disabled={upcoming.length === 0} aria-label="Clear upcoming queue">
-                    <Trash2 className="size-3.5" /> Clear queue
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {player.current?.kind === 'music' && <Button type="button" variant="ghost" size="icon" onClick={() => player.setAutoplay(!player.autoplay)} aria-label="Autoplay similar music" aria-pressed={player.autoplay} title="Autoplay similar music when the queue ends" className={player.autoplay ? 'size-8 text-primary' : 'size-8 text-muted-foreground'}><Sparkles className="size-4" /></Button>}
+                    <Button type="button" variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive" onClick={() => { player.clearUpcomingQueue(); toast({ title: 'Queue cleared', description: current ? 'Now playing was kept.' : undefined }); }} disabled={upcoming.length === 0} aria-label="Clear upcoming queue">
+                      <Trash2 className="size-3.5" /> Clear queue
+                    </Button>
+                  </div>
                 </div>
                 {upcoming.length ? upcoming.map((track, offset) => {
                   const queueIndex = player.index + 1 + offset;

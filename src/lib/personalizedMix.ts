@@ -5,8 +5,8 @@ export interface PersonalizedTrack {
   reason: string;
 }
 
-function dailySeed(date: Date): number {
-  const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+function dailySeed(date: Date, variation: number): number {
+  const key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}:${variation}`;
   let seed = 2166136261;
   for (const character of key) seed = Math.imul(seed ^ character.charCodeAt(0), 16777619);
   return seed >>> 0;
@@ -48,6 +48,7 @@ export function buildPersonalizedMix({
   history,
   followedArtists,
   date = new Date(),
+  variation = 0,
   limit = 24,
 }: {
   candidates: Track[];
@@ -55,6 +56,8 @@ export function buildPersonalizedMix({
   history: Track[];
   followedArtists: string[];
   date?: Date;
+  /** Local-only variation counter used to generate another version of the same day's mix. */
+  variation?: number;
   limit?: number;
 }): PersonalizedTrack[] {
   const musicLiked = liked.filter(track => track.kind === "music");
@@ -77,7 +80,7 @@ export function buildPersonalizedMix({
     for (const topic of track.topics) topicWeights.set(topic.toLowerCase(), (topicWeights.get(topic.toLowerCase()) ?? 0) + weight);
   });
 
-  const seed = dailySeed(date);
+  const seed = dailySeed(date, variation);
   const scored = musicCandidates.flatMap(track => {
     if (likedIds.has(track.id) || likedUrls.has(track.url)) return [];
     const keys = artistKeys(track);
