@@ -63,16 +63,19 @@ const Index = () => {
     }).filter(shelf => shelf.tracks.length > 0);
   }, [tracks, wavlakeTracks]);
 
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
+  const { greeting, greetingImage } = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { greeting: "Good morning", greetingImage: "/greeting-morning.png" };
+    if (hour < 18) return { greeting: "Good afternoon", greetingImage: "/greeting-afternoon.png" };
+    return { greeting: "Good evening", greetingImage: "/greeting-evening.png" };
   })();
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
-      <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
+      <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
+        <span>{greeting}</span>
+        <img src={greetingImage} alt="" aria-hidden="true" className="size-10 shrink-0 object-contain" />
+      </h1>
 
       <section aria-labelledby="browse-genres-heading" className="space-y-3 text-center">
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
