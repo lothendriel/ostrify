@@ -29,7 +29,7 @@ const PlaylistPage = () => {
   const { data: playlist, isLoading: playlistLoading } = usePlaylist(id);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
-  const { removeFromPlaylist } = usePlaylistActions();
+  const { removeFromPlaylist, reorderPlaylist } = usePlaylistActions();
   const { mutate: publish } = useNostrPublish();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -45,6 +45,28 @@ const PlaylistPage = () => {
       { playlistId: playlist.id, trackId: track.id },
       { onSuccess: () => toast({ title: "Removed from playlist" }) },
     );
+  };
+
+  const handleReorder = (orderedTracks: Track[]) => {
+    if (!playlist || reorderPlaylist.isPending) return;
+    const resolvedIds = new Set(tracks.map(track => track.id));
+    const orderedResolvedIds = orderedTracks.map(track => track.id);
+    const nextTrackIds: string[] = [];
+    let resolvedIndex = 0;
+    for (const id of playlist.trackIds) {
+      if (resolvedIds.has(id)) {
+        const nextId = orderedResolvedIds[resolvedIndex];
+        if (nextId) nextTrackIds.push(nextId);
+        resolvedIndex += 1;
+      } else {
+        nextTrackIds.push(id);
+      }
+    }
+    if (nextTrackIds.length !== playlist.trackIds.length || nextTrackIds.every((id, index) => id === playlist.trackIds[index])) return;
+    reorderPlaylist.mutate({ playlistId: playlist.id, trackIds: nextTrackIds }, {
+      onSuccess: () => toast({ title: "Playlist order saved" }),
+      onError: () => toast({ title: "Could not reorder playlist", description: "Check your relay connection and try again.", variant: "destructive" }),
+    });
   };
 
   const handleDelete = () => {
@@ -120,11 +142,13 @@ const PlaylistPage = () => {
         }
       />
       <div className="px-3 sm:px-6">
+        {playlist && !playlist.isLiked && tracks.length > 1 && <p className="mb-3 text-xs text-muted-foreground">Reorder tracks by dragging a row, or use its up/down controls. Changes are saved to your Nostr playlist.</p>}
         {!!data?.unavailable && <p role="status" className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your playlist. <button type="button" className="text-primary underline disabled:opacity-50" disabled={isFetching} onClick={() => void refetch()}>{isFetching ? 'Retrying…' : 'Try again'}</button></p>}
         <TrackList
           tracks={tracks}
           isLoading={isLoading}
           onRemove={handleRemove}
+          onReorder={playlist && !playlist.isLiked ? handleReorder : undefined}
           emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "This playlist is empty. Add songs from anywhere using the + menu."}
         />
       </div>

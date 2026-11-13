@@ -1,4 +1,4 @@
-import { Play, Pause } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, type Track } from "@/lib/music";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -17,9 +17,16 @@ interface TrackRowProps {
   playTrackOnSelect?: boolean;
   onCreatePlaylist?: () => void;
   onRemove?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  onDragStart?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragOver?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd?: () => void;
+  draggable?: boolean;
 }
 
-export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCreatePlaylist, onRemove }: TrackRowProps) {
+export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCreatePlaylist, onRemove, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd, draggable = false }: TrackRowProps) {
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
@@ -39,6 +46,11 @@ export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCre
         "group grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/10 cursor-pointer",
         isCurrent && "bg-accent/10",
       )}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
       onClick={(event) => {
         if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem], [data-queue-action='true']")) return;
         handlePlay();
@@ -53,7 +65,8 @@ export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCre
       }}
     >
       {/* Index / play indicator */}
-      <div className="relative w-8 flex items-center justify-center text-sm text-muted-foreground">
+      <div className="relative flex w-8 items-center justify-center text-sm text-muted-foreground">
+        {draggable && <GripVertical className="absolute -left-2 size-3.5 cursor-grab text-muted-foreground/60" aria-hidden="true" />}
         <span className={cn("group-hover:opacity-0", isPlaying ? "opacity-0" : isCurrent && "text-primary")}>
           {index + 1}
         </span>
@@ -80,6 +93,10 @@ export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCre
 
       {/* Actions + duration */}
       <div className="flex items-center gap-1 justify-end">
+        {(onMoveUp || onMoveDown) && <div className="flex items-center">
+          <button type="button" onClick={event => { event.stopPropagation(); onMoveUp?.(); }} disabled={!onMoveUp} className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${track.title} up`}><ChevronUp className="size-4" /></button>
+          <button type="button" onClick={event => { event.stopPropagation(); onMoveDown?.(); }} disabled={!onMoveDown} className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${track.title} down`}><ChevronDown className="size-4" /></button>
+        </div>}
         <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
           {track.source !== 'librivox' && track.source !== 'tunestr' && <LikeButton trackId={track.id} />}
           {track.source !== 'librivox' && track.source !== 'tunestr' && <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />}

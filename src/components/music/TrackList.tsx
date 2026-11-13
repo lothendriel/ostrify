@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Track } from "@/lib/music";
 import { TrackRow } from "./TrackRow";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,9 +11,19 @@ interface TrackListProps {
   onRemove?: (track: Track) => void;
   emptyMessage?: string;
   playTrackOnSelect?: boolean;
+  onReorder?: (tracks: Track[]) => void;
 }
 
-export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false }: TrackListProps) {
+export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false, onReorder }: TrackListProps) {
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const reorder = (from: number, to: number) => {
+    if (!onReorder || from === to || from < 0 || to < 0 || from >= tracks.length || to >= tracks.length) return;
+    const next = [...tracks];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onReorder(next);
+    setDraggedIndex(null);
+  };
   if (isLoading) {
     return (
       <div className="space-y-1">
@@ -61,6 +72,13 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
             playTrackOnSelect={playTrackOnSelect}
             onCreatePlaylist={onCreatePlaylist}
             onRemove={onRemove ? () => onRemove(track) : undefined}
+            draggable={!!onReorder}
+            onMoveUp={onReorder && i > 0 ? () => reorder(i, i - 1) : undefined}
+            onMoveDown={onReorder && i < tracks.length - 1 ? () => reorder(i, i + 1) : undefined}
+            onDragStart={onReorder ? event => { setDraggedIndex(i); event.dataTransfer.effectAllowed = "move"; } : undefined}
+            onDragOver={onReorder ? event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } : undefined}
+            onDrop={onReorder ? event => { event.preventDefault(); if (draggedIndex !== null) reorder(draggedIndex, i); setDraggedIndex(null); } : undefined}
+            onDragEnd={onReorder ? () => setDraggedIndex(null) : undefined}
           />
         ))}
       </div>

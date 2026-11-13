@@ -334,6 +334,26 @@ export function usePlaylistActions() {
     onSuccess: invalidate,
   });
 
+  const reorderPlaylist = useMutation({
+    mutationFn: async (input: { playlistId: string; trackIds: string[] }) => {
+      const existing = await fetchExisting(input.playlistId);
+      if (!existing) throw new Error('Playlist could not be loaded, so the reorder was not published. Please retry.');
+      const event = buildPlaylistEvent({
+        event: existing.event,
+        id: input.playlistId,
+        title: existing.title,
+        description: existing.description,
+        image: existing.image,
+        trackIds: input.trackIds,
+        isListed: existing.isListed,
+      });
+      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+      await publishPlaylist(event, existing.event.created_at);
+      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+    },
+    onSuccess: invalidate,
+  });
+
   const removeFromPlaylist = useMutation({
     mutationFn: async (input: { playlistId: string; trackId: string }) => {
       const existing = await fetchExisting(input.playlistId);
@@ -387,6 +407,7 @@ export function usePlaylistActions() {
     updatePlaylist,
     addToPlaylist,
     removeFromPlaylist,
+    reorderPlaylist,
     toggleLike,
     isReady: !!user,
   };
