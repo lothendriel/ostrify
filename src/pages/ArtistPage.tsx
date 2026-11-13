@@ -2,13 +2,14 @@ import { useEffect, useMemo } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { useSeoMeta } from "@unhead/react";
-import { Play, Pause, BadgeCheck } from "lucide-react";
+import { Play, Pause, BadgeCheck, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
+import { useRadio } from "@/hooks/useRadio";
 import { useArtistTracks, groupIntoAlbums } from "@/hooks/useArtistTracks";
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
@@ -81,6 +82,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
   const player = usePlayer();
+  const radio = useRadio();
 
   const banner = sanitizeUrl(metadata?.banner);
   const picture = sanitizeUrl(metadata?.picture);
@@ -146,7 +148,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
       </div>
 
       {/* Play all */}
-      <div className="flex items-center gap-4 px-6 py-4">
+      <div className="flex flex-wrap items-center gap-3 px-6 py-4">
         <Button
           onClick={handlePlayAll}
           disabled={tracks.length === 0}
@@ -164,6 +166,15 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
           )}
         </Button>
         <FollowButton pubkey={pubkey} />
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full gap-2"
+          disabled={tracks.length === 0}
+          onClick={() => radio.startArtistRadio(pubkey, tracks)}
+        >
+          <Radio className="size-4" /> Start artist radio
+        </Button>
       </div>
 
       <div className="px-3 sm:px-6 space-y-8 pb-4">

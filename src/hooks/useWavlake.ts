@@ -155,7 +155,7 @@ function parseItem(value: unknown): CatalogItem | null {
   return { id: itemId, type, title, artist: text(item.artist), image: sanitizeUrl(text(item.albumArtUrl) || text(item.artistArtUrl)), track: type === 'track' ? parseTrack(item) ?? undefined : undefined };
 }
 
-export function useWavlakeCatalog(artistId?: string) {
+export function useWavlakeCatalog(artistId?: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: ['wavlake', 'catalog', artistId ?? ''],
     initialPageParam: '',
@@ -168,7 +168,7 @@ export function useWavlakeCatalog(artistId?: string) {
       return { tracks: data.tracks.map(parseTrack).filter((t): t is Track => !!t), next: text(data.nextCursor), total: typeof data.total === 'number' ? data.total : undefined };
     },
     getNextPageParam: (page) => page.next,
-    enabled: !artistId || UUID.test(artistId),
+    enabled: enabled && (!artistId || UUID.test(artistId)),
     retry: 1,
   });
 }

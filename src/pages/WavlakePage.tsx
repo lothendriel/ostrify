@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { BackLink } from '@/components/music/BackLink';
 import { useSeoMeta } from '@unhead/react';
-import { ChevronLeft, ChevronRight, Music, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Music, Search, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
 import { FollowButton } from '@/components/music/FollowButton';
+import { useRadio } from '@/hooks/useRadio';
 import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
@@ -160,12 +161,13 @@ export function WavlakeDiscovery() {
 
 function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }) {
   const release = useWavlakeRelease(type, itemId);
+  const radio = useRadio();
   if (release.isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. <BackLink to="/music?source=wavlake" className="underline">Back to catalog</BackLink></div>;
   const { title, artist, image, albums, tracks } = release.data;
   return <div className="p-4 sm:p-6 space-y-8"><BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:underline">← Wavlake catalog</BackLink>
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
-    {type === 'artist' && itemId && <div className="space-y-2"><FollowButton pubkey={`wavlake:${itemId}`} /><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
+    {type === 'artist' && itemId && <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><FollowButton pubkey={`wavlake:${itemId}`} /><Button type="button" variant="outline" className="rounded-full gap-2" disabled={!tracks.length} onClick={() => radio.startArtistRadio(`wavlake:${itemId}`, tracks)}><Radio className="size-4" /> Start artist radio</Button></div><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
     {albums.length > 0 && <section className="space-y-4"><h2 className="text-2xl font-bold">Albums</h2><CatalogLinks items={albums} /></section>}
     {type === 'album' ? <section className="space-y-4"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={tracks} /></section> : <CatalogTracks artistId={itemId} />}
   </div>;

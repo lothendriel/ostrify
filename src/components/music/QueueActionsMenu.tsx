@@ -1,11 +1,13 @@
-import { ListEnd, ListMusic, ListPlus } from 'lucide-react';
+import { ListEnd, ListMusic, ListPlus, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { usePlayer } from '@/hooks/usePlayer';
+import { useRadio } from '@/hooks/useRadio';
 import type { Track } from '@/lib/music';
 
 export function QueueActionsMenu({ track }: { track: Track }) {
   const player = usePlayer();
+  const radio = useRadio();
   const alreadyQueued = player.queue.slice(player.index + 1).some(item => item.id === track.id);
 
   return <DropdownMenu>
@@ -23,6 +25,13 @@ export function QueueActionsMenu({ track }: { track: Track }) {
       </Button>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end" data-queue-action="true" onClick={event => event.stopPropagation()}>
+      {track.kind === 'music' && <DropdownMenuItem
+        data-queue-action="true"
+        onClick={event => event.stopPropagation()}
+        onSelect={() => radio.startTrackRadio(track)}
+      >
+        <Radio className="size-4" /> Start track radio
+      </DropdownMenuItem>}
       <DropdownMenuItem
         data-queue-action="true"
         onClick={event => event.stopPropagation()}

@@ -10,6 +10,8 @@ interface UseTracksOptions {
   topic?: string;
   /** Restrict to a single author pubkey. */
   author?: string;
+  /** Defer discovery until a feature explicitly needs the track pool. */
+  enabled?: boolean;
 }
 
 /**
@@ -20,10 +22,11 @@ interface UseTracksOptions {
  */
 export function useTracks(options: UseTracksOptions = {}) {
   const { nostr } = useNostr();
-  const { limit = 200, topic, author } = options;
+  const { limit = 200, topic, author, enabled = true } = options;
 
   return useQuery({
     queryKey: ["tracks", limit, topic ?? "", author ?? ""],
+    enabled,
     queryFn: async (c) => {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
 
