@@ -63,9 +63,12 @@ export function PlayerBar() {
                 {current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
               </div>
             </div>
+            {current.kind === 'music' && current.source !== 'tunestr' && <div className="hidden sm:flex items-center">
+              <LikeButton trackId={current.id} size={16} />
+            </div>}
             {current.source !== 'librivox' && current.source !== 'fountain' && current.kind === 'podcast' && <div className="hidden sm:flex items-center">
               <LikeButton trackId={current.id} size={16} />
-              {current.kind === 'podcast' && <AddToPlaylistMenu trackId={current.id} />}
+              <AddToPlaylistMenu trackId={current.id} />
             </div>}
           </>
         ) : (
