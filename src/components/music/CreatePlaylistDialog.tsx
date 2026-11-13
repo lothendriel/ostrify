@@ -21,9 +21,13 @@ interface CreatePlaylistDialogProps {
   onOpenChange: (open: boolean) => void;
   /** If provided, edit this playlist instead of creating a new one. */
   editing?: Playlist;
+  /** Add these supported track references when creating the playlist. */
+  initialTrackIds?: string[];
+  /** Called after a newly created playlist has been published. */
+  onCreated?: (id: string) => void;
 }
 
-export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlaylistDialogProps) {
+export function CreatePlaylistDialog({ open, onOpenChange, editing, initialTrackIds, onCreated }: CreatePlaylistDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState("");
@@ -60,12 +64,15 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing }: CreatePlay
       );
     } else {
       createPlaylist.mutate(
-        { title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined, isListed },
+        { title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined, isListed, trackIds: initialTrackIds },
         {
           onSuccess: (id) => {
-            toast({ title: "Playlist created" });
             onOpenChange(false);
-            navigate(`/playlist/${id}`);
+            if (onCreated) onCreated(id);
+            else {
+              toast({ title: "Playlist created" });
+              navigate(`/playlist/${id}`);
+            }
           },
         },
       );

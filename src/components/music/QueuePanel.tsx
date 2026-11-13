@@ -1,17 +1,52 @@
-import { ChevronDown, ChevronUp, Clock3, ListMusic, X } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, ChevronUp, Clock3, ListMusic, ListPlus, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDuration, type Track } from '@/lib/music';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayer } from '@/hooks/usePlayer';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { isSupportedPlaylistTrackId, usePlaylists, usePlaylistActions } from '@/hooks/usePlaylists';
+import { useToast } from '@/hooks/useToast';
+import { CreatePlaylistDialog } from './CreatePlaylistDialog';
 import { TrackArtwork } from './TrackArtwork';
 import { ArtistLink } from './ArtistLink';
 
 export function QueuePanel() {
   const player = usePlayer();
+  const { user } = useCurrentUser();
+  const { data: playlists } = usePlaylists();
+  const { addTracksToPlaylist } = usePlaylistActions();
+  const { toast } = useToast();
   const current = player.current;
   const upcoming = player.index >= 0 ? player.queue.slice(player.index + 1) : player.queue;
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const regularPlaylists = (playlists ?? []).filter(playlist => !playlist.isLiked);
+  const queueTrackIds = player.queue.map(track => track.id);
+  const uniqueQueueTrackIds = [...new Set(queueTrackIds)];
+  const supportedTrackIds = uniqueQueueTrackIds.filter(isSupportedPlaylistTrackId);
+  const unsupportedCount = uniqueQueueTrackIds.length - supportedTrackIds.length;
+  const supportedCount = supportedTrackIds.length;
+
+  const addQueueToPlaylist = (playlistId: string) => {
+    addTracksToPlaylist.mutate({ playlistId, trackIds: queueTrackIds }, {
+      onSuccess: result => {
+        const details = [
+          result.alreadyPresentCount ? `${result.alreadyPresentCount} already in playlist.` : '',
+          result.unsupportedCount ? `${result.unsupportedCount} unsupported item(s) skipped.` : '',
+        ].filter(Boolean).join(' ');
+        toast({
+          title: result.addedCount ? `Added ${result.addedCount} ${result.addedCount === 1 ? 'track' : 'tracks'} to playlist` : 'No new tracks added',
+          description: details || (result.addedCount ? undefined : 'All supported queue tracks are already in this playlist.'),
+        });
+        setChooserOpen(false);
+      },
+      onError: () => toast({ title: 'Could not add queue to playlist', description: 'Check your relay connection and try again.', variant: 'destructive' }),
+    });
+  };
 
   return <Sheet>
     <SheetTriggerButton queueLength={upcoming.length} />
@@ -28,6 +63,12 @@ export function QueuePanel() {
         <TabsContent value="queue" className="min-h-0 flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="space-y-5 p-4">
+              {user && player.queue.length > 0 && <section className="space-y-2 border-b pb-4">
+                <Button type="button" variant="outline" className="w-full justify-start" onClick={() => setChooserOpen(true)} disabled={supportedCount === 0 || addTracksToPlaylist.isPending}>
+                  <ListPlus className="size-4" /> Add queue to playlist
+                </Button>
+                {unsupportedCount > 0 && <p className="px-1 text-xs text-muted-foreground">{unsupportedCount} unsupported queue item(s) will be skipped.</p>}
+              </section>}
               <section aria-labelledby="queue-now-playing" className="space-y-2">
                 <h2 id="queue-now-playing" className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Now playing</h2>
                 {current ? <QueueTrack track={current} active onRemove={() => player.removeQueueItem(player.index)} /> : <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nothing is playing.</p>}
@@ -57,6 +98,40 @@ export function QueuePanel() {
         </TabsContent>
       </Tabs>
     </SheetContent>
+    <Dialog open={chooserOpen} onOpenChange={setChooserOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add queue to playlist</DialogTitle>
+          <DialogDescription>Choose a playlist for {player.queue.length} queued {player.queue.length === 1 ? 'track' : 'tracks'}. Existing tracks won’t be added again.</DialogDescription>
+        </DialogHeader>
+        <div className="max-h-72 space-y-2 overflow-y-auto">
+          {regularPlaylists.map(playlist => <Button
+            key={playlist.id}
+            type="button"
+            variant="outline"
+            className="w-full justify-start"
+            disabled={addTracksToPlaylist.isPending || supportedCount === 0}
+            onClick={() => addQueueToPlaylist(playlist.id)}
+          >
+            <ListMusic className="size-4 shrink-0" />
+            <span className="truncate">{playlist.title}</span>
+          </Button>)}
+          {regularPlaylists.length === 0 && <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">You don’t have any playlists yet. Create one to save this queue.</p>}
+          <Button type="button" variant="secondary" className="w-full justify-start" onClick={() => { setChooserOpen(false); setCreateOpen(true); }}>
+            <Plus className="size-4" /> New playlist
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    <CreatePlaylistDialog
+      open={createOpen}
+      onOpenChange={setCreateOpen}
+      initialTrackIds={queueTrackIds}
+      onCreated={() => {
+        const addedCount = supportedTrackIds.length;
+        toast({ title: `Playlist created with ${addedCount} ${addedCount === 1 ? 'track' : 'tracks'}`, description: unsupportedCount ? `${unsupportedCount} unsupported queue item(s) skipped.` : undefined });
+      }}
+    />
   </Sheet>;
 }
 

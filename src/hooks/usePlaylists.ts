@@ -191,6 +191,12 @@ export function usePlaylist(id: string | undefined) {
   };
 }
 
+export function isSupportedPlaylistTrackId(id: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(id) ||
+    /^(31337|36787|32123|30440):[0-9a-f]{64}:.+$/i.test(id) ||
+    !!wavlakeTrackUrl(id) || !!fountainTrackUrl(id) || !!podcastIndexTrackUrl(id);
+}
+
 function buildPlaylistEvent(
   playlist: Partial<Playlist> & { id: string; title: string; trackIds: string[]; isListed?: boolean },
 ): { kind: number; content: string; tags: string[][] } {
@@ -279,9 +285,10 @@ export function usePlaylistActions() {
   }
 
   const createPlaylist = useMutation({
-    mutationFn: async (input: { title: string; description?: string; image?: string; id?: string; isListed?: boolean }) => {
+    mutationFn: async (input: { title: string; description?: string; image?: string; id?: string; isListed?: boolean; trackIds?: string[] }) => {
       const id = input.id ?? `playlist-${crypto.randomUUID().slice(0, 8)}`;
-      const event = buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds: [], isListed: input.isListed });
+      const trackIds = [...new Set(input.trackIds ?? [])].filter(isSupportedPlaylistTrackId);
+      const event = buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds, isListed: input.isListed });
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
       await publishPlaylist(event);
       void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
@@ -330,6 +337,40 @@ export function usePlaylistActions() {
       if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
       await publishPlaylist(event, existing.event.created_at);
       void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+    },
+    onSuccess: invalidate,
+  });
+
+  const addTracksToPlaylist = useMutation({
+    mutationFn: async (input: { playlistId: string; trackIds: string[] }) => {
+      const existing = await fetchExisting(input.playlistId);
+      if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
+      const uniqueTrackIds = [...new Set(input.trackIds)];
+      const supportedTrackIds = uniqueTrackIds.filter(isSupportedPlaylistTrackId);
+      const unsupportedCount = uniqueTrackIds.length - supportedTrackIds.length;
+      const trackIds = [...existing.trackIds];
+      const knownIds = new Set(trackIds);
+      for (const trackId of supportedTrackIds) {
+        if (knownIds.has(trackId)) continue;
+        knownIds.add(trackId);
+        trackIds.push(trackId);
+      }
+      const addedCount = trackIds.length - existing.trackIds.length;
+      const alreadyPresentCount = supportedTrackIds.length - addedCount;
+      if (addedCount === 0) return { addedCount, unsupportedCount, alreadyPresentCount };
+      const event = buildPlaylistEvent({
+        event: existing.event,
+        id: existing.id,
+        title: existing.title,
+        description: existing.description,
+        image: existing.image,
+        trackIds,
+        isListed: existing.isListed,
+      });
+      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+      await publishPlaylist(event, existing.event.created_at);
+      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+      return { addedCount, unsupportedCount, alreadyPresentCount };
     },
     onSuccess: invalidate,
   });
@@ -406,6 +447,7 @@ export function usePlaylistActions() {
     createPlaylist,
     updatePlaylist,
     addToPlaylist,
+    addTracksToPlaylist,
     removeFromPlaylist,
     reorderPlaylist,
     toggleLike,
