@@ -20,6 +20,70 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { nip19 } from "nostr-tools";
 import { Input } from "@/components/ui/input";
 
+export function CombinedPodcastEpisodesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedPage = Number(searchParams.get("page") ?? "1");
+  const page = Number.isInteger(requestedPage) ? Math.max(requestedPage, 1) : 1;
+  const nostrEpisodes = useNostrPodcastEpisodeFeed();
+  const fountainQuery = usePodcastEpisodes(120, 120);
+  const nostrTracks = useMemo(() => nostrEpisodes.data?.pages.flatMap(batch => batch.tracks) ?? [], [nostrEpisodes.data]);
+  const fountainTracks = useMemo(() => (fountainQuery.data ?? []).filter(track => track.source === "fountain"), [fountainQuery.data]);
+  const tracks = useMemo(() => {
+    const seen = new Set<string>();
+    return [...nostrTracks, ...fountainTracks].filter(track => {
+      if (seen.has(track.url)) return false;
+      seen.add(track.url);
+      return true;
+    }).sort((left, right) => right.createdAt - left.createdAt);
+  }, [fountainTracks, nostrTracks]);
+  const isLoading = nostrEpisodes.isLoading || fountainQuery.isLoading;
+  const isError = nostrEpisodes.isError && fountainQuery.isError;
+  const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
+
+  useSeoMeta({ title: "Podcast episodes — Ostrify" });
+  useEffect(() => {
+    if (!isLoading && searchParams.get("page") && page > pageCount && !nostrEpisodes.hasNextPage) {
+      setSearchParams(pageCount === 1 ? {} : { page: String(pageCount) }, { replace: true });
+    }
+  }, [isLoading, nostrEpisodes.hasNextPage, page, pageCount, searchParams, setSearchParams]);
+
+  const loadEpisodePage = async (requiredCount: number) => {
+    if (nostrEpisodes.isFetchingNextPage) return false;
+    let loadedTracks = tracks;
+    let hasMore = nostrEpisodes.hasNextPage;
+    while (loadedTracks.length < requiredCount && hasMore) {
+      const result = await nostrEpisodes.fetchNextPage();
+      const nextNostrTracks = result.data?.pages.flatMap(batch => batch.tracks) ?? [];
+      const byUrl = new Map([...nextNostrTracks, ...fountainTracks].map(track => [track.url, track]));
+      loadedTracks = [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt);
+      hasMore = Boolean(result.hasNextPage);
+    }
+    return loadedTracks.length >= requiredCount || (!hasMore && loadedTracks.length > requiredCount - 20);
+  };
+
+  return <main className="space-y-6 p-4 sm:p-6">
+    <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Podcasts</BackLink>
+    <header>
+      <p className="text-sm font-semibold uppercase tracking-wider text-primary">Nostr + Fountain.fm</p>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Podcast episodes</h1>
+      <p className="mt-2 text-muted-foreground">Recent playable episodes from Nostr and Fountain.fm, combined and ordered by publish date.</p>
+    </header>
+    {isError && <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button type="button" className="underline" onClick={() => { void nostrEpisodes.refetch(); void fountainQuery.refetch(); }}>Try again</button></p>}
+    {!isLoading && !isError && !tracks.length && !nostrEpisodes.hasNextPage
+      ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable podcast episodes were found on your relays.</div>
+      : <TrackList
+          tracks={tracks}
+          isLoading={isLoading}
+          page={page}
+          onPageChange={nextPage => setSearchParams(nextPage <= 1 ? {} : { page: String(nextPage) })}
+          hasMore={nostrEpisodes.hasNextPage}
+          isLoadingMore={nostrEpisodes.isFetchingNextPage}
+          onLoadMore={loadEpisodePage}
+          emptyMessage="No playable podcast episodes were found on your relays."
+        />}
+  </main>;
+}
+
 export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPage = Number(searchParams.get("page") ?? "1");
