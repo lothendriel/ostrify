@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Menu } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Home, Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,7 +52,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </SheetContent>
               </Sheet>
             </div>
-            <div className="flex min-w-0 flex-1 justify-center px-1 sm:px-4">
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1 sm:px-4">
+              <Link to="/" aria-label="Home" title="Home" className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary sm:flex">
+                <Home className="size-5 fill-current" />
+              </Link>
               <GlobalSearch />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
