@@ -89,13 +89,13 @@ export function DailyDiscoverySection({ candidates, isLoading }: { candidates: T
       </header>
 
       {pending || (isLoading && !allCandidates.length) ? (
-        <div className="flex gap-2 overflow-hidden" aria-label="Loading daily discoveries">
-          {Array.from({ length: 4 }, (_, index) => <div key={index} className="w-[min(42vw,176px)] shrink-0 space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
+        <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]" aria-label="Loading daily discoveries">
+          {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
         </div>
       ) : discoveries.length ? (
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]">
           {discoveries.map(({ track, reason }) => (
-            <article key={track.id} className="w-[min(42vw,176px)] shrink-0 rounded-lg border border-border/50 bg-card/60 p-1.5">
+            <article key={track.id} className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border/50 bg-card/60 p-1.5">
               <TrackCard track={track} showLikeAction showPlaylistAction compact />
               <p className="px-2 pb-1 text-[11px] leading-tight text-emerald-200/80">{reason}</p>
               <div className="grid grid-cols-1 gap-0.5 px-1 pb-1">

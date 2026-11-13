@@ -18,7 +18,7 @@ export function Shelf({ title, subtitle, tracks, isLoading }: ShelfProps) {
         <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
         {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
       </div>
-      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-2">
         {isLoading
           ? Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="p-3 space-y-3">

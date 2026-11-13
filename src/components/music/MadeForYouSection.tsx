@@ -53,9 +53,9 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
         </div>
       ) : mix.length ? (
         <>
-          <div className="flex gap-2 overflow-x-auto px-2 pb-2">
+          <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 px-2 pb-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]">
             {mix.slice(0, 6).map(({ track, reason }) => (
-              <div key={track.id} className="w-[min(42vw,176px)] shrink-0">
+              <div key={track.id} className="min-w-0 max-w-full overflow-hidden">
                 <TrackCard track={track} showLikeAction showPlaylistAction compact />
                 <p className="px-2 pb-1 text-[11px] leading-tight text-violet-200/80">{reason}</p>
               </div>

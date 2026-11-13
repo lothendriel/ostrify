@@ -93,7 +93,7 @@ export function MusicNewsSection() {
           No recent music news found on your relays. Posts tagged with music topics will appear here.
         </div>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,15rem),1fr))] gap-3">
           {events.map((event) => <MusicNewsCard key={event.id} event={event} />)}
         </div>
       )}
