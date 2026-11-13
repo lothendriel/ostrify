@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LIKED_SONGS_ID, usePlaylists, type Playlist } from "@/hooks/usePlaylists";
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
@@ -48,23 +49,32 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <span className="font-bold text-xl tracking-tight">Ostrify</span>
       </div>
 
-      <div className="bg-card rounded-lg mx-2 py-2">
-        {navItems.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            onClick={onNavigate}
-            className={({ isActive }) => cn(
-              "flex items-center gap-4 px-5 py-2.5 font-semibold text-sm transition-colors",
-              isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon className="size-6" />
-            {label}
-          </NavLink>
-        ))}
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" className="group mx-2 flex h-11 justify-between rounded-lg bg-card px-4 text-sm font-semibold text-foreground hover:bg-accent/50" aria-label="Open navigation menu">
+            <span>Menu</span>
+            <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="bottom" className="mx-2 w-60 p-2">
+          {navItems.map(({ to, label, icon: Icon, end }) => (
+            <DropdownMenuItem key={to} asChild className="cursor-pointer p-0 focus:bg-accent">
+              <NavLink
+                to={to}
+                end={end}
+                onClick={onNavigate}
+                className={({ isActive }) => cn(
+                  "flex w-full items-center gap-4 rounded-sm px-3 py-2.5 font-semibold text-sm transition-colors",
+                  isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-5" />
+                {label}
+              </NavLink>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <div className="bg-card rounded-lg mx-2 flex-1 min-h-0 flex flex-col">
         <div className="flex items-center justify-between px-4 py-3">
