@@ -23,6 +23,8 @@ import { useToast } from '@/hooks/useToast';
 import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
 import { useFollowedPeople } from '@/hooks/useFollowedPeople';
 import { useProfilePrivacy } from '@/hooks/useProfilePrivacy';
+import { useAppContext } from '@/hooks/useAppContext';
+import { queryLibraryEvents } from '@/lib/libraryQuery';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
   const { data } = useAuthor(pubkey);
@@ -68,17 +70,31 @@ function FollowedPeopleList({ pubkey }: { pubkey: string }) {
 
 function ProfileFriendAction({ pubkey }: { pubkey: string }) {
   const { user } = useCurrentUser();
+  const { nostr } = useNostr();
+  const { config } = useAppContext();
   const follows = useFollowedPeople();
   const { toast } = useToast();
+  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const hasReadRelays = readRelays.length > 0;
+  const reciprocalFollow = useQuery({
+    queryKey: ['public-ostrify-follow-back', pubkey, user?.pubkey ?? '', readRelays.join('|')],
+    enabled: !!user && user.pubkey !== pubkey && hasReadRelays,
+    staleTime: 60_000,
+    queryFn: async ({ signal }) => {
+      const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], authors: [pubkey], '#d': ['ostrify-people'], limit: 20 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
+      const event = events.filter(item => item.kind === 30000 && item.pubkey === pubkey && item.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
+      return (event?.tags ?? []).some(([name, value]) => name === 'p' && value === user?.pubkey);
+    },
+  });
   if (!user || user.pubkey === pubkey) return null;
   if (!follows.hasReadRelays) return <p className="text-sm text-muted-foreground">Enable a read relay to add Ostrify friends.</p>;
   if (follows.isLoading) return <Skeleton className="h-10 w-40" />;
   if (follows.isError) return <p role="alert" className="text-sm text-destructive">Could not load your Ostrify friends. <button className="underline" onClick={() => void follows.refetch()}>Try again</button></p>;
   const isFriend = follows.people.includes(pubkey);
-  return <div className="space-y-2"><Button type="button" variant={isFriend ? 'secondary' : 'outline'} aria-pressed={isFriend} disabled={follows.toggle.isPending} onClick={() => follows.toggle.mutate({ pubkey, follow: !isFriend }, {
+  return <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><Button type="button" variant={isFriend ? 'secondary' : 'outline'} aria-pressed={isFriend} disabled={follows.toggle.isPending} onClick={() => follows.toggle.mutate({ pubkey, follow: !isFriend }, {
     onSuccess: () => toast({ title: isFriend ? 'Removed from friends' : 'Added to friends' }),
     onError: error => toast({ title: 'Could not update friends', description: error.message, variant: 'destructive' }),
-  })}>{isFriend ? <CheckCircle2 className="size-4" /> : <UserPlus className="size-4" />} {follows.toggle.isPending ? 'Saving…' : isFriend ? 'Following · Friend' : 'Add friend'}</Button><p className="text-sm text-muted-foreground">Following is one-way and immediately adds this person to your Ostrify friends. This relationship is public on Nostr.</p></div>;
+  })}>{isFriend ? <CheckCircle2 className="size-4" /> : <UserPlus className="size-4" />} {follows.toggle.isPending ? 'Saving…' : isFriend ? 'Following · Friend' : 'Add friend'}</Button>{reciprocalFollow.data && <span className="text-sm text-muted-foreground">(Follows You)</span>}</div><p className="text-sm text-muted-foreground">Following is one-way and immediately adds this person to your Ostrify friends. This relationship is public on Nostr.</p></div>;
 }
 
 function FriendProfile({ pubkey }: { pubkey: string }) {
