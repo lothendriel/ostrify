@@ -32,9 +32,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main content column */}
-        <div className="flex-1 flex flex-col min-w-0 bg-card md:rounded-lg overflow-hidden">
+        <div className="relative isolate flex-1 flex flex-col min-w-0 bg-card md:rounded-lg overflow-hidden">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[500px] bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "linear-gradient(to bottom, color-mix(in srgb, var(--card) 30%, transparent) 0%, var(--card) 100%), url('/autumn-forest.png')" }} />
           {/* Top bar */}
-          <header className="h-14 shrink-0 flex items-center justify-between gap-2 px-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
+          <header className="relative z-10 h-14 shrink-0 flex items-center justify-between gap-2 px-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
             <div className="flex shrink-0 items-center gap-2">
               {/* Mobile menu */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -67,7 +68,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Scrollable page content */}
-          <ScrollArea type="always" className="app-content-scroll min-w-0 max-w-full flex-1 min-h-0">
+          <ScrollArea type="always" className="app-content-scroll relative z-10 min-w-0 max-w-full flex-1 min-h-0 bg-transparent">
             <div className="min-w-0 max-w-full overflow-x-hidden pb-6">{children}</div>
           </ScrollArea>
         </div>
