@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { BackLink } from "@/components/music/BackLink";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowLeft, Heart, Mic, Play } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Heart, Mic, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackCard } from "@/components/music/TrackCard";
@@ -18,8 +18,11 @@ export default function FountainShowPage() {
   const favorites = usePodcastFavorites();
   const favoriteActions = usePodcastFavoriteActions();
   const player = usePlayer();
-  const [visibleEpisodeCount, setVisibleEpisodeCount] = useState(5);
-  const tracks = useMemo(() => episodes.data?.slice(0, visibleEpisodeCount) ?? [], [episodes.data, visibleEpisodeCount]);
+  const [episodePage, setEpisodePage] = useState(1);
+  const allTracks = episodes.data ?? [];
+  const pageCount = Math.max(1, Math.ceil(allTracks.length / 20));
+  const currentPage = Math.min(episodePage, pageCount);
+  const tracks = allTracks.slice((currentPage - 1) * 20, currentPage * 20);
   const image = sanitizeUrl(show.data?.image);
   const favorite = show.data ? fountainShowFavorite(show.data) : undefined;
   const isSaved = favorite ? favorites.data.some(item => item.id === favorite.id) : false;
@@ -38,8 +41,8 @@ export default function FountainShowPage() {
     </header>}
 
     <section className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Episodes</h2><p className="text-sm text-muted-foreground">Latest playable episodes from RSS, with Podcast Index as a fallback.</p></div><Button type="button" disabled={!tracks.length || showLoadFailed || showIsLoading} onClick={() => player.playQueue(tracks)}><Play className="size-4 fill-current" /> Play loaded episodes</Button></div>
-      {show.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Show details could not be loaded, so its RSS episodes are unavailable.</div> : show.isLoading || episodes.isLoading ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="space-y-3"><Skeleton className="aspect-square rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}</div> : !show.data?.feedUrl ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">A public RSS feed could not be resolved for this show.</div> : episodes.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center"><p className="text-destructive">Couldn’t load this show’s episodes from RSS or Podcast Index.</p><Button className="mt-4" variant="outline" onClick={() => void episodes.refetch()}>Try again</Button></div> : <>{tracks.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{tracks.map(track => <TrackCard key={track.id} track={track} showPlaylistAction showLikeAction />)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found in this show’s RSS feed.</div>}{episodes.data && visibleEpisodeCount < episodes.data.length && <div className="flex justify-center"><Button type="button" variant="outline" onClick={() => setVisibleEpisodeCount(count => count + 5)}>Load more episodes</Button></div>}</>}
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Episodes</h2><p className="text-sm text-muted-foreground">Latest playable episodes from RSS, with Podcast Index as a fallback.</p></div><Button type="button" disabled={!allTracks.length || showLoadFailed || showIsLoading} onClick={() => player.playQueue(allTracks)}><Play className="size-4 fill-current" /> Play loaded episodes</Button></div>
+      {show.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Show details could not be loaded, so its RSS episodes are unavailable.</div> : show.isLoading || episodes.isLoading ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="space-y-3"><Skeleton className="aspect-square rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}</div> : !show.data?.feedUrl ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">A public RSS feed could not be resolved for this show.</div> : episodes.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center"><p className="text-destructive">Couldn’t load this show’s episodes from RSS or Podcast Index.</p><Button className="mt-4" variant="outline" onClick={() => void episodes.refetch()}>Try again</Button></div> : <>{tracks.length ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{tracks.map(track => <TrackCard key={track.id} track={track} showPlaylistAction showLikeAction />)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found in this show’s RSS feed.</div>}{allTracks.length > 20 && <nav aria-label="Podcast episode pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setEpisodePage(page => Math.max(1, page - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} <span className="hidden sm:inline">· {allTracks.length} episodes</span></p><Button type="button" variant="outline" onClick={() => setEpisodePage(page => Math.min(pageCount, page + 1))} disabled={currentPage >= pageCount}>Next <ChevronRight className="size-4" /></Button></nav>}</>}
     </section>
   </div>;
 }

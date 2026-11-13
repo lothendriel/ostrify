@@ -9,8 +9,7 @@ import { CollectionHeader } from "@/components/music/CollectionHeader";
 import { TrackList } from "@/components/music/TrackList";
 import { NostrCollections } from "@/components/music/NostrCollections";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, Music } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Music } from "lucide-react";
 
 function wavlakeReleases(tracks: Track[], type: 'artist' | 'album'): WavlakeRelease[] {
   const releases = new Map<string, WavlakeRelease>();
@@ -29,11 +28,8 @@ function wavlakeReleases(tracks: Track[], type: 'artist' | 'album'): WavlakeRele
   return [...releases.values()];
 }
 
-const TRACKS_PER_PAGE = 20;
-
 const CategoryPage = () => {
   const { id } = useParams<{ id: string }>();
-  const [page, setPage] = useState(1);
   const [collectionShuffle, setCollectionShuffle] = useState<{ categoryId: string; key: number } | null>(null);
   const category = CATEGORIES.find((c) => c.id === id);
   const { data: nostrTracks = [], isLoading, isError, refetch } = useCategoryTracks(id);
@@ -64,10 +60,6 @@ const CategoryPage = () => {
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [id]);
 
-  const pageCount = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE));
-  const currentPage = Math.min(page, pageCount);
-  const visibleTracks = tracks.slice((currentPage - 1) * TRACKS_PER_PAGE, currentPage * TRACKS_PER_PAGE);
-
   useSeoMeta({ title: `${category?.label ?? "Category"} — Ostrify` });
 
   if (!category) {
@@ -91,24 +83,11 @@ const CategoryPage = () => {
         {isWavlakeError && <p role="status" className="text-sm text-muted-foreground">Some Wavlake catalog results are unavailable right now. <button type="button" onClick={() => void refetchWavlake()} className="text-primary underline">Try again</button></p>}
         <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2>
         <TrackList
-          tracks={visibleTracks}
+          tracks={tracks}
           isLoading={isLoading || isWavlakeLoading}
           playTrackOnSelect
           emptyMessage={`No ${category.label} tracks found right now. We look for the genre in Nostr tags and catalog track metadata — check back later or browse another genre.`}
         />
-        {!isLoading && !isWavlakeLoading && tracks.length > 0 && (
-          <nav aria-label={`${category.label} track pagination`} className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-            <Button type="button" variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={currentPage <= 1}>
-              <ChevronLeft className="size-4" /> Previous
-            </Button>
-            <p aria-live="polite" className="text-sm text-muted-foreground">
-              Page {currentPage} of {pageCount} <span className="hidden sm:inline">· {tracks.length} tracks</span>
-            </p>
-            <Button type="button" variant="outline" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={currentPage >= pageCount}>
-              Next <ChevronRight className="size-4" />
-            </Button>
-          </nav>
-        )}
         </section>
       </div>
     </div>

@@ -15,7 +15,6 @@ import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, type Track } from "@/lib/music";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
-import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
 
@@ -26,7 +25,7 @@ function TrackSections({ tracks, heading }: { tracks: Track[]; heading: string }
     {heading && <h2 className="text-2xl font-bold tracking-tight">{heading}</h2>}
     {albums.map((album) => <section key={album.title} id={`album-${album.title ?? ''}`} className="space-y-3 scroll-mt-4">
       <h3 className="text-xl font-semibold tracking-tight">{album.title}</h3>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{album.tracks.map((track) => <TrackCard key={track.id} track={track} />)}</div>
+      <TrackList tracks={album.tracks} />
     </section>)}
     {singles.length > 0 && <section className="space-y-3"><h3 className="text-xl font-semibold">{albums.length > 0 ? "Singles" : "Tracks"}</h3><TrackList tracks={singles} playTrackOnSelect /></section>}
   </section>;

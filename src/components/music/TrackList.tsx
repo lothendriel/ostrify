@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Track } from "@/lib/music";
 import { TrackRow } from "./TrackRow";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
+
+const TRACKS_PER_PAGE = 20;
 
 interface TrackListProps {
   tracks: Track[];
@@ -16,6 +19,11 @@ interface TrackListProps {
 
 export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false, onReorder }: TrackListProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * TRACKS_PER_PAGE;
+  const visibleTracks = tracks.slice(pageStart, pageStart + TRACKS_PER_PAGE);
   const reorder = (from: number, to: number) => {
     if (!onReorder || from === to || from < 0 || to < 0 || from >= tracks.length || to >= tracks.length) return;
     const next = [...tracks];
@@ -63,25 +71,31 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
         </span>
       </div>
       <div className="mt-1">
-        {tracks.map((track, i) => (
-          <TrackRow
+        {visibleTracks.map((track, i) => {
+          const index = pageStart + i;
+          return <TrackRow
             key={track.id}
             track={track}
-            index={i}
+            index={index}
             queue={tracks}
             playTrackOnSelect={playTrackOnSelect}
             onCreatePlaylist={onCreatePlaylist}
             onRemove={onRemove ? () => onRemove(track) : undefined}
             draggable={!!onReorder}
-            onMoveUp={onReorder && i > 0 ? () => reorder(i, i - 1) : undefined}
-            onMoveDown={onReorder && i < tracks.length - 1 ? () => reorder(i, i + 1) : undefined}
-            onDragStart={onReorder ? event => { setDraggedIndex(i); event.dataTransfer.effectAllowed = "move"; } : undefined}
+            onMoveUp={onReorder && index > 0 ? () => reorder(index, index - 1) : undefined}
+            onMoveDown={onReorder && index < tracks.length - 1 ? () => reorder(index, index + 1) : undefined}
+            onDragStart={onReorder ? event => { setDraggedIndex(index); event.dataTransfer.effectAllowed = "move"; } : undefined}
             onDragOver={onReorder ? event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } : undefined}
-            onDrop={onReorder ? event => { event.preventDefault(); if (draggedIndex !== null) reorder(draggedIndex, i); setDraggedIndex(null); } : undefined}
+            onDrop={onReorder ? event => { event.preventDefault(); if (draggedIndex !== null) reorder(draggedIndex, index); setDraggedIndex(null); } : undefined}
             onDragEnd={onReorder ? () => setDraggedIndex(null) : undefined}
-          />
-        ))}
+          />;
+        })}
       </div>
+      {tracks.length > TRACKS_PER_PAGE && <nav aria-label="Track pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <Button type="button" variant="outline" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /> Previous</Button>
+        <p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} <span className="hidden sm:inline">· {tracks.length} tracks</span></p>
+        <Button type="button" variant="outline" onClick={() => setPage(current => Math.min(pageCount, current + 1))} disabled={currentPage >= pageCount}>Next <ChevronRight className="size-4" /></Button>
+      </nav>}
     </div>
   );
 }
