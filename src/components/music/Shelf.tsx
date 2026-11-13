@@ -1,4 +1,6 @@
 import type { Track } from "@/lib/music";
+import { Link } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { TrackCard } from "./TrackCard";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -8,16 +10,24 @@ interface ShelfProps {
   tracks: Track[];
   isLoading?: boolean;
   dense?: boolean;
+  seeAllHref?: string;
 }
 
-export function Shelf({ title, subtitle, tracks, isLoading, dense = false }: ShelfProps) {
+export function Shelf({ title, subtitle, tracks, isLoading, dense = false, seeAllHref }: ShelfProps) {
   if (!isLoading && tracks.length === 0) return null;
 
   return (
     <section className="w-full min-w-0 max-w-full space-y-3 overflow-hidden">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
-        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
+          {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+        </div>
+        {seeAllHref && (
+          <Link to={seeAllHref} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
+            See all <ChevronRight className="size-4" />
+          </Link>
+        )}
       </div>
       <div className={`grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(3,minmax(0,1fr))] ${dense ? "lg:grid-cols-[repeat(4,minmax(0,1fr))] 2xl:grid-cols-[repeat(6,minmax(0,1fr))]" : "lg:grid-cols-[repeat(3,minmax(0,1fr))] 2xl:grid-cols-[repeat(5,minmax(0,1fr))]"}`}>
         {isLoading

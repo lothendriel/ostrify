@@ -94,7 +94,7 @@ const Index = () => {
       <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense />
 
       {categoryShelves.map(({ category, tracks: catTracks }) => (
-        <Shelf key={category.id} title={category.label} tracks={catTracks} dense />
+        <Shelf key={category.id} title={category.label} tracks={catTracks} dense seeAllHref={`/category/${category.id}`} />
       ))}
 
       {!tracksLoading && tracks.length === 0 && !podcastsLoading && (
