@@ -8,6 +8,7 @@ import {
   Loader2,
   FileUp,
   ExternalLink,
+  Puzzle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +92,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   // Login state — single input accepting either an nsec or a bunker URI.
   const [loginInput, setLoginInput] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isExtensionLoggingIn, setIsExtensionLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
   // Nostrconnect ("Open signer app") state. No QR code is shown — the URI is
@@ -141,6 +143,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       setShowKey(false);
       setIsGenerating(false);
       setIsLoggingIn(false);
+      setIsExtensionLoggingIn(false);
       setLoginError('');
       setProfileData({ name: '', about: '', picture: '' });
       setNostrConnectParams(null);
@@ -303,6 +306,24 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
         setIsLoggingIn(false);
       }
     }, 50);
+  };
+
+  const handleExtensionLogin = async () => {
+    setIsLoggingIn(true);
+    setIsExtensionLoggingIn(true);
+    setLoginError('');
+    try {
+      await login.extension();
+      onClose();
+    } catch (error) {
+      setLoginError(
+        error instanceof Error
+          ? error.message
+          : 'Browser extension login failed. Make sure a NIP-07 extension is installed and unlocked.',
+      );
+      setIsLoggingIn(false);
+      setIsExtensionLoggingIn(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -662,6 +683,8 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
                   onSubmit={handleLogin}
                   onFileChange={handleFileUpload}
                   onOpenSignerApp={handleOpenSignerApp}
+                  onExtensionLogin={() => void handleExtensionLogin()}
+                  isExtensionLoggingIn={isExtensionLoggingIn}
                   fileInputRef={fileInputRef}
                 />
               )}
@@ -692,6 +715,8 @@ interface NsecLoginFormProps {
   onSubmit: () => void;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onOpenSignerApp: () => void;
+  onExtensionLogin: () => void;
+  isExtensionLoggingIn: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
@@ -704,6 +729,8 @@ const NsecLoginForm: React.FC<NsecLoginFormProps> = ({
   onSubmit,
   onFileChange,
   onOpenSignerApp,
+  onExtensionLogin,
+  isExtensionLoggingIn,
   fileInputRef,
 }) => (
   <form
@@ -765,7 +792,26 @@ const NsecLoginForm: React.FC<NsecLoginFormProps> = ({
       disabled={isLoggingIn || !loginInput.trim()}
       className="w-full rounded-full"
     >
-      {isLoggingIn ? 'Logging in…' : 'Log in'}
+      {isLoggingIn && !isExtensionLoggingIn ? 'Logging in…' : 'Log in'}
+    </Button>
+    <Button
+      type="button"
+      variant="outline"
+      onClick={onExtensionLogin}
+      disabled={isLoggingIn}
+      className="w-full rounded-full"
+    >
+      {isExtensionLoggingIn ? (
+        <>
+          <Loader2 className="size-4 animate-spin" />
+          Connecting to browser extension…
+        </>
+      ) : (
+        <>
+          <Puzzle className="size-4" />
+          Log in with browser extension
+        </>
+      )}
     </Button>
   </form>
 );
