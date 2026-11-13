@@ -83,8 +83,8 @@ const Index = () => {
           <h2 id="browse-genres-heading" className="text-sm font-semibold text-muted-foreground">Browse genres</h2>
           <Link to="/music" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">All music <ChevronRight className="size-3.5" /></Link>
         </div>
-        <nav aria-label="Browse music genres" className="flex gap-2 overflow-x-auto pb-1">
-          {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="shrink-0 rounded-full border border-border/70 bg-secondary/40 px-3 py-1.5 text-xs font-medium transition-colors hover:border-primary/50 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
+        <nav aria-label="Browse music genres" className="flex flex-wrap gap-2 pb-1">
+          {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="rounded-full border border-border/70 bg-secondary/40 px-3 py-1.5 text-xs font-medium transition-colors hover:border-primary/50 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
         </nav>
       </section>
 
