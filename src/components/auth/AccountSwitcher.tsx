@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { ChevronDown, Loader2, LogOut, Puzzle, UserIcon, UserPlus, Settings } from 'lucide-react';
+import { ChevronDown, LogOut, UserIcon, UserPlus, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { sanitizeUrl } from '@/lib/sanitize';
 import {
@@ -12,8 +11,6 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar.tsx';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
-import { useLoginActions } from '@/hooks/useLoginActions';
-import { toast } from '@/hooks/useToast';
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -21,25 +18,6 @@ interface AccountSwitcherProps {
 
 export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const { currentUser, otherUsers, isLoading, setLogin, removeLogin } = useLoggedInAccounts();
-  const login = useLoginActions();
-  const [isExtensionLoggingIn, setIsExtensionLoggingIn] = useState(false);
-
-  const handleExtensionLogin = async () => {
-    setIsExtensionLoggingIn(true);
-    try {
-      await login.extension();
-    } catch (error) {
-      toast({
-        title: 'Browser extension login failed',
-        description: error instanceof Error
-          ? error.message
-          : 'Make sure a NIP-07 browser extension is installed and unlocked.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsExtensionLoggingIn(false);
-    }
-  };
 
   if (!currentUser) return null;
 
@@ -140,18 +118,6 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         >
           <UserPlus className='w-4 h-4' />
           <span>Add another account</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => void handleExtensionLogin()}
-          disabled={isExtensionLoggingIn}
-          className='flex items-center gap-2 cursor-pointer p-2 rounded-md'
-        >
-          {isExtensionLoggingIn ? (
-            <Loader2 className='w-4 h-4 animate-spin' />
-          ) : (
-            <Puzzle className='w-4 h-4' />
-          )}
-          <span>{isExtensionLoggingIn ? 'Connecting extension…' : 'Log in with browser extension'}</span>
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => removeLogin(currentUser.id)}
