@@ -32,7 +32,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
   };
 
   return (
-    <div className={cn("group relative rounded-lg bg-card transition-colors hover:bg-accent/10", compact ? "p-2" : "p-3")}>
+    <div className={cn("group relative min-w-0 max-w-full overflow-hidden rounded-lg bg-card transition-colors hover:bg-accent/10", compact ? "p-2" : "p-3")}>
       <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="block w-full text-left">
         <div className={cn("relative", compact ? "mb-2" : "mb-3")}>
           <TrackArtwork track={track} className="w-full aspect-square" rounded={compact ? "rounded-md" : "rounded-md shadow-lg"} />

@@ -45,7 +45,7 @@ const Index = () => {
   })();
 
   return (
-    <div className="p-4 sm:p-6 space-y-8">
+    <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
       <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
 
       <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />

@@ -13,12 +13,12 @@ export function Shelf({ title, subtitle, tracks, isLoading }: ShelfProps) {
   if (!isLoading && tracks.length === 0) return null;
 
   return (
-    <section className="space-y-3">
+    <section className="w-full min-w-0 max-w-full space-y-3 overflow-hidden">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
         {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+      <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {isLoading
           ? Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="p-3 space-y-3">
