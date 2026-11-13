@@ -92,7 +92,7 @@ export function buildPersonalizedMix({
       ? Math.min(1, Math.max(0, 1 - (date.getTime() / 1000 - track.createdAt) / (365 * 24 * 60 * 60)))
       : 0;
 
-    let reason = "A fresh find from Nostr";
+    let reason = track.source === "wavlake" ? "A fresh find on Wavlake" : "A fresh find from Nostr";
     if (followedMatch) reason = "From an artist you follow";
     else if (likedArtistMatch) reason = "From an artist you like";
     else if (historyArtistMatch) reason = "Similar to your recent listening";

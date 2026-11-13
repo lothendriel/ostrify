@@ -5,6 +5,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
+import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildPersonalizedMix } from "@/lib/personalizedMix";
 import type { Track } from "@/lib/music";
 import { Button } from "@/components/ui/button";
@@ -15,18 +16,22 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
   const player = usePlayer();
   const playlists = usePlaylists();
   const followedArtists = useFollowedArtists();
+  const wavlake = useWavlakeCatalog();
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
   const likedTracks = useTracksByIds(likedPlaylist?.trackIds);
   const liked = likedTracks.data?.tracks ?? [];
+  const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
+  const mixCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
   const mix = useMemo(() => buildPersonalizedMix({
-    candidates,
+    candidates: mixCandidates,
     liked,
     history: player.history,
     followedArtists: followedArtists.data ?? [],
-  }), [candidates, liked, player.history, followedArtists.data]);
+  }), [mixCandidates, liked, player.history, followedArtists.data]);
   const mixTracks = mix.map(item => item.track);
   const tasteCount = liked.length + player.history.filter(track => track.kind === "music").length + (followedArtists.data?.length ?? 0);
   const isPersonalDataLoading = playlists.isLoading || likedTracks.isLoading || followedArtists.isLoading;
+  const catalogFailure = wavlake.isError && !wavlakeTracks.length;
 
   return (
     <section aria-labelledby="made-for-you-heading" className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-violet-950/70 via-indigo-950/40 to-card">
@@ -44,7 +49,7 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
         </Button>
       </div>
       <div className="border-t border-white/10 px-5 py-3 text-xs text-muted-foreground sm:px-6">
-        Private by design: recommendations run in this browser and your listening data is never published.
+        Private by design: recommendations run in this browser and your listening data is never published. Mixes combine Nostr discoveries with Wavlake’s catalog.
       </div>
       {isLoading || isPersonalDataLoading ? (
         <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Building your mix">
@@ -60,7 +65,7 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
               </div>
             ))}
           </div>
-          <p className="px-5 pb-4 text-xs text-muted-foreground sm:px-6">{mix.length} tracks in today’s mix · updates daily as discovery and your library change</p>
+          <p className="px-5 pb-4 text-xs text-muted-foreground sm:px-6">{mix.length} tracks in today’s mix · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"} · updates daily as discovery and your library change{catalogFailure ? " · Wavlake catalog unavailable right now" : ""}</p>
         </>
       ) : (
         <div className="px-5 pb-6 sm:px-6">
@@ -68,7 +73,7 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
             {tasteCount === 0 ? (
               <><p className="font-medium text-foreground">Your mix will take shape as you listen.</p><p className="mt-1">Like a few tracks, follow artists, or start playing music. Your recommendations stay in this browser.</p><Link to="/music" className="mt-3 inline-flex font-semibold text-violet-200 hover:underline">Explore music</Link></>
             ) : (
-              <><p className="font-medium text-foreground">Not enough matching music just yet.</p><p className="mt-1">We use music currently available from your Nostr discovery feed. Try again after discovering more tracks.</p></>
+              <><p className="font-medium text-foreground">Not enough matching music just yet.</p><p className="mt-1">We use tracks available from your Nostr discovery feed and Wavlake’s catalog. Try again after discovering more music.</p>{catalogFailure && <p className="mt-2">Wavlake’s catalog couldn’t be reached, so only Nostr results are available right now.</p>}</>
             )}
           </div>
         </div>
