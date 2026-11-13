@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { Shelf } from "@/components/music/Shelf";
+import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 
@@ -44,6 +45,8 @@ const Index = () => {
   return (
     <div className="p-4 sm:p-6 space-y-8">
       <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
+
+      <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
 
       {/* Browse categories */}
       <section className="space-y-3">
