@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { BackLink } from "@/components/music/BackLink";
 import { useQueryClient } from "@tanstack/react-query";
@@ -39,9 +39,11 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
   }, [episodesQuery.data]);
   const itemsCount = type === "shows" ? shows.length : tracks.length;
   const pageSize = 20;
+  const hasMorePages = type === "shows" ? showsQuery.hasNextPage : episodesQuery.hasNextPage;
   const pageCount = Math.max(1, Math.ceil(itemsCount / pageSize));
-  const visibleShows = type === "shows" ? shows.slice((page - 1) * pageSize, page * pageSize) : [];
-  const visibleTracks = type === "episodes" ? tracks.slice((page - 1) * pageSize, page * pageSize) : [];
+  const effectivePage = Math.min(page, pageCount + (hasMorePages ? 1 : 0));
+  const visibleShows = type === "shows" ? shows.slice((effectivePage - 1) * pageSize, effectivePage * pageSize) : [];
+  const visibleTracks = type === "episodes" ? tracks.slice((effectivePage - 1) * pageSize, effectivePage * pageSize) : [];
   const isLoading = type === "shows" ? showsQuery.isLoading : episodesQuery.isLoading;
   const isError = type === "shows" ? showsQuery.isError : episodesQuery.isError;
   const hasNextPage = type === "shows" ? showsQuery.hasNextPage : episodesQuery.hasNextPage;
@@ -54,14 +56,14 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
   }, [hasNextPage, page, pageCount, searchParams, setSearchParams]);
 
   const nextPage = async () => {
-    if (itemsCount > page * pageSize) {
-      setSearchParams({ page: String(page + 1) });
+    if (itemsCount > effectivePage * pageSize) {
+      setSearchParams({ page: String(effectivePage + 1) });
       return;
     }
     if (!hasNextPage || isFetchingNextPage) return;
     let count = itemsCount;
     let more: boolean = hasNextPage;
-    while (count <= page * pageSize && more) {
+    while (count <= effectivePage * pageSize && more) {
       if (type === "shows") {
         const result = await showsQuery.fetchNextPage();
         const uniqueShows = [...new Map((result.data?.pages.flatMap(batch => batch.shows) ?? []).map(show => [show.id, show])).values()];
@@ -74,8 +76,22 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
         more = Boolean(result.hasNextPage);
       }
     }
-    if (count > page * pageSize) setSearchParams({ page: String(page + 1) });
+    if (count > effectivePage * pageSize) setSearchParams({ page: String(effectivePage + 1) });
   };
+
+  const loadEpisodePage = async (requiredCount: number) => {
+    if (episodesQuery.isFetchingNextPage) return false;
+    let count = tracks.length;
+    let more: boolean = episodesQuery.hasNextPage;
+    while (count < requiredCount && more) {
+      const result = await episodesQuery.fetchNextPage();
+      count = [...new Set((result.data?.pages.flatMap(batch => batch.tracks) ?? []).map(track => track.url))].length;
+      more = Boolean(result.hasNextPage);
+    }
+    return count >= requiredCount;
+  };
+
+  const paginationNav = (position: "top" | "bottom") => <nav aria-label={`${type} pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t py-3"}`}><Button type="button" variant="outline" onClick={() => setSearchParams(effectivePage === 2 ? {} : { page: String(effectivePage - 1) })} disabled={effectivePage <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {effectivePage}{!hasNextPage && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {itemsCount} {type} {hasNextPage ? 'loaded' : 'total'}</span></p><Button type="button" variant="outline" onClick={() => void nextPage()} disabled={!hasNextPage && effectivePage >= pageCount || isFetchingNextPage}>{isFetchingNextPage ? "Loading…" : "Next →"}</Button></nav>;
 
   return <div className="p-4 sm:p-6 space-y-6">
     <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr podcasts</BackLink>
@@ -84,8 +100,7 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
     {isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Nostr {type}. <button type="button" className="underline" onClick={() => void (type === "shows" ? showsQuery.refetch() : episodesQuery.refetch())}>Try again</button></p>}
     {!isLoading && !isError && !itemsCount && !hasNextPage && <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Nostr {type} were found on your read relays.</div>}
     {itemsCount === 0 && hasNextPage && <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Nostr {type} in the batches loaded so far. Continue to search older relay results.</div>}
-    {(itemsCount > 0 || hasNextPage) && <>{type === "shows" && visibleShows.length > 0 && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{visibleShows.map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={favorites.data} onToggleFavorite={(favorite, saved) => favoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={favorites.isEnabled} />)}</div>}{type === "episodes" && visibleTracks.length > 0 && <TrackList tracks={visibleTracks} />}
-      <nav aria-label={`${type} pagination`} className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{!hasNextPage && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {itemsCount} {type} loaded</span></p><Button type="button" variant="outline" onClick={() => void nextPage()} disabled={!hasNextPage && page >= pageCount || isFetchingNextPage}>{isFetchingNextPage ? "Loading…" : "Next →"}</Button></nav>
+    {(itemsCount > 0 || hasNextPage) && <>{type === "episodes" && tracks.length > 0 && <TrackList tracks={tracks} page={page} onPageChange={nextPageNumber => setSearchParams(nextPageNumber === 1 ? {} : { page: String(nextPageNumber) })} hasMore={hasNextPage} isLoadingMore={isFetchingNextPage} onLoadMore={loadEpisodePage} />}{type === "shows" && visibleShows.length > 0 && <>{paginationNav("top")}<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{visibleShows.map(show => <ShowCard key={show.id} show={show} tracks={[]} favorites={favorites.data} onToggleFavorite={(favorite, saved) => favoriteActions.toggleFavorite.mutate({ favorite, saved })} userLoggedIn={favorites.isEnabled} />)}</div>{paginationNav("bottom")}</>}
     </>}
   </div>;
 }
@@ -172,6 +187,7 @@ function FountainEpisodesPage() {
     setPendingPage(page + 1);
     setEpisodeLimit(limit => Math.min(limit + 20, 120));
   };
+  const pagination = (position: "top" | "bottom") => <nav aria-label={`Latest Fountain episodes pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t py-3"}`}><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1 || episodes.isFetching}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{exhausted && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} episodes loaded</span></p><Button type="button" variant="outline" onClick={nextPage} disabled={episodes.isFetching || exhausted && page * 20 >= tracks.length}>{episodes.isFetching && pendingPage !== null ? "Loading…" : "Next →"}</Button></nav>;
 
   return <main className="space-y-6 p-4 sm:p-6">
     <BackLink to="/podcasts?source=fountain" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Fountain.fm podcasts</BackLink>
@@ -179,7 +195,7 @@ function FountainEpisodesPage() {
     {episodes.isLoading && <TrackSkeletonGrid />}
     {episodes.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button type="button" className="underline" onClick={() => void episodes.refetch()}>Try again</button></p>}
     {!episodes.isLoading && !episodes.isError && !tracks.length && exhausted && <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No Fountain-linked episodes were found in the relays currently loaded.</div>}
-    {tracks.length > 0 && <><div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{visibleTracks.map(track => <TrackCard key={track.id} track={track} showPlaylistAction showLikeAction />)}</div><nav aria-label="Latest Fountain episodes pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1 || episodes.isFetching}>← Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{exhausted && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} episodes loaded</span></p><Button type="button" variant="outline" onClick={nextPage} disabled={episodes.isFetching || exhausted && page * 20 >= tracks.length}>{episodes.isFetching && pendingPage !== null ? "Loading…" : "Next →"}</Button></nav></>}
+    {tracks.length > 0 && <>{pagination("top")}<div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{visibleTracks.map(track => <TrackCard key={track.id} track={track} showPlaylistAction showLikeAction />)}</div>{pagination("bottom")}</>}
   </main>;
 }
 
@@ -194,6 +210,7 @@ const PodcastsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSource = searchParams.get("source");
   const [source, setSource] = useState<"nostr" | "fountain" | "directory">(initialSource === "directory" ? "directory" : initialSource === "fountain" ? "fountain" : "nostr");
+  const nostrEpisodes = useNostrPodcastEpisodeFeed(source === "nostr");
   const [viewAllSource, setViewAllSource] = useState<"nostr" | "fountain" | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -217,12 +234,31 @@ const PodcastsPage = () => {
   const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null) ?? selectedIndexShow;
   const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
   const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
+  const relayedNostrTracks = (nostrEpisodes.data?.pages.flatMap(batch => batch.tracks) ?? []).filter(track => track.kind === "podcast");
+  const [nostrPage, setNostrPage] = useState(1);
+  const nostrPageRef = useRef(1);
+  const updateNostrPage = (nextPage: number) => { nostrPageRef.current = nextPage; setNostrPage(nextPage); };
+  const loadNostrEpisodePage = async (requiredCount: number) => {
+    if (nostrEpisodes.isFetchingNextPage) return false;
+    let loaded = relayedNostrTracks.length;
+    let hasMore = nostrEpisodes.hasNextPage;
+    while (loaded < requiredCount && hasMore) {
+      const result = await nostrEpisodes.fetchNextPage();
+      loaded = (result.data?.pages.flatMap(batch => batch.tracks) ?? []).filter(track => track.kind === "podcast").length;
+      hasMore = Boolean(result.hasNextPage);
+    }
+    if (loaded >= requiredCount) updateNostrPage(nostrPageRef.current + 1);
+    return false;
+  };
+  const nostrTrackPageCount = Math.max(1, Math.ceil(relayedNostrTracks.length / 20));
+  const nostrTrackPage = Math.min(nostrPage, nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0));
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
   const nostrShowList = nostrShows.data ?? [];
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
     return () => clearTimeout(timer);
   }, [search]);
+  useEffect(() => { if (nostrPage > nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0)) updateNostrPage(nostrTrackPageCount); }, [nostrPage, nostrTrackPageCount, nostrEpisodes.hasNextPage]);
   const perShowEpisodes = useMemo(() => {
     const grouped = new Map<string, Track[]>();
     for (const episode of selectedTracks) {
@@ -294,7 +330,7 @@ const PodcastsPage = () => {
               <section className="space-y-4">
                 {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><div className="flex gap-2"><Button asChild variant="outline"><Link to="/podcasts/nostr/episodes">See all</Link></Button><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div></div>}
                 {source === "fountain" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Latest Fountain episodes</h2><p className="text-sm text-muted-foreground">Fountain episodes currently referenced on Nostr.</p></div><Button asChild variant="outline"><Link to="/podcasts/fountain/episodes">See all</Link></Button></div>}
-                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? fountainTracks.slice(0, 10) : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div>{source === "nostr" && <TrackList tracks={selectedTracks} />}</> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
+                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <>{source === "nostr" && <TrackList tracks={relayedNostrTracks} page={nostrTrackPage} onPageChange={nextPage => updateNostrPage(Math.min(nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0), nextPage))} hasMore={nostrEpisodes.hasNextPage} isLoadingMore={nostrEpisodes.isFetchingNextPage} onLoadMore={loadNostrEpisodePage} />}<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? fountainTracks.slice(0, 10) : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div></> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
               </section>
             </>
           )}
@@ -393,15 +429,14 @@ function PodcastEpisodeList({ tracks, show, favorites, onToggleFavorite, onPlayT
   const currentPage = Math.min(page, pageCount);
   const pageStart = (currentPage - 1) * 20;
   const visibleTracks = tracks.slice(pageStart, pageStart + 20);
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
-  return <div><div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Show</span><span className="pr-14">Actions</span></div>{visibleTracks.map((track, index) => {
+  useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
+  const pagination = (position: "top" | "bottom") => <nav aria-label={`Podcast episode pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "mb-3 border-y py-3" : "mt-4 border-t pt-4"}`}><Button type="button" variant="outline" onClick={() => setPage(value => Math.max(1, value - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} · {tracks.length} episodes</p><Button type="button" variant="outline" onClick={() => setPage(value => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount}>Next <ChevronRight className="size-4" /></Button></nav>;
+  return <div>{tracks.length > 20 && pagination("top")}<div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Show</span><span className="pr-14">Actions</span></div>{visibleTracks.map((track, index) => {
     const episodeId = track.podcastIndexEpisodeId;
     const favorite: PodcastFavorite | undefined = episodeId ? { id: `podcast-index:episode:id:${episodeId}`, source: "podcast-index", title: track.title, publisher: show.title, image: track.image ?? show.image, feedId: show.feedId, episode: true, episodeId } : undefined;
     const isSaved = false;
     return <div key={track.id} className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/10"><span className="text-center text-sm text-muted-foreground">{pageStart + index + 1}</span><button type="button" className="min-w-0 truncate text-left font-medium hover:text-primary" onClick={() => onPlayTrack(track)}>{track.title}</button><span className="hidden truncate text-sm text-muted-foreground md:block">{show.title}</span><div className="flex items-center gap-1">{favorite ? <PodcastFavoriteButton favorite={favorite} saved={isSaved} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /> : null}<LikeButton trackId={track.id} /><AddToPlaylistMenu trackId={track.id} /><QueueActionsMenu track={track} /></div></div>;
-  })}{tracks.length > 20 && <nav aria-label="Podcast episode pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4"><Button type="button" variant="outline" onClick={() => setPage(value => Math.max(1, value - 1))} disabled={currentPage <= 1}>← Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} · {tracks.length} episodes</p><Button type="button" variant="outline" onClick={() => setPage(value => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount}>Next →</Button></nav>}</div>;
+  })}{tracks.length > 20 && pagination("bottom")}</div>;
 }
 
 export default PodcastsPage;

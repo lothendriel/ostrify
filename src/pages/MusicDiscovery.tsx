@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Music2, PictureInPicture2, Radio, RefreshCw, Video, X } from 'lucide-react';
+import { Maximize2, Minimize2, Music2, PictureInPicture2, Radio, RefreshCw, Video, X } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WavlakeDiscovery } from '@/pages/WavlakePage';
 import { NostrCollections } from '@/components/music/NostrCollections';
@@ -110,7 +110,6 @@ export default function MusicDiscovery() {
   const [selectedStream, setSelectedStream] = useState<TunestrStream | null>(null);
   const [playerDocked, setPlayerDocked] = useState(false);
   const [visibleRecordingCount, setVisibleRecordingCount] = useState(24);
-  const [trackPage, setTrackPage] = useState(1);
   const source = searchParams.get('source');
   const activeTab = source === 'wavlake' || source === 'tunestr' ? source : 'nostr';
   const feed = useMusicDiscovery();
@@ -128,8 +127,8 @@ export default function MusicDiscovery() {
   }, [feed.data]);
   const filteredTracks = hideClips ? tracks.filter(track => track.duration === undefined || track.duration >= 30) : tracks;
   const trackPageCount = Math.max(1, Math.ceil(filteredTracks.length / 20));
+  const [trackPage, setTrackPage] = useState(1);
   const currentTrackPage = Math.min(trackPage, trackPageCount);
-  const visibleTracks = filteredTracks.slice((currentTrackPage - 1) * 20, currentTrackPage * 20);
   const latest = feed.data?.pages.at(-1);
   const failed = latest?.failed ?? [];
   const tunedStreams = useMemo(() => {
@@ -144,15 +143,11 @@ export default function MusicDiscovery() {
   const recordings = tunedStreams.filter(stream => !stream.isLive);
   const visibleRecordings = recordings.slice(0, visibleRecordingCount);
   const supportedRelayCount = config.relayMetadata.relays.filter(relay => relay.read).length;
-  const nextMusicPage = async () => {
-    if (filteredTracks.length > currentTrackPage * 20) {
-      setTrackPage(currentTrackPage + 1);
-      return;
-    }
-    if (feed.isFetchingNextPage) return;
+  const loadMusicTracks = async (requiredTrackCount: number) => {
+    if (feed.isFetchingNextPage) return false;
     let loadedTracks = filteredTracks.length;
     let hasMore = feed.hasNextPage;
-    while (loadedTracks <= currentTrackPage * 20 && hasMore) {
+    while (loadedTracks < requiredTrackCount && hasMore) {
       const result = await feed.fetchNextPage();
       const loaded = result.data?.pages.flatMap(batch => batch.tracks) ?? [];
       const ids = new Set<string>();
@@ -166,7 +161,7 @@ export default function MusicDiscovery() {
       loadedTracks = hideClips ? unique.filter(track => track.duration === undefined || track.duration >= 30).length : unique.length;
       hasMore = Boolean(result.hasNextPage);
     }
-    if (loadedTracks > currentTrackPage * 20) setTrackPage(currentTrackPage + 1);
+    return loadedTracks >= requiredTrackCount;
   };
 
   return <div className="p-4 sm:p-6 space-y-6">
@@ -193,15 +188,8 @@ export default function MusicDiscovery() {
           {feed.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Some relays could not be queried. <Button variant="link" onClick={() => feed.refetch()}><RefreshCw className="size-4" /> Retry</Button></div>}
 
           {failed.length > 0 && <div className="rounded-lg border border-border bg-secondary/30 p-4 text-sm text-muted-foreground">{failed.length} {failed.length === 1 ? 'relay did' : 'relays did'} not respond in the latest batch. Results from responding relays are shown. <Link to="/settings" className="text-primary underline">Check relay settings</Link>.</div>}
-          {relayCount > 0 && <TrackList tracks={visibleTracks} isLoading={feed.isLoading} emptyMessage="No playable tracks were found in this batch. Try loading older music or checking your read relays." />}
-          {(filteredTracks.length > 0 || feed.hasNextPage) && <div className="space-y-2">
-            {filteredTracks.length > 0 && <nav aria-label="Music track pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => setTrackPage(page => Math.max(1, page - 1))} disabled={currentTrackPage <= 1}><ChevronLeft className="size-4" /> Previous</Button>
-              <p aria-live="polite" className="text-sm text-muted-foreground">Page {currentTrackPage}{!feed.hasNextPage && <span> of {trackPageCount}</span>} <span className="hidden sm:inline">· {filteredTracks.length} tracks loaded</span></p>
-              <Button type="button" variant="outline" onClick={() => void nextMusicPage()} disabled={feed.isFetchingNextPage || filteredTracks.length <= currentTrackPage * 20 && !feed.hasNextPage}>{feed.isFetchingNextPage ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
-            </nav>}
-            <p className="text-xs text-muted-foreground">Results depend on relay availability and the formats each relay stores. Older batches appear after currently loaded tracks.</p>
-          </div>}
+          {relayCount > 0 && <TrackList tracks={filteredTracks} isLoading={feed.isLoading} emptyMessage="No playable tracks were found in this batch. Try loading older music or checking your read relays." hasMore={feed.hasNextPage} isLoadingMore={feed.isFetchingNextPage} onLoadMore={loadMusicTracks} page={currentTrackPage} onPageChange={nextPage => setTrackPage(Math.max(1, Math.min(trackPageCount + (feed.hasNextPage ? 1 : 0), nextPage)))} />}
+          {(filteredTracks.length > 0 || feed.hasNextPage) && <p className="text-xs text-muted-foreground">Results depend on relay availability and the formats each relay stores. Older batches appear after currently loaded tracks.</p>}
         </div>
       </TabsContent>
       <TabsContent value="tunestr" className="mt-0">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Track } from "@/lib/music";
 import { TrackRow } from "./TrackRow";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,15 +15,42 @@ interface TrackListProps {
   emptyMessage?: string;
   playTrackOnSelect?: boolean;
   onReorder?: (tracks: Track[]) => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: (requiredTrackCount: number) => Promise<boolean>;
+  page?: number;
+  onPageChange?: (page: number) => void;
 }
 
-export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false, onReorder }: TrackListProps) {
+export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false, onReorder, hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange }: TrackListProps) {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
+  const tracksKey = tracks.map(track => track.id).join('|');
+  const [paginationState, setPaginationState] = useState({ tracksKey, page: 1 });
+  const localPage = paginationState.tracksKey === tracksKey ? paginationState.page : 1;
+  const page = controlledPage ?? localPage;
   const pageCount = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE));
-  const currentPage = Math.min(page, pageCount);
-  const pageStart = (currentPage - 1) * TRACKS_PER_PAGE;
+  const pageLimit = pageCount + (hasMore && onLoadMore ? 1 : 0);
+  const displayedPage = Math.min(page, pageLimit);
+  const setPage = (update: (current: number) => number) => {
+    const nextPage = Math.max(1, Math.min(pageLimit, update(page)));
+    if (onPageChange) onPageChange(nextPage);
+    else setPaginationState({ tracksKey, page: nextPage });
+  };
+  const pageStart = (displayedPage - 1) * TRACKS_PER_PAGE;
   const visibleTracks = tracks.slice(pageStart, pageStart + TRACKS_PER_PAGE);
+  const canLoadMore = hasMore && !!onLoadMore;
+  const nextPageAvailable = displayedPage < pageCount || displayedPage === pageCount && canLoadMore;
+  const next = async () => {
+    if (isLoadingMore || !nextPageAvailable) return;
+    if (displayedPage < pageCount) {
+      setPage(current => current + 1);
+      return;
+    }
+    if (onLoadMore) {
+      const loaded = await onLoadMore((displayedPage + 1) * TRACKS_PER_PAGE);
+      if (loaded) setPage(current => current + 1);
+    }
+  };
   const reorder = (from: number, to: number) => {
     if (!onReorder || from === to || from < 0 || to < 0 || from >= tracks.length || to >= tracks.length) return;
     const next = [...tracks];
@@ -49,18 +76,28 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
     );
   }
 
+  const pagination = (position: 'top' | 'bottom') => tracks.length > TRACKS_PER_PAGE || page < pageCount || hasMore && !!onLoadMore ? <nav aria-label={`Track pagination (${position})`} className={`${position === 'top' ? 'mb-4' : 'mt-4'} flex flex-wrap items-center justify-between gap-3 border-y py-3`}>
+    <Button type="button" variant="outline" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={displayedPage <= 1 || isLoadingMore}><ChevronLeft className="size-4" /> Previous</Button>
+    <p aria-live="polite" className="text-sm text-muted-foreground">Page {displayedPage}{!hasMore && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} tracks {canLoadMore ? 'loaded' : 'total'}</span></p>
+    <Button type="button" variant="outline" onClick={() => void next()} disabled={isLoadingMore || !nextPageAvailable}>{isLoadingMore ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
+  </nav> : null;
+
   if (tracks.length === 0) {
     return (
-      <div className="border border-dashed border-border rounded-lg py-12 px-8 text-center">
-        <p className="text-muted-foreground max-w-sm mx-auto">
-          {emptyMessage ?? "No tracks here yet."}
-        </p>
+      <div className="space-y-4">
+        {canLoadMore && pagination('top')}
+        <div className="border border-dashed border-border rounded-lg py-12 px-8 text-center">
+          <p className="text-muted-foreground max-w-sm mx-auto">
+            {emptyMessage ?? "No tracks here yet."}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
     <div>
+      {pagination('top')}
       {/* Header row */}
       <div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 px-3 py-2 border-b border-border/50 text-xs uppercase tracking-wider text-muted-foreground">
         <span className="text-center">#</span>
@@ -91,11 +128,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
           />;
         })}
       </div>
-      {tracks.length > TRACKS_PER_PAGE && <nav aria-label="Track pagination" className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-        <Button type="button" variant="outline" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /> Previous</Button>
-        <p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} <span className="hidden sm:inline">· {tracks.length} tracks</span></p>
-        <Button type="button" variant="outline" onClick={() => setPage(current => Math.min(pageCount, current + 1))} disabled={currentPage >= pageCount}>Next <ChevronRight className="size-4" /></Button>
-      </nav>}
+      {pagination('bottom')}
     </div>
   );
 }

@@ -54,32 +54,22 @@ function CatalogTracks({ artistId }: { artistId?: string }) {
   }, [catalog.data]);
   const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
   const visiblePage = Math.min(page, pageCount);
-  const visibleTracks = tracks.slice((visiblePage - 1) * 20, visiblePage * 20);
-  const nextPage = async () => {
-    if (tracks.length > page * 20) {
-      updatePage(page + 1);
-      return;
-    }
-    if (catalog.isFetchingNextPage || !catalog.hasNextPage) return;
+  const loadWavlakeTracks = async (requiredTrackCount: number) => {
+    if (catalog.isFetchingNextPage) return false;
     let loadedTracks = tracks.length;
     let hasMore: boolean = catalog.hasNextPage;
-    while (loadedTracks <= page * 20 && hasMore) {
+    while (loadedTracks < requiredTrackCount && hasMore) {
       const result = await catalog.fetchNextPage();
-      const uniqueTracks = [...new Set((result.data?.pages.flatMap(batch => batch.tracks) ?? []).map(track => track.id))];
-      loadedTracks = uniqueTracks.length;
+      loadedTracks = [...new Set((result.data?.pages.flatMap(batch => batch.tracks) ?? []).map(track => track.id))].length;
       hasMore = Boolean(result.hasNextPage);
     }
-    if (loadedTracks > page * 20) updatePage(page + 1);
+    return loadedTracks >= requiredTrackCount;
   };
   return <section className="space-y-4">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-2xl font-bold">{artistId ? 'Songs' : 'Latest tracks'}</h2><span className="text-sm text-muted-foreground">{catalog.data?.pages[0]?.total != null ? `${catalog.data.pages[0].total.toLocaleString()} tracks in this catalog` : 'From Wavlake'}</span></div>
     {catalog.isError && <p role="alert" className="text-sm text-destructive">Could not load Wavlake tracks. {catalog.error.message} <button className="underline" onClick={() => catalog.refetch()}>Try again</button></p>}
-    <TrackList tracks={visibleTracks} isLoading={catalog.isLoading} emptyMessage="No playable tracks found in this catalog." />
-    {tracks.length > 0 && <nav aria-label="Wavlake track pagination" className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-      <Button type="button" variant="outline" onClick={() => updatePage(visiblePage - 1)} disabled={visiblePage <= 1 || catalog.isFetchingNextPage}><ChevronLeft className="size-4" /> Previous</Button>
-      <p aria-live="polite" className="text-sm text-muted-foreground">Page {visiblePage}{!catalog.hasNextPage && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} tracks loaded</span></p>
-      <Button type="button" variant="outline" onClick={() => void nextPage()} disabled={catalog.isFetchingNextPage || !catalog.hasNextPage && visiblePage >= pageCount}>{catalog.isFetchingNextPage ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
-    </nav>}
+    <TrackList tracks={tracks} isLoading={catalog.isLoading} emptyMessage="No playable tracks found in this catalog." hasMore={catalog.hasNextPage} isLoadingMore={catalog.isFetchingNextPage} onLoadMore={loadWavlakeTracks} page={visiblePage} onPageChange={nextPageNumber => updatePage(Math.max(1, Math.min(pageCount + (catalog.hasNextPage ? 1 : 0), nextPageNumber)))} />
+
   </section>;
 }
 
