@@ -84,14 +84,14 @@ const Index = () => {
         </nav>
       </section>
 
-      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} />
+      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense />
       <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
       <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
 
       <MusicNewsSection />
-      <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
+      <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} dense />
 
-      <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} />
+      <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense />
 
       {categoryShelves.map(({ category, tracks: catTracks }) => (
         <Shelf key={category.id} title={category.label} tracks={catTracks} dense />
