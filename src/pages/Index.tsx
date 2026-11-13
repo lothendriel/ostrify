@@ -74,19 +74,19 @@ const Index = () => {
     <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
       <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
 
-      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} />
-      <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
-      <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
-
-      <section aria-labelledby="browse-genres-heading" className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
+      <section aria-labelledby="browse-genres-heading" className="space-y-3 text-center">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
           <h2 id="browse-genres-heading" className="text-sm font-semibold text-muted-foreground">Browse genres</h2>
           <Link to="/music" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">All music <ChevronRight className="size-3.5" /></Link>
         </div>
-        <nav aria-label="Browse music genres" className="flex flex-wrap gap-2 pb-1">
+        <nav aria-label="Browse music genres" className="flex flex-wrap justify-center gap-2 pb-1">
           {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="rounded-full border border-[#00ed69] bg-[#00ed69] px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:border-[#00d95f] hover:bg-[#00d95f] focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
         </nav>
       </section>
+
+      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} />
+      <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
+      <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
 
       <MusicNewsSection />
       <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} />
