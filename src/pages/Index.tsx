@@ -1,13 +1,14 @@
 import { useMemo } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
 import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { Shelf } from "@/components/music/Shelf";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
-import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
+import { CATEGORIES, tracksInCategory } from "@/lib/categories";
 
 function shuffled<T>(items: readonly T[]): T[] {
   const result = [...items];
@@ -50,23 +51,14 @@ const Index = () => {
       <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
       <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
 
-      {/* Browse categories */}
-      <section className="space-y-3">
-        <h2 className="text-2xl font-bold tracking-tight">Browse all</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          <Link to="/audiobooks" className="relative h-24 rounded-lg overflow-hidden p-4 flex items-end font-bold text-white text-lg shadow-md hover:scale-[1.02] transition-transform" style={{ background: categoryColor('audiobooks') }}>Audiobooks</Link>
-          <Link to="/podcasts" className="relative h-24 rounded-lg overflow-hidden p-4 flex items-end font-bold text-white text-lg shadow-md hover:scale-[1.02] transition-transform" style={{ background: categoryColor('podcasts') }}>Podcasts</Link>
-          {CATEGORIES.map((c) => (
-            <Link
-              key={c.id}
-              to={`/category/${c.id}`}
-              className="relative h-24 rounded-lg overflow-hidden p-4 flex items-end font-bold text-white text-lg shadow-md hover:scale-[1.02] transition-transform"
-              style={{ background: categoryColor(c.id) }}
-            >
-              {c.label}
-            </Link>
-          ))}
+      <section aria-labelledby="browse-genres-heading" className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="browse-genres-heading" className="text-sm font-semibold text-muted-foreground">Browse genres</h2>
+          <Link to="/music" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">All music <ChevronRight className="size-3.5" /></Link>
         </div>
+        <nav aria-label="Browse music genres" className="flex gap-2 overflow-x-auto pb-1">
+          {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="shrink-0 rounded-full border border-border/70 bg-secondary/40 px-3 py-1.5 text-xs font-medium transition-colors hover:border-primary/50 hover:bg-accent/50 focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
+        </nav>
       </section>
 
       <MusicNewsSection />

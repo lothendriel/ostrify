@@ -79,45 +79,41 @@ export function DailyDiscoverySection({ candidates, isLoading }: { candidates: T
   }, [allCandidates, feedback.blockedArtists]);
 
   return (
-    <section aria-labelledby="daily-discovery-heading" className="space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300"><CalendarDays className="size-4" aria-hidden="true" /> Daily picks · {date.toLocaleDateString(undefined, { month: "long", day: "numeric" })}</p>
-          <h2 id="daily-discovery-heading" className="mt-1 text-2xl font-bold tracking-tight">Discover something new</h2>
-          <p className="mt-1 text-sm text-muted-foreground">New music from Nostr and Wavlake, with a little guidance from your taste.</p>
+    <section aria-labelledby="daily-discovery-heading" className="space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 id="daily-discovery-heading" className="text-xl font-bold tracking-tight">Discover something new</h2>
+          <span className="hidden text-xs font-medium text-emerald-300 sm:inline">Daily · {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
         </div>
+        <p className="text-xs text-muted-foreground">Nostr + Wavlake · feedback stays local</p>
       </header>
 
-      <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 text-sm text-muted-foreground">
-        Feedback is saved only in this browser. “Not for me” hides a track and gently reduces similar picks; “Block artist” hides their tracks until you unblock them.
-      </div>
-
       {pending || (isLoading && !allCandidates.length) ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6" aria-label="Loading daily discoveries">
-          {Array.from({ length: 6 }, (_, index) => <div key={index} className="space-y-3 rounded-lg p-3"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
+        <div className="flex gap-2 overflow-hidden" aria-label="Loading daily discoveries">
+          {Array.from({ length: 4 }, (_, index) => <div key={index} className="w-[min(42vw,176px)] shrink-0 space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
         </div>
       ) : discoveries.length ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+        <div className="flex gap-2 overflow-x-auto pb-2">
           {discoveries.map(({ track, reason }) => (
-            <article key={track.id} className="min-w-0 rounded-lg border border-border/50 bg-card/60 p-2">
-              <TrackCard track={track} showLikeAction showPlaylistAction />
-              <p className="px-3 pb-2 text-xs text-emerald-200/80">{reason}</p>
-              <div className="grid grid-cols-1 gap-1 px-2 pb-2">
-                <Button type="button" variant="ghost" size="sm" className="h-8 justify-start gap-2 px-2 text-xs" onClick={() => { setFeedback(markMoreLikeThis(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
-                  <Heart className="size-3.5" /> More like this
+            <article key={track.id} className="w-[min(42vw,176px)] shrink-0 rounded-lg border border-border/50 bg-card/60 p-1.5">
+              <TrackCard track={track} showLikeAction showPlaylistAction compact />
+              <p className="px-2 pb-1 text-[11px] leading-tight text-emerald-200/80">{reason}</p>
+              <div className="grid grid-cols-1 gap-0.5 px-1 pb-1">
+                <Button type="button" variant="ghost" size="sm" className="h-7 justify-start gap-1.5 px-1.5 text-[11px]" onClick={() => { setFeedback(markMoreLikeThis(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
+                  <Heart className="size-3" /> More like this
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="h-8 justify-start gap-2 px-2 text-xs text-muted-foreground" onClick={() => { setFeedback(markNotForMe(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
-                  <ThumbsDown className="size-3.5" /> Not for me
+                <Button type="button" variant="ghost" size="sm" className="h-7 justify-start gap-1.5 px-1.5 text-[11px] text-muted-foreground" onClick={() => { setFeedback(markNotForMe(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
+                  <ThumbsDown className="size-3" /> Not for me
                 </Button>
-                {discoveryArtistKeys(track).length > 0 && <Button type="button" variant="ghost" size="sm" className="h-8 justify-start gap-2 px-2 text-xs text-muted-foreground hover:text-destructive" onClick={() => { setFeedback(blockDiscoveryArtist(track)); setDismissedToday(ids => [...new Set([...ids, ...discoveryArtistKeys(track).flatMap(key => discoveries.filter(item => discoveryArtistKeys(item.track).includes(key)).map(item => item.track.id))])]); }}>
-                  <Ban className="size-3.5" /> Block artist
+                {discoveryArtistKeys(track).length > 0 && <Button type="button" variant="ghost" size="sm" className="h-7 justify-start gap-1.5 px-1.5 text-[11px] text-muted-foreground hover:text-destructive" onClick={() => { setFeedback(blockDiscoveryArtist(track)); setDismissedToday(ids => [...new Set([...ids, ...discoveryArtistKeys(track).flatMap(key => discoveries.filter(item => discoveryArtistKeys(item.track).includes(key)).map(item => item.track.id))])]); }}>
+                  <Ban className="size-3" /> Block artist
                 </Button>}
               </div>
             </article>
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border px-6 py-10 text-center">
+        <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
           <Sparkles className="mx-auto size-8 text-muted-foreground" />
           <p className="mt-3 font-semibold">Your next discoveries are still taking shape.</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Try again after more music is available from your read relays or Wavlake, or adjust your artist blocks below.</p>
