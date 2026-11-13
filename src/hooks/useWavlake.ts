@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
 import { nip19 } from 'nostr-tools';
 import { sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
@@ -77,7 +77,7 @@ function parseTrack(value: unknown): Track | null {
   return {
     id: `wavlake:${trackId}`, source: 'wavlake', artistId: id(item.artistId), albumId: id(item.albumId),
     url, title, artist: text(item.artist), album: text(item.albumTitle),
-    image: sanitizeUrl(text(item.albumArtUrl)), pubkey,
+    image: sanitizeUrl(text(item.albumArtUrl)), artistImage: sanitizeUrl(text(item.artistArtUrl)), pubkey,
     duration: typeof item.duration === 'number' && Number.isFinite(item.duration) ? item.duration : undefined,
     kind: 'music', topics: text(item.genre) ? [String(item.genre).toLowerCase()] : [],
     createdAt: Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : 0,
@@ -170,6 +170,21 @@ export function useWavlakeCatalog(artistId?: string, enabled = true) {
     getNextPageParam: (page) => page.next,
     enabled: enabled && (!artistId || UUID.test(artistId)),
     retry: 1,
+  });
+}
+
+export function useWavlakeGenreCatalog(genres: string[]) {
+  return useQueries({
+    queries: genres.map((genre) => ({
+      queryKey: ['wavlake', 'genre-catalog', genre],
+      queryFn: async ({ signal }) => {
+        const data = object(await fetchApi('tracks', { limit: '50', genre }, signal));
+        if (!data || !Array.isArray(data.tracks)) throw new Error('Invalid Wavlake catalog response');
+        return data.tracks.map(parseTrack).filter((track): track is Track => !!track);
+      },
+      staleTime: 5 * 60 * 1000,
+      retry: 1,
+    })),
   });
 }
 

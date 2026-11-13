@@ -35,6 +35,8 @@ export interface Track {
   album?: string;
   /** Cover art / episode image URL (https). */
   image?: string;
+  /** Artist image URL for external catalog entries, when available. */
+  artistImage?: string;
   /** Pubkey that published the event. */
   pubkey: string;
   /** Duration in seconds, if known. */

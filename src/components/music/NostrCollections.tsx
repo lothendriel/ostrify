@@ -14,6 +14,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useMusicDiscovery } from '@/hooks/useMusicDiscovery';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
+import type { WavlakeRelease } from '@/hooks/useWavlake';
 
 function PublisherCard({ pubkey, podcast }: { pubkey: string; podcast: boolean }) {
   const { data } = useAuthor(pubkey);
@@ -75,13 +76,27 @@ function AlbumCard({ track, count }: { track: Track; count: number }) {
   return <Link to={`/artist/${nip19.npubEncode(track.pubkey)}#album-${encodeURIComponent(track.album ?? '')}`} className="rounded-lg bg-secondary/50 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary"><TrackArtwork track={track} className="w-full aspect-square mb-3" /><p className="font-semibold truncate">{track.album}</p><p className="text-sm text-muted-foreground truncate">{track.artist || 'Publisher'} · {count} {count === 1 ? 'track' : 'tracks'} here</p></Link>;
 }
 
+function WavlakeReleaseCard({ release }: { release: WavlakeRelease }) {
+  return <Link to={`/wavlake/${release.type}/${release.id}`} className="group rounded-lg bg-secondary/50 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary">
+    <div className={`aspect-square w-full overflow-hidden bg-muted flex items-center justify-center mb-3 ${release.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}>
+      {release.image ? <img src={release.image} alt="" loading="lazy" className="size-full object-cover" /> : <Music2 className="size-10 text-muted-foreground" />}
+    </div>
+    <p className="font-semibold truncate">{release.title}</p>
+    <p className="text-sm text-muted-foreground truncate">{release.type === 'artist' ? 'Wavlake artist' : release.artist || 'Wavlake album'}</p>
+  </Link>;
+}
+
 /** Discover publishers and album titles within the supplied results, not a global popularity chart. */
-export function NostrCollections({ tracks, podcast = false, showAllPublishersOption = false }: { tracks: Track[]; podcast?: boolean; showAllPublishersOption?: boolean }) {
+export function NostrCollections({ tracks, podcast = false, showAllPublishersOption = false, wavlakeArtists = [], wavlakeAlbums = [] }: { tracks: Track[]; podcast?: boolean; showAllPublishersOption?: boolean; wavlakeArtists?: WavlakeRelease[]; wavlakeAlbums?: WavlakeRelease[] }) {
   const { publishers, albums } = useMemo(() => collectionItems(tracks), [tracks]);
-  if (!publishers.length && !albums.length) return null;
+  const nostrPublishersToShow = publishers.slice(0, wavlakeArtists.length > 0 ? 4 : 8);
+  const artistsToShow = wavlakeArtists.slice(0, 8 - nostrPublishersToShow.length);
+  const nostrAlbumsToShow = albums.slice(0, wavlakeAlbums.length > 0 ? 4 : 8);
+  const albumsToShow = wavlakeAlbums.slice(0, 8 - nostrAlbumsToShow.length);
+  if (!publishers.length && !albums.length && !artistsToShow.length && !albumsToShow.length) return null;
   return <div className="space-y-8">
-    {publishers.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">{podcast ? 'Shows & publishers to explore' : 'Artists & publishers to explore'}</h2><p className="text-sm text-muted-foreground">Publishers with the most {podcast ? 'episodes' : 'tracks'} in the results loaded here—not a popularity chart. {podcast ? 'Open a publisher to see their show profile.' : 'Open a publisher to browse the music released by that account.'}</p></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{publishers.slice(0, 8).map(([pubkey]) => <PublisherCard key={pubkey} pubkey={pubkey} podcast={podcast} />)}</div>{showAllPublishersOption && publishers.length > 8 && <Button asChild type="button" variant="outline"><Link to="/music/publishers">See all publishers</Link></Button>}</section>}
-    {albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums to explore</h2><p className="text-sm text-muted-foreground">Grouped by album title and publisher from loaded tracks; not a popularity chart. Open a publisher to see its releases.</p></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{albums.slice(0, 8).map(({ track, count }) => <AlbumCard key={`${track.pubkey}:${track.artist ?? ''}:${track.album}`} track={track} count={count} />)}</div>{showAllPublishersOption && albums.length > 8 && <Button asChild type="button" variant="outline"><Link to="/music/albums">See all albums</Link></Button>}</section>}
+    {(publishers.length > 0 || artistsToShow.length > 0) && <section className="space-y-3"><div><h2 className="text-2xl font-bold">{podcast ? 'Shows & publishers to explore' : 'Artists & publishers to explore'}</h2><p className="text-sm text-muted-foreground">{podcast ? 'Publishers with the most episodes in the results loaded here—not a popularity chart. Open a publisher to see their show profile.' : artistsToShow.length > 0 ? 'Publishers with the most Nostr tracks in the results loaded here—not a popularity chart. Also explore artists in the Wavlake catalog.' : 'Publishers with the most tracks in the results loaded here—not a popularity chart. Open a publisher to browse the music released by that account.'}</p></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{nostrPublishersToShow.map(([pubkey]) => <PublisherCard key={`nostr:${pubkey}`} pubkey={pubkey} podcast={podcast} />)}{artistsToShow.map((release) => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>{showAllPublishersOption && publishers.length > 8 && <Button asChild type="button" variant="outline"><Link to="/music/publishers">See all publishers</Link></Button>}</section>}
+    {(albums.length > 0 || albumsToShow.length > 0) && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums to explore</h2><p className="text-sm text-muted-foreground">Grouped from tracks loaded here, including Wavlake catalog albums.</p></div><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{nostrAlbumsToShow.map(({ track, count }) => <AlbumCard key={`${track.pubkey}:${track.artist ?? ''}:${track.album}`} track={track} count={count} />)}{albumsToShow.map((release) => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>{showAllPublishersOption && albums.length > 8 && <Button asChild type="button" variant="outline"><Link to="/music/albums">See all albums</Link></Button>}</section>}
   </div>;
 }
 

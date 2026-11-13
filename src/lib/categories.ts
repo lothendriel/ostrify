@@ -1,45 +1,53 @@
 import type { Track } from "./music";
 
 /** A curated set of genre/mood categories to surface on Home & Search. */
-export const CATEGORIES: { id: string; label: string; match: string[] }[] = [
+export const CATEGORIES: { id: string; label: string; match: string[]; wavlakeGenres?: string[] }[] = [
   {
     id: "rock",
     label: "Rock",
+    wavlakeGenres: ["Rock", "Alternative"],
     match: ["rock", "metal", "punk", "grunge", "guitar", "band", "alternative", "hardcore"],
   },
   {
     id: "electronic",
     label: "Electronic",
+    wavlakeGenres: ["Electronic", "Dance/EDM"],
     match: ["electronic", "electro", "edm", "techno", "house", "synth", "dnb", "trance", "dubstep", "beat", "beats", "remix"],
   },
   {
     id: "hiphop",
     label: "Hip-Hop",
+    wavlakeGenres: ["Hip-Hop/Rap"],
     match: ["hiphop", "hip-hop", "hip hop", "rap", "rapper", "trap", "freestyle", "bars"],
   },
   {
     id: "jazz",
     label: "Jazz & Blues",
+    wavlakeGenres: ["Jazz", "Blues", "R&B/Soul"],
     match: ["jazz", "blues", "soul", "funk", "saxophone", "swing"],
   },
   {
     id: "classical",
     label: "Classical",
+    wavlakeGenres: ["Classical"],
     match: ["classical", "orchestra", "orchestral", "piano", "violin", "symphony", "cello", "instrumental"],
   },
   {
     id: "folk",
     label: "Folk & Acoustic",
+    wavlakeGenres: ["Singer/Songwriter", "Country"],
     match: ["folk", "acoustic", "country", "bluegrass", "singer-songwriter", "unplugged"],
   },
   {
     id: "pop",
     label: "Pop",
+    wavlakeGenres: ["Pop"],
     match: ["pop", "indie", "dance", "song", "single", "vocal", "cover"],
   },
   {
     id: "ambient",
     label: "Ambient & Chill",
+    wavlakeGenres: ["New Age"],
     match: ["ambient", "chill", "chillout", "lofi", "lo-fi", "relax", "meditation", "sleep", "soundscape", "nature"],
   },
   {
