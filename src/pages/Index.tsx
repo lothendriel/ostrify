@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
+import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { Shelf } from "@/components/music/Shelf";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
@@ -27,6 +28,8 @@ const Index = () => {
 
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 150 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
+  const wavlake = useWavlakeCatalog();
+  const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
 
   const fresh = useMemo(() => shuffled(tracks).slice(0, 10), [tracks]);
   const shuffledPodcasts = useMemo(() => {
@@ -41,11 +44,22 @@ const Index = () => {
     return shuffled([...selected, ...remaining]).slice(0, 10);
   }, [podcasts]);
   const categoryShelves = useMemo(() => {
-    return CATEGORIES.map((c) => ({
-      category: c,
-      tracks: shuffled(tracksInCategory(tracks, c.id)).slice(0, 10),
-    })).filter((s) => s.tracks.length > 0);
-  }, [tracks]);
+    return CATEGORIES.map((category) => {
+      const nostrMatches = tracksInCategory(tracks, category.id).filter(track => track.source !== "wavlake");
+      const nostrKeys = new Set(nostrMatches.flatMap(track => [track.id, track.url]));
+      const wavlakeMatches = tracksInCategory(wavlakeTracks, category.id).filter(track => !nostrKeys.has(track.id) && !nostrKeys.has(track.url));
+      const selected = [
+        ...shuffled(nostrMatches).slice(0, 5),
+        ...shuffled(wavlakeMatches).slice(0, 5),
+      ];
+      const selectedKeys = new Set(selected.flatMap(track => [track.id, track.url]));
+      const remaining = shuffled([...nostrMatches, ...wavlakeMatches].filter(track => !selectedKeys.has(track.id) && !selectedKeys.has(track.url)));
+      return {
+        category,
+        tracks: shuffled([...selected, ...remaining]).slice(0, 10),
+      };
+    }).filter(shelf => shelf.tracks.length > 0);
+  }, [tracks, wavlakeTracks]);
 
   const greeting = (() => {
     const h = new Date().getHours();
