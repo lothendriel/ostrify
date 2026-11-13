@@ -430,6 +430,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [queue, index]);
 
+  const clearUpcomingQueue = useCallback(() => {
+    restoredStateRef.current = false;
+    if (index < 0 || index >= queue.length) {
+      setQueue([]);
+      setIndex(-1);
+      setProgress(0);
+      setDuration(0);
+      setIsPlaying(false);
+      return;
+    }
+    setQueue(queue.slice(0, index + 1));
+  }, [queue, index]);
+
   const moveQueueItem = useCallback((fromIndex: number, toIndex: number) => {
     if (fromIndex <= index || toIndex <= index || fromIndex >= queue.length || toIndex >= queue.length || fromIndex === toIndex) return;
     restoredStateRef.current = false;
@@ -493,6 +506,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       addToQueue,
       playNext,
       removeQueueItem,
+      clearUpcomingQueue,
       moveQueueItem,
       togglePlay,
       next,
@@ -520,6 +534,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       addToQueue,
       playNext,
       removeQueueItem,
+      clearUpcomingQueue,
       moveQueueItem,
       togglePlay,
       next,

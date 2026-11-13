@@ -32,6 +32,8 @@ export interface PlayerState {
   playNext: (tracks: Track[]) => void;
   /** Remove a track from a queue position. */
   removeQueueItem: (queueIndex: number) => void;
+  /** Remove all upcoming tracks while preserving the currently playing track. */
+  clearUpcomingQueue: () => void;
   /** Move an upcoming queue item to another position. */
   moveQueueItem: (fromIndex: number, toIndex: number) => void;
   togglePlay: () => void;
