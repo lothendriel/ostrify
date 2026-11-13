@@ -5,7 +5,7 @@ import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
 import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
-export function useTracksByIds(ids: string[] | undefined) {
+export function useTracksByIds(ids: string[] | undefined, enabled = true) {
   const { nostr } = useNostr();
   const key = (ids ?? []).join(",");
 
@@ -71,6 +71,6 @@ export function useTracksByIds(ids: string[] | undefined) {
       const tracks = ids.map((id) => byId.get(id.toLowerCase()) ?? byId.get(id)).filter((t): t is Track => !!t);
       return { tracks, unavailable: ids.length - tracks.length };
     },
-    enabled: !!ids?.length,
+    enabled: enabled && !!ids?.length,
   });
 }

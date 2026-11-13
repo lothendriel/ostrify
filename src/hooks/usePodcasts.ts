@@ -359,6 +359,31 @@ function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): P
 }
 
 /** Paginate recent Nostr podcast episodes from enabled relays. */
+export function useNostrPodcastEpisodesForShow(pubkey: string | undefined) {
+  const { nostr } = useNostr();
+  return useQuery({
+    queryKey: ["podcast-show-episodes", pubkey ?? ""],
+    enabled: !!pubkey && /^[0-9a-f]{64}$/i.test(pubkey),
+    staleTime: 5 * 60 * 1000,
+    queryFn: async ({ signal }): Promise<Track[]> => {
+      if (!pubkey || !/^[0-9a-f]{64}$/i.test(pubkey)) return [];
+      const events = await nostr.query([
+        { kinds: [NOSTR_PODCAST_EPISODE_KIND], authors: [pubkey], limit: 100 },
+        { kinds: [1063, NOSTR_NOTE_KIND], authors: [pubkey], "#t": PODCAST_TOPICS, limit: 100 },
+      ], { signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]) });
+      const seen = new Set<string>();
+      return events.flatMap(event => {
+        const hasPodcastTopic = event.tags.some(([name, value]) => name === "t" && value && PODCAST_TOPICS.includes(value.toLowerCase()));
+        if (event.kind !== NOSTR_PODCAST_EPISODE_KIND && !hasPodcastTopic) return [];
+        const track = event.kind === NOSTR_PODCAST_EPISODE_KIND ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
+        if (!track || seen.has(track.url)) return [];
+        seen.add(track.url);
+        return [{ ...track, kind: "podcast" as const }];
+      }).sort((left, right) => right.createdAt - left.createdAt);
+    },
+  });
+}
+
 export function useNostrPodcastEpisodeFeed(enabled = true) {
   const { nostr } = useNostr();
   return useInfiniteQuery({
