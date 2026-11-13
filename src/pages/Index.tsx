@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
+import { usePlayer } from "@/hooks/usePlayer";
 import { Shelf } from "@/components/music/Shelf";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
@@ -28,6 +29,7 @@ const Index = () => {
 
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 150 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
+  const player = usePlayer();
   const wavlake = useWavlakeCatalog();
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
 
@@ -72,6 +74,7 @@ const Index = () => {
     <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
       <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
 
+      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} />
       <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
       <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
 
