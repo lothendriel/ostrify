@@ -74,7 +74,7 @@ const Index = () => {
     <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
       <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
         <span>{greeting}</span>
-        <img src="/thanksgiving-turkey.png" alt="Thanksgiving turkey" className="size-7 shrink-0 object-contain" />
+        <img src="/thanksgiving-turkey.png" alt="Thanksgiving turkey" className="size-12 shrink-0 object-contain sm:size-14" />
       </h1>
 
       <section aria-labelledby="browse-genres-heading" className="space-y-3 text-center">
