@@ -182,6 +182,15 @@
 }
 
 @layer base {
+  /* Radix uses a table wrapper to measure scrollable content. Keep vertically
+     scrolling app panes constrained to their viewport so wide children cannot
+     make every page's content wider than the screen. */
+  [data-slot="scroll-area"].app-content-scroll [data-radix-scroll-area-viewport] > div {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
   *,
   ::after,
   ::before,

@@ -63,7 +63,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </header>
 
           {/* Scrollable page content */}
-          <ScrollArea type="always" className="min-w-0 max-w-full flex-1 min-h-0">
+          <ScrollArea type="always" className="app-content-scroll min-w-0 max-w-full flex-1 min-h-0">
             <div className="min-w-0 max-w-full overflow-x-hidden pb-6">{children}</div>
           </ScrollArea>
         </div>
