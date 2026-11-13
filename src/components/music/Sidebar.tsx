@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3 } from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause } from "lucide-react";
 import { useAudiobookLibrary } from "@/hooks/useAudiobookLibrary";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,9 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 import { usePodcastFavorites } from "@/hooks/usePodcasts";
+import { useTracksByIds } from "@/hooks/useTracksByIds";
+import { usePlayer } from "@/hooks/usePlayer";
+import { useToast } from "@/hooks/useToast";
 
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
@@ -26,9 +29,29 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const audiobookLibrary = useAudiobookLibrary();
   const podcastFavorites = usePodcastFavorites();
   const [createOpen, setCreateOpen] = useState(false);
+  const location = useLocation();
+  const player = usePlayer();
+  const { toast } = useToast();
 
   const liked = playlists?.find((p) => p.isLiked);
+  const { data: likedTracks, isLoading: likedTracksLoading } = useTracksByIds(liked?.trackIds);
   const regular = (playlists ?? []).filter((p) => !p.isLiked);
+  const likedTrackList = likedTracks?.tracks ?? [];
+  const isLikedSongsQueue = player.queue.length === likedTrackList.length && player.queue.every((track, index) => track.id === likedTrackList[index]?.id);
+  const isLikedSongsPlaying = location.pathname === "/liked" && isLikedSongsQueue && player.isPlaying;
+  const handleLikedSongsPlay = () => {
+    if (isLoading || likedTracksLoading) return;
+    if (!likedTrackList.length) {
+      toast({ title: "No playable liked songs", description: "Like some music or check your relay connections." });
+      return;
+    }
+    if (isLikedSongsQueue) {
+      player.togglePlay();
+    } else {
+      player.playQueue(likedTrackList);
+    }
+    onNavigate?.();
+  };
 
   return (
     <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
@@ -87,26 +110,32 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           ) : (
             <div className="space-y-1">
               {/* Liked songs pinned */}
-              <NavLink
-                to="/liked"
-                onClick={onNavigate}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors",
-                    isActive && "bg-accent/10",
-                  )
-                }
-              >
-                <div className="size-11 rounded-md bg-gradient-to-br from-violet-500 to-primary flex items-center justify-center shrink-0">
-                  <Heart className="size-5 text-white fill-white" />
-                </div>
-                <div className="min-w-0">
-                  <div className="font-medium text-sm truncate">Liked Songs</div>
+              <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="group size-11 shrink-0 rounded-md bg-gradient-to-br from-violet-500 to-primary text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={handleLikedSongsPlay}
+                  disabled={isLoading || likedTracksLoading}
+                  aria-label={isLikedSongsPlaying ? "Pause Liked Songs" : "Play Liked Songs"}
+                  title={isLikedSongsPlaying ? "Pause Liked Songs" : "Play Liked Songs"}
+                >
+                  {isLikedSongsPlaying
+                    ? <Pause className="size-5 fill-current" />
+                    : <><Heart className="size-5 fill-white group-hover:hidden" /><Play className="hidden size-5 fill-current group-hover:block" /></>}
+                </Button>
+                <NavLink
+                  to="/liked"
+                  onClick={onNavigate}
+                  className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}
+                >
+                  <div className="truncate text-sm font-medium">Liked Songs</div>
                   <div className="text-xs text-muted-foreground">
                     {liked ? `${liked.trackIds.length} songs` : "Playlist"}
                   </div>
-                </div>
-              </NavLink>
+                </NavLink>
+              </div>
 
               <NavLink
                 to="/audiobook-library"
