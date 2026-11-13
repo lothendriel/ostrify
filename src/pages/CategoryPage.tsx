@@ -37,6 +37,7 @@ const CategoryPage = () => {
         <TrackList
           tracks={tracks}
           isLoading={isLoading}
+          playTrackOnSelect
           emptyMessage={`No ${category.label} tracks found right now. We look for the genre in each track's tags, title, and description — check back as more music is published to Nostr.`}
         />
         </section>
