@@ -72,7 +72,10 @@ const Index = () => {
 
   return (
     <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
-      <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
+      <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
+        <span>{greeting}</span>
+        <img src="/thanksgiving-turkey.png" alt="Thanksgiving turkey" className="size-7 shrink-0 object-contain" />
+      </h1>
 
       <section aria-labelledby="browse-genres-heading" className="space-y-3 text-center">
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
