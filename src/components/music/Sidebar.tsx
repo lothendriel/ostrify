@@ -78,13 +78,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <ScrollArea type="always" className="flex-1 min-h-0 px-2 pb-2">
           {!user ? <p className="px-3 py-4 text-sm text-muted-foreground">Log in to create playlists and like songs.</p> : (
             <div className="space-y-1">
-              <PlaylistLibraryItem playlist={likedPlaylist} liked onNavigate={onNavigate} />
-              <AudiobookLibraryItem books={savedAudiobooks} favoriteCount={audiobookLibrary.favoriteBooks.length} collectionCount={audiobookLibrary.collections.length} onNavigate={onNavigate} />
-              <PodcastLibraryItem favorites={podcastFavorites.data} onNavigate={onNavigate} />
               <NavLink to="/artists" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
                 <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0"><Users className="size-5 text-white" /></div>
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
               </NavLink>
+              <PlaylistLibraryItem playlist={likedPlaylist} liked onNavigate={onNavigate} />
+              <AudiobookLibraryItem books={savedAudiobooks} favoriteCount={audiobookLibrary.favoriteBooks.length} collectionCount={audiobookLibrary.collections.length} onNavigate={onNavigate} />
+              <PodcastLibraryItem favorites={podcastFavorites.data} onNavigate={onNavigate} />
               {isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">Loading…</p>}
               {regular.map(playlist => <PlaylistLibraryItem key={playlist.id} playlist={playlist} onNavigate={onNavigate} />)}
             </div>
