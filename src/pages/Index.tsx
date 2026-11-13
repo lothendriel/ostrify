@@ -5,6 +5,7 @@ import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { Shelf } from "@/components/music/Shelf";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
+import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 
@@ -47,6 +48,7 @@ const Index = () => {
       <h1 className="text-3xl font-bold tracking-tight">{greeting}</h1>
 
       <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
+      <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
 
       {/* Browse categories */}
       <section className="space-y-3">
