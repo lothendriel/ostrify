@@ -2,8 +2,9 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowDownAZ, Music, Pencil, Trash2 } from "lucide-react";
+import { ArrowDownAZ, Music, Pencil, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -41,6 +42,7 @@ const PlaylistPage = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [sort, setSort] = useState<PlaylistSort>("original");
+  const [filter, setFilter] = useState("");
   const sortedTracks = useMemo(() => {
     if (sort === "original") return tracks;
     return [...tracks].sort((left, right) => {
@@ -50,6 +52,11 @@ const PlaylistPage = () => {
       return primary || left.title.localeCompare(right.title, undefined, { sensitivity: "base", numeric: true });
     });
   }, [sort, tracks]);
+  const visibleTracks = useMemo(() => {
+    const normalizedFilter = filter.trim().toLocaleLowerCase();
+    if (!normalizedFilter) return sortedTracks;
+    return sortedTracks.filter(track => `${track.title} ${track.artist ?? ""}`.toLocaleLowerCase().includes(normalizedFilter));
+  }, [filter, sortedTracks]);
 
   useSeoMeta({ title: `${playlist?.title ?? "Playlist"} — Ostrify` });
 
@@ -157,7 +164,12 @@ const PlaylistPage = () => {
       />
       <div className="px-3 sm:px-6">
         {tracks.length > 1 && <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <Input value={filter} onChange={event => setFilter(event.target.value)} onKeyDown={event => { if (event.key === "Escape") setFilter(""); }} placeholder="Filter by title or artist" aria-label="Filter playlist tracks by title or artist" maxLength={120} className="h-9 pl-9 pr-9" />
+              {filter && <Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-7 -translate-y-1/2" onClick={() => setFilter("")} aria-label="Clear playlist track filter"><X className="size-4" /></Button>}
+            </div>
             <ArrowDownAZ className="size-4 text-muted-foreground" aria-hidden="true" />
             <Label htmlFor="playlist-sort" className="text-xs text-muted-foreground">Sort by</Label>
             <Select value={sort} onValueChange={value => setSort(value as PlaylistSort)}>
@@ -171,18 +183,22 @@ const PlaylistPage = () => {
               </SelectContent>
             </Select>
           </div>
-          {sort === "original" && playlist && !playlist.isLiked
-            ? <p className="text-xs text-muted-foreground">Drag rows or use the up/down controls to save a new playlist order.</p>
-            : sort !== "original" && <p className="text-xs text-muted-foreground">Display sort only · saved playlist order is unchanged.</p>}
+          {(filter.trim() || sort !== "original") && <p className="text-xs text-muted-foreground">View only · saved playlist order is unchanged.</p>}
+          {sort === "original" && !filter.trim() && playlist && !playlist.isLiked && <p className="text-xs text-muted-foreground">Drag rows or use the up/down controls to save a new playlist order.</p>}
         </div>}
         {!!data?.unavailable && <p role="status" className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your playlist. <button type="button" className="text-primary underline disabled:opacity-50" disabled={isFetching} onClick={() => void refetch()}>{isFetching ? 'Retrying…' : 'Try again'}</button></p>}
-        <TrackList
-          tracks={sortedTracks}
-          isLoading={isLoading}
-          onRemove={handleRemove}
-          onReorder={sort === "original" && playlist && !playlist.isLiked ? handleReorder : undefined}
-          emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "This playlist is empty. Add songs from anywhere using the + menu."}
-        />
+        {filter.trim() && visibleTracks.length === 0 && !isLoading
+          ? <div className="rounded-lg border border-dashed px-6 py-10 text-center">
+              <p className="text-muted-foreground">No tracks match “{filter.trim()}”.</p>
+              <Button type="button" variant="link" onClick={() => setFilter("")}>Clear filter</Button>
+            </div>
+          : <TrackList
+              tracks={visibleTracks}
+              isLoading={isLoading}
+              onRemove={handleRemove}
+              onReorder={sort === "original" && !filter.trim() && playlist && !playlist.isLiked ? handleReorder : undefined}
+              emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "This playlist is empty. Add songs from anywhere using the + menu."}
+            />}
       </div>
 
       {playlist && (
