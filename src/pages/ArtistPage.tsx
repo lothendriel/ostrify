@@ -3,10 +3,8 @@ import { useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { useSeoMeta } from "@unhead/react";
 import { Play, Pause, BadgeCheck, Radio } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuthor } from "@/hooks/useAuthor";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useRadio } from "@/hooks/useRadio";
@@ -100,7 +98,6 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
     }
   }, [hash, isLoading, tracks]);
 
-  const { albums, singles } = useMemo(() => groupIntoAlbums(tracks), [tracks]);
   const isThisPlaying =
     player.isPlaying && tracks.some((t) => t.id === player.current?.id);
 
@@ -114,48 +111,22 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   };
 
   return (
-    <div>
-      {/* Hero header */}
-      <div className="relative isolate">
-        {banner && (
-          <div className="absolute inset-0 -z-10 overflow-hidden">
-            <img src={banner} alt="" className="w-full h-full object-cover opacity-40" />
-            <div className="absolute inset-0 bg-gradient-to-t from-card via-card/70 to-transparent" />
-          </div>
-        )}
-        <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 p-6 pt-12 sm:pt-20">
-          <Avatar className="size-32 sm:size-40 shadow-2xl ring-4 ring-background/20">
-            <AvatarImage src={picture} alt={name} className="object-cover" />
-            <AvatarFallback className="text-4xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
-          </Avatar>
-          <div className="text-center sm:text-left min-w-0">
-            <div className="flex items-center gap-1.5 justify-center sm:justify-start text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              {verified && <BadgeCheck className="size-4 text-primary" />}
-              Nostr artist & publisher
-            </div>
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight break-words my-2">
-              {name}
-            </h1>
-            {metadata?.about && (
-              <p className="text-muted-foreground line-clamp-2 max-w-xl">{metadata.about}</p>
-            )}
-            <p className="text-sm text-muted-foreground mt-2">
-              {isLoading ? "Loading…" : `${tracks.length + otherPublisherTracks.length} track${tracks.length + otherPublisherTracks.length === 1 ? "" : "s"}`}
-            </p>
-          </div>
+    <div className="min-h-full w-full pb-10">
+      <header className="relative isolate flex min-h-[320px] flex-col justify-end gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-12 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
+        {banner && <img src={banner} alt="" className="absolute inset-0 z-0 size-full object-cover opacity-40" />}
+        <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
+        <div className="relative z-20 flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
+          <div className="size-36 shrink-0 overflow-hidden rounded-full bg-emerald-950 shadow-2xl ring-1 ring-white/15 sm:size-52">{picture ? <img src={picture} alt={name} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-4xl font-bold text-white sm:text-6xl">{name.slice(0, 2).toUpperCase()}</div>}</div>
+          <div className="min-w-0 pb-1 text-white"><div className="flex items-center gap-1.5 text-sm font-medium">{verified &&             <BadgeCheck aria-label="Nostr profile verification" className="size-4 text-primary" />} Nostr artist & publisher</div><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{isLoading ? 'Loading…' : `${tracks.length + otherPublisherTracks.length} track${tracks.length + otherPublisherTracks.length === 1 ? '' : 's'}`}</p></div>
         </div>
-      </div>
-
-      {/* Play all */}
-      <div className="flex flex-wrap items-center gap-3 px-6 py-4">
+      </header>
+      <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
+      <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5">
         <Button
           onClick={handlePlayAll}
           disabled={tracks.length === 0}
           size="icon"
-          className={cn(
-            "size-14 rounded-full bg-primary text-primary-foreground shadow-xl",
-            "hover:scale-105 transition-transform disabled:opacity-40",
-          )}
+          className="size-14 rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-105 disabled:opacity-40"
           aria-label={isThisPlaying ? "Pause" : "Play all"}
         >
           {isThisPlaying ? (
@@ -176,16 +147,16 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         </Button>
       </div>
 
-      <div className="px-3 sm:px-6 space-y-8 pb-4">
-        {artistPublisherTracks.length > 0 && <TrackSections tracks={artistPublisherTracks} heading="" />}
-        {otherPublisherTracks.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold tracking-tight">Other music published by this account</h2><p className="text-sm text-muted-foreground mt-1">These tracks are published by this account but credit a different artist.</p></div><TrackSections tracks={otherPublisherTracks} heading="" /></section>}
+      {metadata?.about && <p className="mb-5 max-w-4xl whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{metadata.about}</p>}
+      <div className="px-0 space-y-8 pb-4">
+        {artistPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 pt-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Tracks</h2><TrackSections tracks={artistPublisherTracks} heading="" /></section>}
+        {otherPublisherTracks.length > 0 && <section className="space-y-3 border-t border-white/10 pt-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Other music published by this account</h2><p className="text-sm text-muted-foreground">These tracks are published by this account but credited to a different artist.</p><TrackList tracks={otherPublisherTracks} /></section>}
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="p-3 space-y-3">
-                <Skeleton className="w-full aspect-square rounded-md" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
+          <div className="space-y-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2">
+                <Skeleton className="size-10 rounded-md" />
+                <div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/4" /></div>
               </div>
             ))}
           </div>
@@ -199,6 +170,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         ) : (
           <TrackSections tracks={artistPublishedTracks} heading="Tracks identifying this artist" />
         )}
+      </div>
       </div>
     </div>
   );
