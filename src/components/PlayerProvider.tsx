@@ -6,9 +6,11 @@ import { sanitizeUrl } from "@/lib/sanitize";
 import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildRadioStation } from "@/lib/radio";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 const PLAYER_VOLUME_STORAGE_KEY = "ostrify-player-volume";
 const PLAYER_STATE_STORAGE_KEY = "ostrify-player-state";
+const PLAYER_HISTORY_STORAGE_PREFIX = "ostrify-player-history:";
 const PLAYER_AUTOPLAY_STORAGE_KEY = "ostrify-player-autoplay";
 const DEFAULT_PLAYER_VOLUME = 0.8;
 const PLAYER_HISTORY_LIMIT = 50;
@@ -17,7 +19,10 @@ interface SavedPlayerState {
   queue: Track[];
   index: number;
   progress: number;
-  history?: Track[];
+}
+
+function historyStorageKey(owner: string): string {
+  return `${PLAYER_HISTORY_STORAGE_PREFIX}${owner}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -73,6 +78,48 @@ function restoreTrack(value: unknown): Track | undefined {
   };
 }
 
+function readSavedHistory(owner: string): Track[] {
+  try {
+    if (typeof window === "undefined") return [];
+    const stored = window.localStorage.getItem(historyStorageKey(owner));
+    if (!stored) return [];
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(restoreTrack).filter((track): track is Track => track !== undefined).slice(0, PLAYER_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+function writeSavedHistory(owner: string, history: Track[]): void {
+  try {
+    if (typeof window === "undefined") return;
+    const storedHistory = history.slice(0, PLAYER_HISTORY_LIMIT).map(track => ({
+      id: track.id,
+      source: track.source,
+      artistId: track.artistId,
+      artistPubkey: track.artistPubkey,
+      albumId: track.albumId,
+      showId: track.showId,
+      podcastIndexEpisodeId: track.podcastIndexEpisodeId,
+      url: track.url,
+      mimeType: track.mimeType,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      image: track.image,
+      pubkey: track.pubkey,
+      duration: track.duration,
+      kind: track.kind,
+      topics: track.topics,
+      createdAt: track.createdAt,
+    }));
+    window.localStorage.setItem(historyStorageKey(owner), JSON.stringify(storedHistory));
+  } catch {
+    // Listening history remains available for this session if browser storage is unavailable.
+  }
+}
+
 function readSavedPlayerState(): SavedPlayerState | undefined {
   try {
     if (typeof window === "undefined") return undefined;
@@ -91,10 +138,7 @@ function readSavedPlayerState(): SavedPlayerState | undefined {
       (tracks.length > 0 && (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= tracks.length)) ||
       typeof progress !== "number" || !Number.isFinite(progress) || progress < 0
     ) return undefined;
-    const savedHistory = Array.isArray(parsed.history)
-      ? parsed.history.map(restoreTrack).filter((track): track is Track => track !== undefined).slice(0, PLAYER_HISTORY_LIMIT)
-      : [];
-    return { queue: tracks, index: index as number, progress, history: savedHistory };
+    return { queue: tracks, index: index as number, progress };
   } catch {
     return undefined;
   }
@@ -130,7 +174,6 @@ function writeSavedPlayerState(state: SavedPlayerState | undefined): void {
     const persistedState: SavedPlayerState = {
       ...state,
       queue: state.queue.map(serializeTrack),
-      history: state.history?.map(serializeTrack).slice(0, PLAYER_HISTORY_LIMIT) ?? [],
     };
     window.localStorage.setItem(PLAYER_STATE_STORAGE_KEY, JSON.stringify(persistedState));
   } catch {
@@ -161,6 +204,8 @@ function readSavedVolume(): number {
 }
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useCurrentUser();
+  const owner = user?.pubkey ?? "anonymous";
   const audioRef = useRef<HTMLAudioElement | null>(null);
   if (audioRef.current === null && typeof Audio !== "undefined") {
     audioRef.current = new Audio();
@@ -169,9 +214,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [initialPlayerState] = useState(readSavedPlayerState);
   const restoredStateRef = useRef(initialPlayerState !== undefined);
   const pendingSeekRef = useRef(initialPlayerState?.progress ?? 0);
-  const lastSavedStateRef = useRef<{ queue: Track[]; index: number; progressBucket: number; historyKey: string } | null>(null);
+  const lastSavedStateRef = useRef<{ queue: Track[]; index: number; progressBucket: number } | null>(null);
+  const [historyState, setHistoryState] = useState(() => ({ owner, tracks: readSavedHistory(owner) }));
+  const history = useMemo(
+    () => historyState.owner === owner ? historyState.tracks : readSavedHistory(owner),
+    [historyState, owner],
+  );
+  const setHistory = useCallback((update: (tracks: Track[]) => Track[]) => {
+    setHistoryState(previous => {
+      const currentHistory = previous.owner === owner ? previous.tracks : readSavedHistory(owner);
+      return { owner, tracks: update(currentHistory) };
+    });
+  }, [owner]);
   const [queue, setQueue] = useState<Track[]>(() => initialPlayerState?.queue ?? []);
-  const [history, setHistory] = useState<Track[]>(() => initialPlayerState?.history ?? []);
   const [index, setIndex] = useState(() => initialPlayerState?.index ?? -1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(() => initialPlayerState?.progress ?? 0);
@@ -203,8 +258,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const wavlake = useWavlakeCatalog(undefined, false);
   const recordPlayedTrack = useCallback((track: Track | undefined) => {
     if (!track) return;
-    setHistory((items) => items[0]?.id === track.id ? items : [track, ...items].slice(0, PLAYER_HISTORY_LIMIT));
-  }, []);
+    setHistory(items => items[0]?.id === track.id ? items : [track, ...items].slice(0, PLAYER_HISTORY_LIMIT));
+  }, [setHistory]);
 
   // Load the current audio track whenever it changes. Video streams are handled
   // by their inline video player rather than the audio queue.
@@ -230,8 +285,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         }
         pendingSeekRef.current = 0;
         restoredStateRef.current = false;
-        lastSavedStateRef.current = { queue, index, progressBucket: Math.floor(position), historyKey: history.map(track => track.id).join('|') };
-        writeSavedPlayerState({ queue, index, progress: position, history });
+        lastSavedStateRef.current = { queue, index, progressBucket: Math.floor(position) };
+        writeSavedPlayerState({ queue, index, progress: position });
         setProgress(audio.currentTime || position);
       };
       if (audio.readyState >= 1) restorePosition();
@@ -242,24 +297,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
 
-  // Preserve the queue, current position, and play history between page loads.
+  // Keep listening history private to the active account; the playback queue remains device-local.
+  useEffect(() => {
+    writeSavedHistory(owner, history);
+  }, [owner, history]);
+
   // A restored session remains paused until the user explicitly presses Play.
   useEffect(() => {
     if (restoredStateRef.current) return;
     if (!current || index < 0 || queue.length === 0) {
       lastSavedStateRef.current = null;
-      if (history.length > 0) writeSavedPlayerState({ queue: [], index: -1, progress: 0, history });
-      else writeSavedPlayerState(undefined);
+      writeSavedPlayerState(undefined);
       return;
     }
     const progressBucket = Math.floor(progress);
-    const historyKey = history.map(track => track.id).join('|');
     const previous = lastSavedStateRef.current;
     const sameQueue = previous?.queue.length === queue.length && previous.queue.every((track, trackIndex) => track.id === queue[trackIndex]?.id);
-    if (sameQueue && previous?.index === index && previous.progressBucket === progressBucket && previous.historyKey === historyKey) return;
-    lastSavedStateRef.current = { queue, index, progressBucket, historyKey };
-    writeSavedPlayerState({ queue, index, progress, history });
-  }, [queue, index, current, progress, history]);
+    if (sameQueue && previous?.index === index && previous.progressBucket === progressBucket) return;
+    lastSavedStateRef.current = { queue, index, progressBucket };
+    writeSavedPlayerState({ queue, index, progress });
+  }, [queue, index, current, progress]);
 
   // Sync volume / mute.
   useEffect(() => {
