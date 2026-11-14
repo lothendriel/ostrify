@@ -1,41 +1,48 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
+import type { NostrFilter } from "@nostrify/nostrify";
+import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 
-/** Fetch all tracks and podcast episodes published by a given pubkey (artist). */
+const ARTIST_TRACK_KINDS = [...MUSIC_TRACK_KINDS, 1063, 54, 1];
+const ARTIST_TRACK_LIMIT = 500;
+
+/** Fetch a broad, relay-by-relay set of audio published by an artist/publisher. */
 export function useArtistTracks(pubkey: string | undefined) {
   const { nostr } = useNostr();
+  const { config } = useAppContext();
+  const readRelays = [...new Set(config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url))].sort();
 
   return useQuery({
-    queryKey: ["artist-tracks", pubkey ?? ""],
-    queryFn: async (c) => {
+    queryKey: ["artist-tracks", pubkey ?? "", readRelays.join("|")],
+    enabled: !!pubkey && readRelays.length > 0,
+    staleTime: 60_000,
+    queryFn: async ({ signal }) => {
       if (!pubkey) return [] as Track[];
-      const signal = AbortSignal.any([c.signal, AbortSignal.timeout(6000)]);
-
-      const events = await nostr.query(
-        [
-          { kinds: [...MUSIC_TRACK_KINDS], authors: [pubkey], limit: 200 },
-          { kinds: [1063], authors: [pubkey], limit: 200 },
-          { kinds: [54], authors: [pubkey], limit: 200 },
-          { kinds: [1], authors: [pubkey], limit: 200 },
-        ],
-        { signal },
-      );
-
-      const tracks: Track[] = [];
-      const seen = new Set<string>();
-      for (const event of events) {
-        const track = eventToTrack(event);
-        if (!track) continue;
-        if (seen.has(track.url)) continue;
-        seen.add(track.url);
-        tracks.push(track);
+      const timeoutSignal = AbortSignal.any([signal, AbortSignal.timeout(12_000)]);
+      const filters: NostrFilter[] = ARTIST_TRACK_KINDS.map(kind => ({
+        kinds: [kind],
+        authors: [pubkey],
+        limit: ARTIST_TRACK_LIMIT,
+      }));
+      const relayResults = await Promise.allSettled(readRelays.map(url =>
+        nostr.relay(url).query(filters, { signal: timeoutSignal }),
+      ));
+      if (relayResults.every(result => result.status === "rejected")) {
+        throw new Error("Could not load audio published by this account from your read relays.");
       }
 
-      tracks.sort((a, b) => b.createdAt - a.createdAt);
-      return tracks;
+      const byUrl = new Map<string, Track>();
+      for (const result of relayResults) {
+        if (result.status !== "fulfilled") continue;
+        for (const event of result.value) {
+          if (event.pubkey !== pubkey) continue;
+          const track = eventToTrack(event);
+          if (track) byUrl.set(track.url, track);
+        }
+      }
+      return [...byUrl.values()].sort((a, b) => b.createdAt - a.createdAt);
     },
-    enabled: !!pubkey,
   });
 }
 
@@ -64,8 +71,6 @@ export function groupIntoAlbums(tracks: Track[]): { albums: AlbumGroup[]; single
   }
 
   const albums: AlbumGroup[] = [...byAlbum.entries()]
-    // An "album" needs at least one track; keep single-track albums too since
-    // some releases genuinely are singles with an album title.
     .map(([title, albumTracks]) => ({
       title,
       tracks: albumTracks.sort((a, b) => a.createdAt - b.createdAt),

@@ -83,19 +83,16 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const publisherTracks = publisherTrackQuery.data ?? [];
   const metadata = author.data?.metadata;
   const name = metadata?.name || metadata?.display_name || genUserName(pubkey);
-  const artistNames = [metadata?.name, metadata?.display_name].filter((value): value is string => !!value).map(value => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, ''));
-  const isThisArtist = (track: Track) => {
-    if (track.artistPubkey) return track.artistPubkey === pubkey;
-    const trackArtist = track.artist?.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-    if (trackArtist) return artistNames.includes(trackArtist);
-    return track.kind === 'music';
-  };
+  const isThisArtist = (track: Track) => track.artistPubkey === pubkey;
   const artistPublisherTracks = publisherTracks.filter(isThisArtist);
-  const otherPublisherTracks = publisherTracks.filter((track) => !isThisArtist(track));
-  const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey);
+  const otherPublisherTracks = publisherTracks.filter((track) => track.kind === 'music' && !isThisArtist(track));
+  const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey && (!track.artistPubkey || track.artistPubkey === pubkey));
   const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
-  const { albums, singles } = useMemo(() => groupIntoAlbums(tracks), [tracks]);
+  const isError = publisherTrackQuery.isError && artistTracks.isError;
+  const publishedMusicTracks = publisherTracks.filter(track => track.kind === 'music');
+  const featuredTracks = tracks.length > 0 ? tracks : publishedMusicTracks;
+  const { albums, singles } = useMemo(() => groupIntoAlbums(publishedMusicTracks), [publishedMusicTracks]);
   const player = usePlayer();
   const radio = useRadio();
 
@@ -135,7 +132,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
         <div className="relative z-20 flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
           <div className="size-36 shrink-0 overflow-hidden rounded-full bg-emerald-950 shadow-2xl ring-1 ring-white/15 sm:size-52">{picture ? <img src={picture} alt={name} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-4xl font-bold text-white sm:text-6xl">{name.slice(0, 2).toUpperCase()}</div>}</div>
-          <div className="min-w-0 pb-1 text-white"><div className="flex items-center gap-1.5 text-sm font-medium">{verified &&             <BadgeCheck aria-label="Nostr profile verification" className="size-4 text-primary" />} Nostr artist & publisher</div><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{isLoading ? 'Loading…' : `${tracks.length + otherPublisherTracks.length} track${tracks.length + otherPublisherTracks.length === 1 ? '' : 's'}`}</p></div>
+          <div className="min-w-0 pb-1 text-white"><div className="flex items-center gap-1.5 text-sm font-medium">{verified &&             <BadgeCheck aria-label="Nostr profile verification" className="size-4 text-primary" />} Nostr artist & publisher</div><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{isLoading ? 'Loading…' : `${publishedMusicTracks.length} published track${publishedMusicTracks.length === 1 ? '' : 's'}`}</p></div>
         </div>
       </header>
       <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
@@ -166,8 +163,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
       </div>
 
       {metadata?.about && <p className="mb-5 max-w-4xl whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{metadata.about}</p>}
-      {isLoading ? <div className="space-y-2 pb-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex items-center gap-3 px-3 py-2"><Skeleton className="size-10 rounded-md" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/4" /></div></div>)}</div> : tracks.length === 0 ? <div className="rounded-lg border border-dashed border-white/15 px-6 py-12 text-center"><p className="mx-auto max-w-sm text-sm text-muted-foreground">No music found for this artist yet. They may publish from relays Ostrify isn’t reading from — try adding more relays in Settings.</p></div> : <>
-        <div className="space-y-6 pb-5"><TrackSections tracks={tracks} heading="Popular" popular /></div>
+        {isLoading ? <div className="space-y-2 pb-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex items-center gap-3 px-3 py-2"><Skeleton className="size-10 rounded-md" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/4" /></div></div>)}</div> : isError ? <div role="alert" className="rounded-lg border border-dashed border-white/15 px-6 py-12 text-center"><p className="mx-auto max-w-sm text-sm text-muted-foreground">Couldn’t load this publisher’s audio from your configured read relays. Check relay settings and try again.</p><Button type="button" variant="outline" className="mt-4" onClick={() => { void publisherTrackQuery.refetch(); void artistTracks.refetch(); }}>Try again</Button></div> : tracks.length === 0 && publishedMusicTracks.length === 0 ? <div className="rounded-lg border border-dashed border-white/15 px-6 py-12 text-center"><p className="mx-auto max-w-sm text-sm text-muted-foreground">No music found for this artist yet. The publisher may use event kinds or relays that Ostrify isn’t currently reading.</p></div> : <>
+        {featuredTracks.length > 0 && <div className="space-y-6 pb-5"><TrackSections tracks={featuredTracks} heading="Popular" popular /></div>}
         {albums.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Discography</h2><span className="text-xs text-muted-foreground">{albums.length} releases</span></div><div className="mb-3 flex flex-wrap gap-2 text-xs">{['Popular releases', 'Albums', 'Singles and EPs', 'Compilations'].map((label, index) => <span key={label} className={index === 0 ? 'rounded-full bg-white px-3 py-2 font-medium text-black' : 'rounded-full bg-white/10 px-3 py-2 text-muted-foreground'}>{label}</span>)}</div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{albums.map(album => <div key={album.title} className="min-w-0 rounded-lg bg-white/[0.04] p-3 transition-colors hover:bg-white/[0.1]"><button type="button" onClick={() => player.playQueue(album.tracks)} className="block w-full text-left"><div className="aspect-square overflow-hidden rounded-md bg-secondary">{sanitizeUrl(album.image) ? <img src={sanitizeUrl(album.image)} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-900 to-slate-800"><Music2 className="size-10 text-white/70" /></div>}</div><h3 className="mt-3 truncate text-sm font-semibold">{album.title}</h3><p className="mt-1 truncate text-xs text-muted-foreground">{Math.max(...album.tracks.map(track => track.createdAt)) > 0 ? new Date(Math.max(...album.tracks.map(track => track.createdAt)) * 1000).getFullYear() : 'Nostr'} · Album</p></button></div>)}</div></section>}
         {singles.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Singles and EPs</h2><TrackList tracks={singles} playTrackOnSelect /></section>}
         {artistPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">All tracks</h2><TrackList tracks={artistPublisherTracks} /></section>}
