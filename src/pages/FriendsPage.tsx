@@ -17,6 +17,7 @@ import { useFriendLibrary, useFriendStatuses } from '@/hooks/useFriendLibrary';
 import { useTracksByIds } from '@/hooks/useTracksByIds';
 import { useWavlakeRelease } from '@/hooks/useWavlake';
 import { TrackList } from '@/components/music/TrackList';
+import { MessageFriendButton } from '@/components/music/MessageFriendButton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
@@ -78,7 +79,7 @@ function ProfileFriendAction({ pubkey }: { pubkey: string }) {
   const hasReadRelays = readRelays.length > 0;
   const reciprocalFollow = useQuery({
     queryKey: ['public-ostrify-follow-back', pubkey, user?.pubkey ?? '', readRelays.join('|')],
-    enabled: !!user && user.pubkey !== pubkey && hasReadRelays,
+    enabled: !!user && user.pubkey !== pubkey && hasReadRelays && follows.people.includes(pubkey),
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
       const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], authors: [pubkey], '#d': ['ostrify-people'], limit: 20 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
@@ -94,7 +95,7 @@ function ProfileFriendAction({ pubkey }: { pubkey: string }) {
   return <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><Button type="button" variant={isFriend ? 'secondary' : 'outline'} aria-pressed={isFriend} disabled={follows.toggle.isPending} onClick={() => follows.toggle.mutate({ pubkey, follow: !isFriend }, {
     onSuccess: () => toast({ title: isFriend ? 'Removed from friends' : 'Added to friends' }),
     onError: error => toast({ title: 'Could not update friends', description: error.message, variant: 'destructive' }),
-  })}>{isFriend ? <CheckCircle2 className="size-4" /> : <UserPlus className="size-4" />} {follows.toggle.isPending ? 'Saving…' : isFriend ? 'Following · Friend' : 'Add friend'}</Button>{reciprocalFollow.data && <span className="text-sm text-muted-foreground">(Follows You)</span>}</div><p className="text-sm text-muted-foreground">Following is one-way and immediately adds this person to your Ostrify friends. This relationship is public on Nostr.</p></div>;
+  })}>{isFriend ? <CheckCircle2 className="size-4" /> : <UserPlus className="size-4" />} {follows.toggle.isPending ? 'Saving…' : isFriend ? 'Following · Friend' : 'Add friend'}</Button>{reciprocalFollow.data && <span className="text-sm text-muted-foreground">(Follows You)</span>}{isFriend && reciprocalFollow.data && <MessageFriendButton pubkey={pubkey} />}</div><p className="text-sm text-muted-foreground">Following is one-way and immediately adds this person to your Ostrify friends. This relationship is public on Nostr.</p></div>;
 }
 
 function FriendProfile({ pubkey }: { pubkey: string }) {
