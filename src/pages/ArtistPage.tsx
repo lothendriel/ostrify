@@ -1,8 +1,8 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Clock, Music2, Play, Pause, BadgeCheck, Radio } from "lucide-react";
 import { useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { useSeoMeta } from "@unhead/react";
-import { Play, Pause, BadgeCheck, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuthor } from "@/hooks/useAuthor";
@@ -16,16 +16,33 @@ import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
 
-function TrackSections({ tracks, heading }: { tracks: Track[]; heading: string }) {
+function PopularTrackRow({ track, index, queue }: { track: Track; index: number; queue: Track[] }) {
+  const player = usePlayer();
+  const current = player.current?.id === track.id;
+  return <button type="button" onClick={() => player.playQueue(queue, index)} className="group grid w-full grid-cols-[2.25rem_2.75rem_minmax(0,1fr)_3.5rem] items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-primary sm:grid-cols-[2.25rem_2.75rem_minmax(0,1fr)_minmax(5rem,0.4fr)_3.5rem]">
+    <span className="text-center text-sm tabular-nums text-muted-foreground group-hover:text-foreground">{current ? <Play className="mx-auto size-4 fill-current text-primary" /> : index + 1}</span>
+    <span className="size-11 overflow-hidden rounded bg-secondary">{sanitizeUrl(track.image) ? <img src={sanitizeUrl(track.image)} alt="" className="size-full object-cover" /> : <span className="flex size-full items-center justify-center"><Play className="size-4" /></span>}</span>
+    <span className="min-w-0"><span className="block truncate text-sm font-medium">{track.title}</span><span className="block truncate text-xs text-muted-foreground">{track.artist || track.album || 'Audio'}</span></span>
+    <span className="hidden truncate text-xs text-muted-foreground sm:block">{track.source === 'wavlake' ? 'Wavlake' : track.topics[0] ? `#${track.topics[0]}` : track.kind === 'podcast' ? 'Podcast' : 'Nostr'}</span>
+    <span className="flex items-center justify-end gap-1 text-xs tabular-nums text-muted-foreground"><Clock className="size-3.5 sm:hidden" />{track.duration ? `${Math.floor(track.duration / 60)}:${String(Math.floor(track.duration % 60)).padStart(2, '0')}` : '—'}</span>
+  </button>;
+}
+
+function TrackSections({ tracks, heading, popular = false }: { tracks: Track[]; heading: string; popular?: boolean }) {
   const { albums, singles } = useMemo(() => groupIntoAlbums(tracks), [tracks]);
+  const [showAll, setShowAll] = useState(false);
   if (!tracks.length) return null;
+  const popularTracks = tracks.slice(0, showAll ? tracks.length : 5);
   return <section className="space-y-5">
-    {heading && <h2 className="text-2xl font-bold tracking-tight">{heading}</h2>}
-    {albums.map((album) => <section key={album.title} id={`album-${album.title ?? ''}`} className="space-y-3 scroll-mt-4">
-      <h3 className="text-xl font-semibold tracking-tight">{album.title}</h3>
-      <TrackList tracks={album.tracks} />
-    </section>)}
-    {singles.length > 0 && <section className="space-y-3"><h3 className="text-xl font-semibold">{albums.length > 0 ? "Singles" : "Tracks"}</h3><TrackList tracks={singles} playTrackOnSelect /></section>}
+    {heading && <div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">{heading}</h2>{popular && tracks.length > 5 && <button type="button" onClick={() => setShowAll(value => !value)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">{showAll ? 'Show less' : 'See more'}</button>}</div>}
+    {popular && <div className="space-y-1">{popularTracks.map((track, index) => <PopularTrackRow key={track.id} track={track} index={tracks.indexOf(track)} queue={tracks} />)}</div>}
+    {!popular && <>
+      {albums.map((album) => <section key={album.title} id={`album-${album.title ?? ''}`} className="space-y-3 scroll-mt-4 border-t border-white/10 pt-5">
+        <h3 className="text-xl font-semibold tracking-tight">{album.title}</h3>
+        <TrackList tracks={album.tracks} />
+      </section>)}
+      {singles.length > 0 && <section className="space-y-3 border-t border-white/10 pt-5"><h3 className="text-xl font-semibold">{albums.length > 0 ? "Singles and EPs" : "Tracks"}</h3><TrackList tracks={singles} playTrackOnSelect /></section>}
+    </>}
   </section>;
 }
 
@@ -78,6 +95,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey);
   const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
+  const { albums, singles } = useMemo(() => groupIntoAlbums(tracks), [tracks]);
   const player = usePlayer();
   const radio = useRadio();
 
@@ -148,29 +166,13 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
       </div>
 
       {metadata?.about && <p className="mb-5 max-w-4xl whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{metadata.about}</p>}
-      <div className="px-0 space-y-8 pb-4">
-        {artistPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 pt-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Tracks</h2><TrackSections tracks={artistPublisherTracks} heading="" /></section>}
-        {otherPublisherTracks.length > 0 && <section className="space-y-3 border-t border-white/10 pt-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Other music published by this account</h2><p className="text-sm text-muted-foreground">These tracks are published by this account but credited to a different artist.</p><TrackList tracks={otherPublisherTracks} /></section>}
-        {isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2">
-                <Skeleton className="size-10 rounded-md" />
-                <div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/4" /></div>
-              </div>
-            ))}
-          </div>
-        ) : tracks.length === 0 ? (
-          <div className="border border-dashed border-border rounded-lg py-16 px-8 text-center">
-            <p className="text-muted-foreground max-w-sm mx-auto">
-              No music found for this artist yet. They may publish from relays Ostrify isn't
-              reading from — try adding more relays in Settings.
-            </p>
-          </div>
-        ) : (
-          <TrackSections tracks={artistPublishedTracks} heading="Tracks identifying this artist" />
-        )}
-      </div>
+      {isLoading ? <div className="space-y-2 pb-6">{Array.from({ length: 6 }, (_, index) => <div key={index} className="flex items-center gap-3 px-3 py-2"><Skeleton className="size-10 rounded-md" /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-3 w-1/4" /></div></div>)}</div> : tracks.length === 0 ? <div className="rounded-lg border border-dashed border-white/15 px-6 py-12 text-center"><p className="mx-auto max-w-sm text-sm text-muted-foreground">No music found for this artist yet. They may publish from relays Ostrify isn’t reading from — try adding more relays in Settings.</p></div> : <>
+        <div className="space-y-6 pb-5"><TrackSections tracks={tracks} heading="Popular" popular /></div>
+        {albums.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Discography</h2><span className="text-xs text-muted-foreground">{albums.length} releases</span></div><div className="mb-3 flex flex-wrap gap-2 text-xs">{['Popular releases', 'Albums', 'Singles and EPs', 'Compilations'].map((label, index) => <span key={label} className={index === 0 ? 'rounded-full bg-white px-3 py-2 font-medium text-black' : 'rounded-full bg-white/10 px-3 py-2 text-muted-foreground'}>{label}</span>)}</div><div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">{albums.map(album => <div key={album.title} className="min-w-0 rounded-lg bg-white/[0.04] p-3 transition-colors hover:bg-white/[0.1]"><button type="button" onClick={() => player.playQueue(album.tracks)} className="block w-full text-left"><div className="aspect-square overflow-hidden rounded-md bg-secondary">{sanitizeUrl(album.image) ? <img src={sanitizeUrl(album.image)} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-900 to-slate-800"><Music2 className="size-10 text-white/70" /></div>}</div><h3 className="mt-3 truncate text-sm font-semibold">{album.title}</h3><p className="mt-1 truncate text-xs text-muted-foreground">{Math.max(...album.tracks.map(track => track.createdAt)) > 0 ? new Date(Math.max(...album.tracks.map(track => track.createdAt)) * 1000).getFullYear() : 'Nostr'} · Album</p></button></div>)}</div></section>}
+        {singles.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Singles and EPs</h2><TrackList tracks={singles} playTrackOnSelect /></section>}
+        {artistPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">All tracks</h2><TrackList tracks={artistPublisherTracks} /></section>}
+        {otherPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Other music published by this account</h2><p className="text-sm text-muted-foreground">These tracks are published by this account but credited to a different artist.</p><TrackList tracks={otherPublisherTracks} /></section>}
+      </>}
       </div>
     </div>
   );
