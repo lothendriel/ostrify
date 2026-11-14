@@ -5,7 +5,7 @@ import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import { Users, UserPlus, Radio, Disc3, X, Heart, Music2, Library, Check, CheckCircle2 } from 'lucide-react';
+import { Users, UserPlus, Radio, Disc3, X, Music2, Check, CheckCircle2, Play, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +23,7 @@ import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
 import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
 import { useFollowedPeople } from '@/hooks/useFollowedPeople';
+import { usePlayer } from '@/hooks/usePlayer';
 import { useProfilePrivacy } from '@/hooks/useProfilePrivacy';
 import { useAppContext } from '@/hooks/useAppContext';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
@@ -39,14 +40,41 @@ function Artist({ reference }: { reference: string }) {
   const { data: wavlake } = useWavlakeRelease('artist', wavlakeId);
   const { data: author } = useAuthor(wavlakeId ? undefined : reference);
   const name = wavlakeId ? wavlake?.title ?? 'Wavlake artist' : author?.metadata?.display_name || author?.metadata?.name || genUserName(reference);
+  const picture = sanitizeUrl(wavlake?.image ?? author?.metadata?.picture);
   const to = wavlakeId ? `/wavlake/artist/${wavlakeId}` : `/${nip19.npubEncode(reference)}`;
-  return <Link to={to} className="rounded-lg bg-secondary/50 p-3 hover:bg-secondary truncate"><Disc3 className="size-5 text-primary mb-2" /><span className="font-medium truncate block">{name}</span></Link>;
+  return <Link to={to} className="group block min-w-0 rounded-lg p-2 transition-colors hover:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><div className="aspect-square w-full overflow-hidden rounded-full bg-secondary shadow-lg">{picture ? <img src={picture} alt="" loading="lazy" className="size-full object-cover transition-transform group-hover:scale-105" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-900 to-slate-800"><Disc3 className="size-10 text-white/75" /></div>}</div><span className="mt-3 block truncate text-left text-sm font-medium">{name}</span><span className="mt-1 block text-left text-xs text-muted-foreground">Artist</span></Link>;
 }
 
 function PublicPlaylist({ title, ids }: { title: string; ids: string[] }) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useTracksByIds(open ? ids : undefined);
   return <div className="rounded-lg border border-border p-4"><button className="w-full flex justify-between gap-3 text-left font-semibold hover:text-primary" onClick={() => setOpen(v => !v)} aria-expanded={open}><span>{title}</span><span className="text-sm text-muted-foreground">{ids.length} tracks · {open ? 'Hide' : 'View'}</span></button>{open && <div className="mt-4"><TrackList tracks={data?.tracks ?? []} isLoading={isLoading} emptyMessage="No playable tracks could be loaded from this list." />{!!data?.unavailable && <p className="text-sm text-muted-foreground mt-2">Some tracks could not be loaded.</p>}</div>}</div>;
+}
+
+function ProfilePersonCard({ pubkey }: { pubkey: string }) {
+  const { data } = useAuthor(pubkey);
+  const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(pubkey);
+  const picture = sanitizeUrl(data?.metadata?.picture);
+  return <Link to={`/${nip19.npubEncode(pubkey)}`} className="group block min-w-0 rounded-lg p-2 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><span className="block aspect-square w-full overflow-hidden rounded-full shadow-lg transition-transform group-hover:scale-105">{picture ? <img src={picture} alt={name} loading="lazy" className="size-full object-cover" /> : <span className="flex size-full items-center justify-center rounded-full bg-gradient-to-br from-emerald-900 to-slate-800 text-2xl text-white"><Users className="size-8" /></span>}</span><span className="mt-3 block truncate text-sm font-medium">{name}</span><span className="mt-1 block text-xs text-muted-foreground">Profile</span></Link>;
+}
+
+function ProfileFollowers({ pubkey }: { pubkey: string }) {
+  const { nostr } = useNostr();
+  const { config } = useAppContext();
+  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const followers = useQuery({
+    queryKey: ['public-ostrify-followers', pubkey, readRelays.join('|')],
+    enabled: readRelays.length > 0,
+    staleTime: 60_000,
+    queryFn: async ({ signal }) => {
+      const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], '#p': [pubkey], limit: 500 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
+      return [...new Set(events.filter(event => event.kind === 30000 && event.pubkey !== pubkey && event.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people') && event.tags.some(([name, value]) => name === 'p' && value === pubkey)).map(event => event.pubkey))];
+    },
+  });
+  if (followers.isLoading) return <div className="flex gap-3 overflow-hidden">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="size-36 shrink-0 rounded-full" />)}</div>;
+  if (followers.isError) return <p role="status" className="text-sm text-muted-foreground">Followers aren’t available from your relays right now.</p>;
+  if (!followers.data?.length) return <p className="text-sm text-muted-foreground">No Ostrify followers found on your read relays yet.</p>;
+  return <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-3 [scrollbar-width:thin]">{followers.data.map(follower => <div key={follower} className="w-32 shrink-0 sm:w-36"><ProfilePersonCard pubkey={follower} /></div>)}</div>;
 }
 
 function FollowedPeopleList({ pubkey }: { pubkey: string }) {
@@ -63,13 +91,13 @@ function FollowedPeopleList({ pubkey }: { pubkey: string }) {
   if (privacy.isLoading || people.isLoading) return <Skeleton className="h-20 w-full" />;
   if (privacy.isError || people.isError) return <p role="status" className="text-sm text-muted-foreground">Followed users aren’t available from your relays right now.</p>;
   if (privacy.isHidden('people')) return <p className="text-sm text-muted-foreground">This person has hidden their friends list.</p>;
-  if (!people.data?.length) return <p className="text-muted-foreground">No public followed users found.</p>;
-  return <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{people.data.map(pubkey => <Person key={pubkey} pubkey={pubkey} />)}</div>;
+  if (!people.data?.length) return <p className="text-sm text-muted-foreground">No public followed users found.</p>;
+  return <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-3 [scrollbar-width:thin]">{people.data.map(pubkey => <div key={pubkey} className="w-36 shrink-0 sm:w-40"><ProfilePersonCard pubkey={pubkey} /></div>)}</div>;
 }
 
 
 
-function ProfileFriendAction({ pubkey }: { pubkey: string }) {
+function ProfileFriendAction({ pubkey, compact = false }: { pubkey: string; compact?: boolean }) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
@@ -88,40 +116,55 @@ function ProfileFriendAction({ pubkey }: { pubkey: string }) {
     },
   });
   if (!user || user.pubkey === pubkey) return null;
-  if (!follows.hasReadRelays) return <p className="text-sm text-muted-foreground">Enable a read relay to add Ostrify friends.</p>;
-  if (follows.isLoading) return <Skeleton className="h-10 w-40" />;
-  if (follows.isError) return <p role="alert" className="text-sm text-destructive">Could not load your Ostrify friends. <button className="underline" onClick={() => void follows.refetch()}>Try again</button></p>;
+  if (!follows.hasReadRelays) return compact ? null : <p className="text-sm text-muted-foreground">Enable a read relay to add Ostrify friends.</p>;
+  if (follows.isLoading) return compact ? <Skeleton className="h-9 w-24 rounded-full" /> : <Skeleton className="h-10 w-40" />;
+  if (follows.isError) return compact ? <p role="alert" className="text-xs text-destructive">Friend status unavailable. <button className="underline" onClick={() => void follows.refetch()}>Retry</button></p> : <p role="alert" className="text-sm text-destructive">Could not load your Ostrify friends. <button className="underline" onClick={() => void follows.refetch()}>Try again</button></p>;
   const isFriend = follows.people.includes(pubkey);
-  return <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><Button type="button" variant={isFriend ? 'secondary' : 'outline'} aria-pressed={isFriend} disabled={follows.toggle.isPending} onClick={() => follows.toggle.mutate({ pubkey, follow: !isFriend }, {
+  return <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><Button type="button" variant={isFriend ? 'secondary' : 'outline'} aria-pressed={isFriend} disabled={follows.toggle.isPending} className={compact ? 'h-9 rounded-full px-4 text-xs' : undefined} onClick={() => follows.toggle.mutate({ pubkey, follow: !isFriend }, {
     onSuccess: () => toast({ title: isFriend ? 'Removed from friends' : 'Added to friends' }),
     onError: error => toast({ title: 'Could not update friends', description: error.message, variant: 'destructive' }),
-  })}>{isFriend ? <CheckCircle2 className="size-4" /> : <UserPlus className="size-4" />} {follows.toggle.isPending ? 'Saving…' : isFriend ? 'Following · Friend' : 'Add friend'}</Button>{reciprocalFollow.data && <span className="text-sm text-muted-foreground">(Follows You)</span>}{isFriend && reciprocalFollow.data && <MessageFriendButton pubkey={pubkey} />}</div><p className="text-sm text-muted-foreground">Following is one-way and immediately adds this person to your Ostrify friends. This relationship is public on Nostr.</p></div>;
+  })}>{isFriend ? <CheckCircle2 className="size-4" /> : <UserPlus className="size-4" />} {follows.toggle.isPending ? 'Saving…' : isFriend ? 'Following' : 'Follow'}</Button>{reciprocalFollow.data && <span className="text-sm text-muted-foreground">(Follows you)</span>}{isFriend && reciprocalFollow.data && <MessageFriendButton pubkey={pubkey} />}</div>{!compact && <p className="text-sm text-muted-foreground">Following is one-way and immediately adds this person to your Ostrify friends. This relationship is public on Nostr.</p>}</div>;
 }
 
 function FriendProfile({ pubkey }: { pubkey: string }) {
+  const player = usePlayer();
+  const [showAllLiked, setShowAllLiked] = useState(false);
+  const [showAllArtists, setShowAllArtists] = useState(false);
   const library = useFriendLibrary(pubkey);
   const privacy = useProfilePrivacy(pubkey);
   const { data: author } = useAuthor(pubkey);
   const metadata = author?.metadata;
   const name = metadata?.display_name || metadata?.name || genUserName(pubkey);
   const picture = sanitizeUrl(metadata?.picture);
+  const banner = sanitizeUrl(metadata?.banner);
   const liked = library.data?.playlists.find(item => item.id === 'nostr-tunes-liked');
   const regular = (library.data?.playlists ?? []).filter(item => item.id !== 'nostr-tunes-liked');
-  const likedTracks = useTracksByIds(liked?.tracks);
-  return <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6">
-    <BackLink to="/friends" className="text-sm text-muted-foreground hover:underline">← Friends</BackLink>
-    <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-emerald-900/70 via-teal-950 to-card p-6 sm:flex-row sm:items-center sm:p-8">
-      <Avatar className="size-24 shrink-0 shadow-lg sm:size-32"><AvatarImage src={picture} alt={name} /><AvatarFallback className="text-3xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
-      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Ostrify profile</p><h1 className="mt-2 break-words text-4xl font-bold tracking-tight">{name}</h1><p className="mt-2 text-sm text-muted-foreground">Public Ostrify music library</p>{metadata?.about && <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm text-muted-foreground">{metadata.about}</p>}</div>
+  const likedTracks = useTracksByIds(privacy.isHidden('liked') ? undefined : liked?.tracks);
+  const allTracks = likedTracks.data?.tracks ?? [];
+  const featuredTracks = allTracks.slice(0, showAllLiked ? 18 : 8);
+  const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase();
+  return <div className="min-h-full w-full pb-10">
+    <header className="relative isolate flex min-h-[320px] flex-col justify-end gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-16 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
+      {banner && <img src={banner} alt="" className="absolute inset-0 z-0 size-full object-cover opacity-40" />}
+      <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
+      <BackLink to="/friends" className="absolute left-5 top-5 z-20 rounded-full bg-black/35 px-3 py-1.5 text-sm text-white/90 backdrop-blur hover:bg-black/50 sm:left-6">← Friends</BackLink>
+      <div className="relative z-20 flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
+        <div className="size-36 shrink-0 overflow-hidden rounded-full bg-emerald-950 shadow-2xl ring-1 ring-white/15 sm:size-52">{picture ? <img src={picture} alt={name} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-4xl font-bold text-white sm:text-6xl">{initials}</div>}</div>
+        <div className="min-w-0 pb-1 text-white"><p className="text-sm font-medium">Ostrify profile</p><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{allTracks.length} liked {allTracks.length === 1 ? 'track' : 'tracks'} <span className="px-1">·</span> {library.data?.artists.length ?? 0} artists <span className="px-1">·</span> {library.data?.people.length ?? 0} Ostrify friends</p></div>
+      </div>
     </header>
-    <ProfileFriendAction pubkey={pubkey} />
-    {privacy.isError && <p role="status" className="text-sm text-muted-foreground">Profile privacy settings couldn’t be checked, so public sections are hidden for now. <button className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
-    {privacy.isLoading || privacy.isError ? <Skeleton className="h-24 w-full" /> : library.isLoading ? <div className="space-y-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div> : library.isError ? <p role="alert" className="text-sm text-destructive">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
-      {!privacy.isHidden('liked') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Heart className="size-5 text-primary" /> Liked songs</h2><TrackList tracks={likedTracks.data?.tracks ?? []} isLoading={likedTracks.isLoading} emptyMessage={liked ? 'No playable liked songs were found.' : 'This person has no public liked songs.'} />{!!likedTracks.data?.unavailable && <p className="text-sm text-muted-foreground">{likedTracks.data.unavailable} saved track(s) weren’t available from your relays.</p>}</section>}
-      {!privacy.isHidden('artists') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Music2 className="size-5 text-primary" /> Followed artists</h2>{library.data?.artists.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.data.artists.map(reference => <Artist key={reference} reference={reference} />)}</div> : <p className="text-muted-foreground">No public followed artists found.</p>}</section>}
-      {!privacy.isHidden('people') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Users className="size-5 text-primary" /> Friends on Ostrify</h2><FollowedPeopleList pubkey={pubkey} /></section>}
-      {!privacy.isHidden('playlists') && <section className="space-y-4"><h2 className="flex items-center gap-2 text-2xl font-bold"><Library className="size-5 text-primary" /> Playlists</h2>{regular.length ? <div className="grid gap-3 sm:grid-cols-2">{regular.map(playlist => <PublicPlaylist key={playlist.id} title={playlist.title} ids={playlist.tracks} />)}</div> : <p className="text-muted-foreground">No public playlists found.</p>}{library.data?.otherListsUnverified && <p className="text-sm text-muted-foreground">Some public lists couldn’t be checked because their referenced events weren’t available on your relays.</p>}</section>}
-    </>}
+    <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
+      <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5"><Button type="button" size="icon" aria-label="Play liked songs" disabled={!allTracks.length} className="size-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => player.playQueue(allTracks)}><Play className="size-6 fill-current" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Shuffle liked songs" disabled={!allTracks.length} className="size-11 rounded-full text-muted-foreground hover:text-foreground" onClick={() => { player.toggleShuffle(); player.playQueue(allTracks); }}><Shuffle className="size-5" /></Button><ProfileFriendAction pubkey={pubkey} compact /></div>
+      {privacy.isError && <p role="status" className="mb-6 text-sm text-muted-foreground">Profile privacy settings couldn’t be checked, so public sections are hidden for now. <button className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
+      {privacy.isLoading || privacy.isError ? <div className="space-y-3 pb-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-56 w-full" /></div> : library.isLoading ? <div className="space-y-4 pb-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-56 w-full" /></div> : library.isError ? <p role="alert" className="pb-8 text-sm text-destructive">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
+        {!privacy.isHidden('artists') && <section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Followed artists</h2>{(library.data?.artists.length ?? 0) > 10 && <button type="button" onClick={() => setShowAllArtists(value => !value)} className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-foreground">{showAllArtists ? 'Show less' : 'Show all'}</button>}</div>{library.data?.artists.length ? <div className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-3 [scrollbar-width:thin]">{library.data.artists.slice(0, showAllArtists ? undefined : 10).map(reference => <div key={reference} className="w-36 shrink-0 sm:w-40"><Artist reference={reference} /></div>)}</div> : <p className="text-sm text-muted-foreground">No public followed artists found.</p>}</section>}
+        {!privacy.isHidden('people') && <><section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Followers</h2></div><ProfileFollowers pubkey={pubkey} /></section><section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Following</h2></div><FollowedPeopleList pubkey={pubkey} /></section></>}
+        {!privacy.isHidden('liked') && <section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Liked songs</h2>{allTracks.length > 8 && <button type="button" onClick={() => setShowAllLiked(value => !value)} className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-foreground">{showAllLiked ? 'Show less' : 'Show all'}</button>}</div>{featuredTracks.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">{featuredTracks.map((track, index) => <button type="button" key={track.id} onClick={() => player.playQueue(allTracks, index)} className="group min-w-0 rounded-lg bg-white/[0.04] p-3 text-left transition-colors hover:bg-white/[0.1] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"><div className="relative aspect-square overflow-hidden rounded-md bg-secondary shadow-lg">{track.image ? <img src={sanitizeUrl(track.image)} alt="" loading="lazy" className="size-full object-cover transition-transform group-hover:scale-105" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-800 to-slate-900"><Music2 className="size-9 text-white/75" /></div>}<span className="absolute bottom-2 right-2 grid size-10 translate-y-2 place-items-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition group-hover:translate-y-0 group-hover:opacity-100"><Play className="size-5 fill-current" /></span></div><span className="mt-3 block truncate text-sm font-semibold">{track.title}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{track.artist || track.album || 'Audio'}</span></button>)}</div> : likedTracks.isLoading ? <TrackList tracks={[]} isLoading emptyMessage="Loading liked songs…" /> : <p className="text-sm text-muted-foreground">{liked ? 'No playable liked songs were found.' : 'This person has no public liked songs.'}</p>}{allTracks.length > 0 && showAllLiked && <TrackList tracks={allTracks} isLoading={likedTracks.isLoading} emptyMessage="No playable liked songs were found." />}{!!likedTracks.data?.unavailable && <p className="text-sm text-muted-foreground">{likedTracks.data.unavailable} saved track(s) weren’t available from your relays.</p>}</section>}
+        {metadata?.about && <p className="mb-6 max-w-4xl whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{metadata.about}</p>}
+        {!privacy.isHidden('playlists') && <section className="space-y-4 border-t border-white/10 py-5"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Playlists</h2><span className="shrink-0 text-xs font-semibold text-muted-foreground">{regular.length} playlists</span></div>{regular.length ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{regular.map(playlist => <PublicPlaylist key={playlist.id} title={playlist.title} ids={playlist.tracks} />)}</div> : <p className="text-sm text-muted-foreground">No public playlists found.</p>}{library.data?.otherListsUnverified && <p className="text-sm text-muted-foreground">Some public lists couldn’t be checked because their referenced events weren’t available on your relays.</p>}</section>}
+      </>}
+
+    </div>
   </div>;
 }
 
