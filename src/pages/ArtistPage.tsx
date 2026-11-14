@@ -91,7 +91,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
   const isError = publisherTrackQuery.isError && artistTracks.isError;
   const publishedMusicTracks = publisherTracks.filter(track => track.kind === 'music');
-  const featuredTracks = tracks.length > 0 ? tracks : publishedMusicTracks;
+  const playableTracks = tracks.length > 0 ? tracks : publishedMusicTracks;
+  const featuredTracks = playableTracks;
   const { albums, singles } = useMemo(() => groupIntoAlbums(publishedMusicTracks), [publishedMusicTracks]);
   const player = usePlayer();
   const radio = useRadio();
@@ -114,14 +115,14 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   }, [hash, isLoading, tracks]);
 
   const isThisPlaying =
-    player.isPlaying && tracks.some((t) => t.id === player.current?.id);
+    player.isPlaying && playableTracks.some((t) => t.id === player.current?.id);
 
   const handlePlayAll = () => {
-    if (tracks.length === 0) return;
-    if (tracks.some((t) => t.id === player.current?.id)) {
+    if (playableTracks.length === 0) return;
+    if (playableTracks.some((t) => t.id === player.current?.id)) {
       player.togglePlay();
     } else {
-      player.playQueue(tracks, 0);
+      player.playQueue(playableTracks, 0);
     }
   };
 
@@ -139,7 +140,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
       <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5">
         <Button
           onClick={handlePlayAll}
-          disabled={tracks.length === 0}
+          disabled={playableTracks.length === 0}
           size="icon"
           className="size-14 rounded-full bg-primary text-primary-foreground shadow-xl transition-transform hover:scale-105 disabled:opacity-40"
           aria-label={isThisPlaying ? "Pause" : "Play all"}
@@ -155,8 +156,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
           type="button"
           variant="outline"
           className="rounded-full gap-2"
-          disabled={tracks.length === 0}
-          onClick={() => radio.startArtistRadio(pubkey, tracks)}
+          disabled={playableTracks.length === 0}
+          onClick={() => radio.startArtistRadio(pubkey, playableTracks)}
         >
           <Radio className="size-4" /> Start artist radio
         </Button>
