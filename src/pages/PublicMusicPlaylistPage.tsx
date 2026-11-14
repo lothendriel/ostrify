@@ -39,7 +39,7 @@ export default function PublicMusicPlaylistPage() {
 
   if (playlistQuery.isLoading) return <div className="space-y-6 p-6"><Skeleton className="h-56 w-full rounded-xl" /><Skeleton className="h-80 w-full rounded-xl" /></div>;
   if (playlistQuery.isError) return <div className="space-y-3 p-6 text-center"><h1 className="text-2xl font-bold">Couldn’t load this Ostrify playlist</h1><p className="text-muted-foreground">Check your read relays and try again.</p><button type="button" className="rounded-md border px-4 py-2 hover:bg-secondary" onClick={() => void playlistQuery.refetch()}>Retry</button></div>;
-  if (!playlist) return <div className="space-y-3 py-24 text-center"><p className="text-muted-foreground">Public Ostrify playlist not found on the configured read relays. It may have been removed or the relays may not have synced it yet.</p><BackLink to="/music" className="text-primary underline">Back to music discovery</BackLink></div>;
+  if (!playlist) return <div className="space-y-3 py-24 text-center"><p className="text-muted-foreground">Public Ostrify playlist not found on the configured read relays. It may have been removed or the relays may not have synced it yet.</p><BackLink to="/music" className="text-primary underline">Back</BackLink></div>;
 
   return <div>
     <CollectionHeader

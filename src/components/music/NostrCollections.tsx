@@ -189,9 +189,9 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
     if (nextCount > page * 15) setSearchParams({ page: String(page + 1) });
   };
 
-  if (isCollectionLoading) return <div className="p-4 sm:p-6 space-y-6"><BackLink to="/music" className="text-sm text-muted-foreground hover:underline">← Nostr music</BackLink><h1 className="text-3xl font-bold">{title}</h1><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div></div>;
+  if (isCollectionLoading) return <div className="p-4 sm:p-6 space-y-6"><BackLink to="/music" className="text-sm text-muted-foreground hover:underline">Back</BackLink><h1 className="text-3xl font-bold">{title}</h1><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div></div>;
   return <div className="p-4 sm:p-6 space-y-6">
-    <BackLink to="/music" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr music</BackLink>
+    <BackLink to="/music" className="text-sm text-muted-foreground hover:text-foreground hover:underline">Back</BackLink>
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Nostr music</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === 'publishers' ? 'Publishers with the most tracks in the music results currently loaded from your read relays—not a popularity chart.' : 'Albums grouped by title and publisher from music tracks currently loaded from your read relays—not a popularity chart.'}</p></header>
     {feed.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Some relays could not be queried. <button className="underline" onClick={() => void feed.refetch()}>Try again</button></div>}
     {!feed.isError && !hasVisibleItems && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No {type} to show in the music results loaded so far.</div>}

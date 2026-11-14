@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { BackLink } from "@/components/music/BackLink";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
-import { Mic, Radio, Globe2, ChevronLeft, ChevronRight, Play, Search, ArrowLeft, Heart } from "lucide-react";
+import { Mic, Radio, Globe2, ChevronLeft, ChevronRight, Play, Search, Heart } from "lucide-react";
 import { usePodcastEpisodes, useNostrPodcastEpisodeFeed, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
@@ -62,7 +62,7 @@ export function CombinedPodcastEpisodesPage() {
   };
 
   return <main className="space-y-6 p-4 sm:p-6">
-    <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Podcasts</BackLink>
+    <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline" />
     <header>
       <p className="text-sm font-semibold uppercase tracking-wider text-primary">Nostr + Fountain.fm</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Podcast episodes</h1>
@@ -158,7 +158,7 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
   const paginationNav = (position: "top" | "bottom") => <nav aria-label={`${type} pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t py-3"}`}><Button type="button" variant="outline" onClick={() => setSearchParams(effectivePage === 2 ? {} : { page: String(effectivePage - 1) })} disabled={effectivePage <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {effectivePage}{!hasNextPage && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {itemsCount} {type} {hasNextPage ? 'loaded' : 'total'}</span></p><Button type="button" variant="outline" onClick={() => void nextPage()} disabled={!hasNextPage && effectivePage >= pageCount || isFetchingNextPage}>{isFetchingNextPage ? "Loading…" : "Next →"}</Button></nav>;
 
   return <div className="p-4 sm:p-6 space-y-6">
-    <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Nostr podcasts</BackLink>
+    <BackLink to="/podcasts" className="text-sm text-muted-foreground hover:text-foreground hover:underline" />
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Nostr podcasts</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === "shows" ? "Shows discovered from NIP-F4 episodes and podcast metadata on your read relays, ordered by episode references." : "Recent playable podcast episodes discovered from your read relays."}</p></header>
     {isLoading && (type === "shows" ? <ShowSkeletonGrid /> : <TrackSkeletonGrid />)}
     {isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Nostr {type}. <button type="button" className="underline" onClick={() => void (type === "shows" ? showsQuery.refetch() : episodesQuery.refetch())}>Try again</button></p>}
@@ -207,7 +207,7 @@ function FountainShowsPage() {
   };
 
   return <main className="space-y-6 p-4 sm:p-6">
-    <BackLink to="/podcasts?source=fountain" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Fountain.fm podcasts</BackLink>
+    <BackLink to="/podcasts?source=fountain" className="text-sm text-muted-foreground hover:text-foreground hover:underline" />
     <header><p className="text-sm font-semibold uppercase tracking-wider text-primary">Fountain.fm</p><h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Fountain RSS shows</h1><p className="mt-2 text-muted-foreground">Shows found through Nostr references with a public Fountain RSS feed.</p></header>
     {showsQuery.isLoading && <ShowSkeletonGrid />}
     {showsQuery.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Fountain shows. <button type="button" className="underline" onClick={() => void showsQuery.refetch()}>Try again</button></p>}
@@ -254,7 +254,7 @@ function FountainEpisodesPage() {
   const pagination = (position: "top" | "bottom") => <nav aria-label={`Latest Fountain episodes pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t py-3"}`}><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1 || episodes.isFetching}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{exhausted && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} episodes loaded</span></p><Button type="button" variant="outline" onClick={nextPage} disabled={episodes.isFetching || exhausted && page * 20 >= tracks.length}>{episodes.isFetching && pendingPage !== null ? "Loading…" : "Next →"}</Button></nav>;
 
   return <main className="space-y-6 p-4 sm:p-6">
-    <BackLink to="/podcasts?source=fountain" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Fountain.fm podcasts</BackLink>
+    <BackLink to="/podcasts?source=fountain" className="text-sm text-muted-foreground hover:text-foreground hover:underline" />
     <header><p className="text-sm font-semibold uppercase tracking-wider text-primary">Fountain.fm</p><h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Latest Fountain episodes</h1><p className="mt-2 text-muted-foreground">Fountain episodes currently referenced on Nostr.</p></header>
     {episodes.isLoading && <TrackSkeletonGrid />}
     {episodes.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button type="button" className="underline" onClick={() => void episodes.refetch()}>Try again</button></p>}
@@ -450,7 +450,7 @@ function PodcastFavoriteButton({ favorite, saved, onToggle, pending = false, use
 function PodcastIndexShow({ show, tracks, isLoading, isError, onRetry, onBack, onPlay, onPlayTrack, favorites, onToggleFavorite, saving, userLoggedIn }: { show: PodcastShow; tracks: Track[]; isLoading: boolean; isError: boolean; onRetry: () => void; onBack: () => void; onPlay: () => void; onPlayTrack: (track: Track) => void; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; saving: boolean; userLoggedIn: boolean }) {
   const favorite = podcastFavoriteFromShow(show);
   return <section className="space-y-5">
-    <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft className="size-4" /> Back to search</button>
+    <button type="button" onClick={onBack} className="inline-flex items-center gap-2 text-sm text-primary hover:underline">Back</button>
     <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-fuchsia-900/70 via-purple-950 to-card p-6 sm:flex-row sm:items-center">
       <div className="size-32 shrink-0 overflow-hidden rounded-xl bg-secondary">{show.image ? <img src={show.image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-muted-foreground" /></div>}</div>
       <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">{show.source === "nostr" ? "Nostr podcast" : "Podcast Index show"}</p><h2 className="mt-2 break-words text-3xl font-bold">{show.title}</h2>{show.publisher && <p className="mt-1 text-muted-foreground">{show.publisher}</p>}{show.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.description}</p>}<PodcastFavoriteButton favorite={favorite} saved={false} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /></div>
@@ -464,7 +464,7 @@ function PodcastIndexShow({ show, tracks, isLoading, isError, onRetry, onBack, o
 
 function ShowCatalog({ source, shows, isLoading, error, onBack, onLoadMore, hasMore, isLoadingMore, loadMoreError, loadMoreLoading, favorites, onToggleFavorite, userLoggedIn }: { source: "nostr" | "fountain"; shows: PodcastShow[]; isLoading: boolean; error: boolean; onBack: () => void; onLoadMore: () => void; hasMore: boolean; isLoadingMore: boolean; loadMoreError: boolean; loadMoreLoading: boolean; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; userLoggedIn: boolean }) {
   return <section className="space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><button type="button" onClick={onBack} className="text-sm text-primary hover:underline">← Back to top shows</button><h2 className="mt-2 text-2xl font-bold">All {source === "nostr" ? "Nostr" : "Fountain.fm"} shows</h2><p className="text-sm text-muted-foreground">{shows.length} shows loaded from discovered podcast references.</p></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><button type="button" onClick={onBack} className="text-sm text-primary hover:underline">Back</button><h2 className="mt-2 text-2xl font-bold">All {source === "nostr" ? "Nostr" : "Fountain.fm"} shows</h2><p className="text-sm text-muted-foreground">{shows.length} shows loaded from discovered podcast references.</p></div></div>
     <p className="text-sm text-muted-foreground">{source === "fountain" ? "Fountain shows are resolved from public podcast feed GUID references found on Nostr." : "Nostr shows are collected from playable NIP-F4 episodes and show metadata on your enabled read relays."}</p>
     {error && <p role="alert" className="text-sm text-destructive">Couldn’t load the show catalog.</p>}
     {isLoading ? <ShowSkeletonGrid /> : shows.length ? <><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">{shows.map((show) => <ShowCard key={show.id} show={show} tracks={[]} favorites={favorites} onToggleFavorite={onToggleFavorite} userLoggedIn={userLoggedIn} />)}</div>{loadMoreError && <p role="alert" className="text-sm text-destructive">Couldn’t load more shows. Try again.</p>}{hasMore && <Button variant="outline" disabled={isLoadingMore || loadMoreLoading} onClick={onLoadMore}>{isLoadingMore || loadMoreLoading ? "Loading more shows…" : "Load more shows"}</Button>}</> : <EmptyShows source={source} />}

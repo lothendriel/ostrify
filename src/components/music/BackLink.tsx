@@ -1,14 +1,14 @@
-import type { ReactNode, MouseEvent } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { usePreviousLocation } from '@/components/NavigationHistory';
 
 type BackLinkProps = {
   to: string;
-  children: ReactNode;
   className?: string;
+  children?: ReactNode;
 };
 
-export function BackLink({ to: fallback, children, className }: BackLinkProps) {
+export function BackLink({ to: fallback, className }: BackLinkProps) {
   const { previousTo, historyLength } = usePreviousLocation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,5 +24,5 @@ export function BackLink({ to: fallback, children, className }: BackLinkProps) {
     else navigate(fallback);
   };
 
-  return <Link to={destination} onClick={handleClick} className={className} state={{ ostrifyBackFallback: fallback }}>{children}</Link>;
+  return <Link to={destination} onClick={handleClick} className={`inline-flex items-center gap-2 ${className ?? ''}`} state={{ ostrifyBackFallback: fallback }} aria-label="Back">Back</Link>;
 }

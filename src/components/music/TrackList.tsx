@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
-const TRACKS_PER_PAGE = 20;
+export const TRACKS_PER_PAGE = 20;
 
 interface TrackListProps {
   tracks: Track[];

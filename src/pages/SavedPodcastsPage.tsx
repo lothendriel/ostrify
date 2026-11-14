@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { BackLink } from '@/components/music/BackLink';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
-import { ArrowLeft, Heart, Mic, Play, Trash2 } from 'lucide-react';
+import { Heart, Mic, Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useFountainShow, usePodcastFavoriteActions, usePodcastFavorites, usePodcastIndexFeed, type PodcastFavorite } from '@/hooks/usePodcasts';
@@ -40,7 +40,7 @@ export default function SavedPodcastsPage() {
 
   return <div className="space-y-8 p-4 sm:p-6">
     <header className="rounded-xl bg-gradient-to-br from-fuchsia-900 via-purple-950 to-card p-6 sm:p-8">
-      <BackLink to="/podcasts?source=directory" className="inline-flex items-center gap-2 text-sm text-fuchsia-100 hover:underline"><ArrowLeft className="size-4" /> Discover podcasts</BackLink>
+      <BackLink to="/podcasts?source=directory" className="inline-flex items-center gap-2 text-sm text-fuchsia-100 hover:underline">Back</BackLink>
       <p className="mt-5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-fuchsia-200"><Heart className="size-4" /> Your library</p>
       <h1 className="mt-2 text-4xl font-bold tracking-tight">Saved Podcasts</h1>
       <p className="mt-2 text-muted-foreground">Shows and episodes saved to your Nostr account.</p>

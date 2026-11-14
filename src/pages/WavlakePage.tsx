@@ -133,7 +133,7 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
   };
 
   return <div className="p-4 sm:p-6 space-y-6">
-    <BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:text-foreground hover:underline">← Wavlake catalog</BackLink>
+    <BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:text-foreground hover:underline" />
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Wavlake catalog</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">Browse {kindLabel} found across Wavlake’s track catalog, with the most recently released tracks first. This is a catalog browse, not a top-tracks ranking.</p></header>
     {catalog.isLoading && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
     {catalog.isError && <p role="alert" className="text-sm text-destructive">Wavlake catalog is unavailable right now. <button className="underline" onClick={() => void catalog.refetch()}>Try again</button></p>}
@@ -185,9 +185,9 @@ function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }
   const release = useWavlakeRelease(type, itemId);
   const radio = useRadio();
   if (release.isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
-  if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. <BackLink to="/music?source=wavlake" className="underline">Back to catalog</BackLink></div>;
+  if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. <BackLink to="/music?source=wavlake" className="underline" /></div>;
   const { title, artist, image, albums, tracks } = release.data;
-  return <div className="p-4 sm:p-6 space-y-8"><BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:underline">← Wavlake catalog</BackLink>
+  return <div className="p-4 sm:p-6 space-y-8"><BackLink to="/music?source=wavlake" className="text-sm text-muted-foreground hover:underline" />
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
     {type === 'artist' && itemId && <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><FollowButton pubkey={`wavlake:${itemId}`} /><Button type="button" variant="outline" className="rounded-full gap-2" disabled={!tracks.length} onClick={() => radio.startArtistRadio(`wavlake:${itemId}`, tracks)}><Radio className="size-4" /> Start artist radio</Button></div><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
     {albums.length > 0 && <section className="space-y-4"><h2 className="text-2xl font-bold">Albums</h2><CatalogLinks items={albums} /></section>}
