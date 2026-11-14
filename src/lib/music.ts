@@ -49,7 +49,7 @@ export interface Track {
   createdAt: number;
 }
 
-export const AUDIO_EXT_RE = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|weba|webm)(?:[?#].*)?$/i;
+export const AUDIO_EXT_RE = /\.(mp3|mpga|m4a|aac|wav|ogg|oga|opus|flac|weba|webm)(?:[?#].*)?$/i;
 
 function tagValue(event: NostrEvent, name: string): string | undefined {
   return event.tags.find(([n]) => n === name)?.[1];

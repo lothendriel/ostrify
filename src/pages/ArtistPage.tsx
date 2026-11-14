@@ -87,11 +87,14 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const artistPublisherTracks = publisherTracks.filter(isThisArtist);
   const otherPublisherTracks = publisherTracks.filter((track) => track.kind === 'music' && !isThisArtist(track));
   const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey && (!track.artistPubkey || track.artistPubkey === pubkey));
-  const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
+  const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.url, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
   const isError = publisherTrackQuery.isError && artistTracks.isError;
   const publishedMusicTracks = publisherTracks.filter(track => track.kind === 'music');
-  const playableTracks = tracks.length > 0 ? tracks : publishedMusicTracks;
+  // Treat every playable music item published by this account as part of its station,
+  // even when it lacks an explicit artist tag. Explicitly credited tracks remain included too.
+  const playableTracks = [...new Map([...tracks, ...publishedMusicTracks].map(track => [track.url, track])).values()];
+  const radioTracks = playableTracks.filter(track => track.kind === 'music');
   const featuredTracks = playableTracks;
   const { albums, singles } = useMemo(() => groupIntoAlbums(publishedMusicTracks), [publishedMusicTracks]);
   const player = usePlayer();
@@ -128,12 +131,12 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
 
   return (
     <div className="min-h-full w-full pb-10">
-      <header className="relative isolate flex min-h-[320px] flex-col justify-end gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-12 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
+      <header className="relative isolate flex min-h-[320px] flex-col justify-start gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-12 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
         {banner && <img src={banner} alt="" className="absolute inset-0 z-0 size-full object-cover opacity-40" />}
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
-        <div className="relative z-20 flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
+        <div className="relative z-20 flex w-full min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
           <div className="size-36 shrink-0 overflow-hidden rounded-full bg-emerald-950 shadow-2xl ring-1 ring-white/15 sm:size-52">{picture ? <img src={picture} alt={name} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-4xl font-bold text-white sm:text-6xl">{name.slice(0, 2).toUpperCase()}</div>}</div>
-          <div className="min-w-0 pb-1 text-white"><div className="flex items-center gap-1.5 text-sm font-medium">{verified &&             <BadgeCheck aria-label="Nostr profile verification" className="size-4 text-primary" />} Nostr artist & publisher</div><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{isLoading ? 'Loading…' : `${publishedMusicTracks.length} published track${publishedMusicTracks.length === 1 ? '' : 's'}`}</p></div>
+          <div className="min-w-0 flex-1 pb-1 text-white"><div className="flex items-center gap-1.5 text-sm font-medium">{verified &&             <BadgeCheck aria-label="Nostr profile verification" className="size-4 text-primary" />} Nostr artist & publisher</div><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{isLoading ? 'Loading…' : `${publishedMusicTracks.length} published track${publishedMusicTracks.length === 1 ? '' : 's'}`}</p></div>
         </div>
       </header>
       <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
@@ -156,8 +159,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
           type="button"
           variant="outline"
           className="rounded-full gap-2"
-          disabled={playableTracks.length === 0}
-          onClick={() => radio.startArtistRadio(pubkey, playableTracks)}
+          disabled={radioTracks.length === 0}
+          onClick={() => radio.startArtistRadio(pubkey, radioTracks)}
         >
           <Radio className="size-4" /> Start artist radio
         </Button>
@@ -170,6 +173,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         {singles.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Singles and EPs</h2><TrackList tracks={singles} playTrackOnSelect /></section>}
         {artistPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">All tracks</h2><TrackList tracks={artistPublisherTracks} /></section>}
         {otherPublisherTracks.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Other music published by this account</h2><p className="text-sm text-muted-foreground">These tracks are published by this account but credited to a different artist.</p><TrackList tracks={otherPublisherTracks} /></section>}
+        {artistPublisherTracks.length === 0 && publishedMusicTracks.length > 0 && <section className="space-y-4 border-t border-white/10 py-5"><h2 className="text-xl font-bold tracking-tight sm:text-2xl">Publisher tracks</h2><TrackList tracks={publishedMusicTracks} /></section>}
       </>}
       </div>
     </div>

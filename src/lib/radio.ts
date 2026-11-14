@@ -5,7 +5,8 @@ function artistKeys(track: Track): string[] {
   const keys = [track.artistPubkey?.toLowerCase(), track.artistId ? `wavlake:${track.artistId.toLowerCase()}` : undefined];
   const name = track.artist?.trim().toLocaleLowerCase();
   if (name) keys.push(`name:${name}`);
-  else if (track.pubkey) keys.push(`publisher:${track.pubkey.toLowerCase()}`);
+  // Keep publisher identity as a separate station key even when a track names its artist.
+  if (track.pubkey) keys.push(`publisher:${track.pubkey.toLowerCase()}`);
   return keys.filter((key): key is string => !!key);
 }
 

@@ -152,7 +152,7 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
   const hasArtistCredit = publisherMusic.some(track => track.artistPubkey === pubkey || !!track.artist && normalizedProfileNames.includes(track.artist.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '')));
   const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase();
   return <div className="min-h-full w-full pb-10">
-    <header className="relative isolate flex min-h-[320px] flex-col justify-end gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-16 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
+    <header className="relative isolate flex min-h-[320px] flex-col justify-start gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-16 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
       {banner && <img src={banner} alt="" className="absolute inset-0 z-0 size-full object-cover opacity-40" />}
       <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
       <BackLink to="/friends" className="absolute left-5 top-5 z-20 rounded-full bg-black/35 px-3 py-1.5 text-sm text-white/90 backdrop-blur hover:bg-black/50 sm:left-6" />

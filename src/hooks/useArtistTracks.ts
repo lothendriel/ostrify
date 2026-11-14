@@ -6,6 +6,7 @@ import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 
 const ARTIST_TRACK_KINDS = [...MUSIC_TRACK_KINDS, 1063, 54, 1];
 const ARTIST_TRACK_LIMIT = 500;
+const MUSIC_TOPICS = ['music', 'tunestr', 'song', 'wavlake', 'v4v', 'value4value'];
 
 /** Fetch a broad, relay-by-relay set of audio published by an artist/publisher. */
 export function useArtistTracks(pubkey: string | undefined) {
@@ -25,6 +26,9 @@ export function useArtistTracks(pubkey: string | undefined) {
         authors: [pubkey],
         limit: ARTIST_TRACK_LIMIT,
       }));
+      // `useMusicDiscovery` also finds kind-1 audio notes through music topic tags;
+      // query that same discovery path here so publisher pages do not miss them.
+      filters.push({ kinds: [1], authors: [pubkey], '#t': MUSIC_TOPICS, limit: ARTIST_TRACK_LIMIT });
       const relayResults = await Promise.allSettled(readRelays.map(url =>
         nostr.relay(url).query(filters, { signal: timeoutSignal }),
       ));
