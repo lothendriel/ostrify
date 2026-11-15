@@ -16,7 +16,7 @@ not define any new event kinds — it aggregates and reuses existing NIPs.
 | `30440` | Wavlake NOM track                        | Artist-published music tracks (`stream_url`)    |
 | `31337` | zapstr.live / lightning.fm audio track   | Artist-published music tracks (`media`/`url`)   |
 | `32123` | Legacy Wavlake track                     | Music tracks (JSON metadata in `content`)       |
-| `36787` | Common audio-track kind (multi-client)   | Music tracks (`url`, `title`, `artist`)         |
+| `36787` | Common audio-track kind (multi-client)   | Music tracks (`url`, `title`, `artist`); Ostrify publishing uses addressable `d` IDs and optional album metadata |
 
 ### Audio detection
 
@@ -40,6 +40,10 @@ practice that kind is shared with many non-audio apps (game scores, fitness data
 etc.); events without a plausible audio URL are ignored.
 
 Genre/category is collected from `t`, `c` (zapstr category), and `genre` tags.
+
+### Ostrify music publishing convention (kind `36787`)
+
+Ostrify publishes one addressable kind `36787` event per track with `d`, `title`, `url`, `artist`, and `alt=Music track` tags. The persistent `d` value identifies a track across revisions; it must be retained when editing that track. Album tracks additionally share `album` (display title), `album_id` (stable Ostrify grouping ID), and `image` (cover URL) tags, and carry a `track_number` tag for ordering. Album IDs are opaque values generated per release and are not separate Nostr events. Existing events without `album_id` continue to group by album title. Uploaded media may include Blossom/NIP-94 metadata tags.
 
 Podcast episodes (kind `54`) use the NIP-F4 `audio` tag: `["audio", <url>, <mime?>]`.
 

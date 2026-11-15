@@ -51,6 +51,8 @@ export function useArtistTracks(pubkey: string | undefined) {
 }
 
 export interface AlbumGroup {
+  /** Stable grouping identifier, falling back to the legacy title. */
+  id: string;
   /** Album title, or undefined for the "singles" bucket. */
   title: string | undefined;
   tracks: Track[];
@@ -58,7 +60,7 @@ export interface AlbumGroup {
   image?: string;
 }
 
-/** Group an artist's tracks into albums (by album title) plus loose singles. */
+/** Group by stable album ID when available; legacy tracks continue grouping by title. */
 export function groupIntoAlbums(tracks: Track[]): { albums: AlbumGroup[]; singles: Track[] } {
   const byAlbum = new Map<string, Track[]>();
   const singles: Track[] = [];
@@ -66,18 +68,25 @@ export function groupIntoAlbums(tracks: Track[]): { albums: AlbumGroup[]; single
   for (const track of tracks) {
     const album = track.album?.trim();
     if (album) {
-      const existing = byAlbum.get(album);
+      const key = track.albumId ? `id:${track.albumId}` : `title:${album.toLocaleLowerCase()}`;
+      const existing = byAlbum.get(key);
       if (existing) existing.push(track);
-      else byAlbum.set(album, [track]);
+      else byAlbum.set(key, [track]);
     } else {
       singles.push(track);
     }
   }
 
   const albums: AlbumGroup[] = [...byAlbum.entries()]
-    .map(([title, albumTracks]) => ({
-      title,
-      tracks: albumTracks.sort((a, b) => a.createdAt - b.createdAt),
+    .map(([id, albumTracks]) => ({
+      id,
+      title: albumTracks.find((track) => track.album?.trim())?.album?.trim(),
+      tracks: albumTracks.sort((a, b) => {
+        if (a.trackNumber !== undefined && b.trackNumber !== undefined && a.trackNumber !== b.trackNumber) return a.trackNumber - b.trackNumber;
+        if (a.trackNumber !== undefined && b.trackNumber === undefined) return -1;
+        if (a.trackNumber === undefined && b.trackNumber !== undefined) return 1;
+        return a.createdAt - b.createdAt;
+      }),
       image: albumTracks.find((t) => t.image)?.image,
     }))
     .sort((a, b) => {

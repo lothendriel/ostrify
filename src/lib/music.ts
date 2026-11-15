@@ -18,7 +18,6 @@ export interface Track {
   artistId?: string;
   /** Explicit Nostr identity for the artist, distinct from the event publisher. */
   artistPubkey?: string;
-  albumId?: string;
   /** Stable catalog or Nostr coordinate of the parent podcast show. */
   showId?: string;
   /** Podcast Index episode identifier for restoring saved directory episodes. */
@@ -33,7 +32,13 @@ export interface Track {
   artist?: string;
   /** Album / release title, if the track belongs to one. */
   album?: string;
-  /** Cover art / episode image URL (https). */
+  /** Stable grouping ID for a Nostr album. */
+  albumId?: string;
+  /** Position within an album, when provided. */
+  trackNumber?: number;
+  /** Addressable event identifier (`d` tag), stable across revisions. */
+  addressableId?: string;
+  /** Cover art / episode image URL. */
   image?: string;
   /** Artist image URL for external catalog entries, when available. */
   artistImage?: string;
@@ -152,6 +157,7 @@ export function parseFileMetadataTrack(event: NostrEvent): Track | null {
   const image = sanitizeUrl(tagValue(event, "image") || tagValue(event, "thumb"));
   const duration = parseDuration(tagValue(event, "duration"));
   const artist = tagValue(event, "artist") || tagValue(event, "author");
+  const trackNumber = parseDuration(tagValue(event, "track_number") || tagValue(event, "track"));
 
   return {
     id: event.id,
@@ -162,6 +168,9 @@ export function parseFileMetadataTrack(event: NostrEvent): Track | null {
     artist,
     artistPubkey: artistPubkey(event),
     album: tagValue(event, "album") || tagValue(event, "release"),
+    albumId: tagValue(event, "album_id"),
+    trackNumber,
+    addressableId: tagValue(event, "d"),
     image,
     pubkey: event.pubkey,
     duration,
@@ -279,6 +288,8 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
   let title = tagValue(event, "title") || tagValue(event, "subject") || tagValue(event, "name");
   let artist = tagValue(event, "artist") || tagValue(event, "creator") || tagValue(event, "author");
   let album = tagValue(event, "album") || tagValue(event, "release");
+  let albumId = tagValue(event, "album_id");
+  let trackNumber = parseDuration(tagValue(event, "track_number") || tagValue(event, "track"));
   let duration = parseDuration(tagValue(event, "duration"));
 
   // 2. imeta attachment (NIP-92), if present.
@@ -305,6 +316,8 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
       title = title || pick("title", "name");
       artist = artist || pick("creator", "artist", "author");
       album = album || pick("album", "release", "albumTitle");
+      albumId = albumId || pick("album_id", "albumId");
+      trackNumber = trackNumber ?? parseDuration(pick("track_number", "trackNumber", "track"));
       image = image || pick("image", "artwork", "cover", "artworkUrl");
       duration = duration ?? parseDuration(pick("duration"));
       if (!mime) mime = pick("type", "mimeType");
@@ -342,6 +355,9 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     artist,
     artistPubkey: artistPubkey(event, jsonMetadata),
     album,
+    albumId,
+    trackNumber,
+    addressableId: tagValue(event, "d"),
     image: sanitizeUrl(image),
     pubkey: event.pubkey,
     duration,

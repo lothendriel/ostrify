@@ -16,6 +16,7 @@ export default function ArtistAlbumPage() {
   const { nip19: identifier } = useParams<{ nip19: string }>();
   const [searchParams] = useSearchParams();
   const title = searchParams.get('title')?.trim() ?? '';
+  const albumId = searchParams.get('albumId')?.trim() ?? '';
   let pubkey: string | undefined;
   if (identifier) {
     try {
@@ -29,7 +30,7 @@ export default function ArtistAlbumPage() {
   const author = useAuthor(pubkey, { persistForPublicArtistPage: true });
   const query = useArtistTracks(pubkey);
   const player = usePlayer();
-  const album = useMemo(() => groupIntoAlbums(query.data ?? []).albums.find(item => item.title?.toLocaleLowerCase() === title.toLocaleLowerCase()), [query.data, title]);
+  const album = useMemo(() => groupIntoAlbums(query.data ?? []).albums.find(item => albumId ? item.id === `id:${albumId}` : item.title?.toLocaleLowerCase() === title.toLocaleLowerCase()), [query.data, albumId, title]);
   const artist = author.data?.metadata?.display_name || author.data?.metadata?.name || (pubkey ? genUserName(pubkey) : 'Nostr artist');
   useSeoMeta({ title: title ? `${title} — ${artist} — Ostrify` : 'Album — Ostrify' });
 
