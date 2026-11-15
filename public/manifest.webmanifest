@@ -11,7 +11,7 @@
   "categories": ["music", "entertainment"],
   "icons": [
     {
-      "src": "/ostrify-logo.png",
+      "src": "/ostrify-logo.png?v=ostrich-note",
       "sizes": "any",
       "type": "image/png",
       "purpose": "any maskable"
