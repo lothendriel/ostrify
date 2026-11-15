@@ -10,10 +10,11 @@ interface ShelfProps {
   tracks: Track[];
   isLoading?: boolean;
   dense?: boolean;
+  compactCards?: boolean;
   seeAllHref?: string;
 }
 
-export function Shelf({ title, subtitle, tracks, isLoading, dense = false, seeAllHref }: ShelfProps) {
+export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref }: ShelfProps) {
   if (!isLoading && tracks.length === 0) return null;
 
   return (
@@ -29,16 +30,16 @@ export function Shelf({ title, subtitle, tracks, isLoading, dense = false, seeAl
           </Link>
         )}
       </div>
-      <div className={`grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(3,minmax(0,1fr))] ${dense ? "lg:grid-cols-[repeat(4,minmax(0,1fr))] 2xl:grid-cols-[repeat(6,minmax(0,1fr))]" : "lg:grid-cols-[repeat(3,minmax(0,1fr))] 2xl:grid-cols-[repeat(5,minmax(0,1fr))]"}`}>
+      <div className={`grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 ${compactCards ? 'sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]' : `sm:grid-cols-[repeat(3,minmax(0,1fr))] ${dense ? 'lg:grid-cols-[repeat(4,minmax(0,1fr))] 2xl:grid-cols-[repeat(6,minmax(0,1fr))]' : 'lg:grid-cols-[repeat(3,minmax(0,1fr))] 2xl:grid-cols-[repeat(5,minmax(0,1fr))]'}`}`}>
         {isLoading
-          ? Array.from({ length: 5 }).map((_, i) => (
+          ? Array.from({ length: compactCards ? 6 : 5 }).map((_, i) => (
               <div key={i} className="p-3 space-y-3">
                 <Skeleton className="w-full aspect-square rounded-md" />
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
             ))
-          : tracks.map((track) => <TrackCard key={track.id} track={track} />)}
+          : tracks.map((track) => <TrackCard key={track.id} track={track} compact={compactCards} />)}
       </div>
     </section>
   );

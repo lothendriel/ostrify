@@ -87,7 +87,7 @@ const Index = () => {
         </nav>
       </section>
 
-      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense />
+      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
       <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
       <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
 
