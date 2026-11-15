@@ -27,10 +27,9 @@ export function useMusicDiscovery() {
     retry: false,
     queryFn: async ({ pageParam, signal }): Promise<Page> => {
       const next: Cursor = { ...pageParam };
-      const failed: string[] = [];
-      const results = await Promise.all(relays.map(async (url) => {
+      const queryRelay = async (url: string) => {
         const activeKinds = KINDS.filter(kind => next[cursorKey(url, kind)] !== null);
-        if (!activeKinds.length) return { events: [], ok: false, skipped: true };
+        if (!activeKinds.length) return { url, events: [], ok: false, skipped: true };
         const filters: NostrFilter[] = activeKinds.map(kind => {
           const until = next[cursorKey(url, kind)];
           return {
@@ -50,13 +49,22 @@ export function useMusicDiscovery() {
             const current = next[cursorKey(url, kind)];
             next[cursorKey(url, kind)] = oldest === null ? null : oldest === current ? oldest - 1 : oldest;
           }
-          return { events, ok: true, skipped: false };
+          return { url, events, ok: true, skipped: false };
         } catch (error) {
           if (signal.aborted) throw error;
-          failed.push(url);
-          return { events: [], ok: false, skipped: false };
+          return { url, events: [], ok: false, skipped: false };
         }
-      }));
+      };
+      let results = await Promise.all(relays.map(queryRelay));
+      // Keep partial results responsive. Retry the failed relays once only when
+      // none responded, so a slow/broken relay cannot hold back a usable feed.
+      if (!results.some(result => result.ok)) {
+        const retryable = results.filter(result => !result.ok && !result.skipped);
+        const retried = await Promise.all(retryable.map(result => queryRelay(result.url)));
+        const retryByUrl = new Map(retried.map(result => [result.url, result]));
+        results = results.map(result => retryByUrl.get(result.url) ?? result);
+      }
+      const failed = results.filter(result => !result.ok && !result.skipped).map(result => result.url);
       const succeeded = results.filter(result => result.ok).length;
       if (!succeeded && failed.length) throw new Error('Could not reach any configured read relays.');
       const tracks = results.flatMap(result => result.events).map(eventToTrack).filter((t): t is Track => !!t && t.kind === 'music');

@@ -32,19 +32,45 @@ function object(value: unknown): RecordValue | undefined {
 function text(value: unknown): string | undefined { return typeof value === 'string' && value.trim() ? value : undefined; }
 function id(value: unknown): string | undefined { const v = text(value); return v && UUID.test(v) ? v : undefined; }
 
+const WAVLAKE_REQUEST_TIMEOUT_MS = 8000;
+
+async function fetchAttempt(url: string, signal: AbortSignal): Promise<Response> {
+  return fetch(url, {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(WAVLAKE_REQUEST_TIMEOUT_MS)]),
+  });
+}
+
+function responseError(response: Response): Error {
+  return new Error(`Wavlake returned ${response.status}${response.status === 429 ? ' (rate limit)' : ''}`);
+}
+
 async function fetchApi(path: string, params: Record<string, string>, signal: AbortSignal): Promise<unknown> {
   // Paths are constructed locally, never taken from catalog data.
   const url = new URL(path, API);
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
-  let response: Response;
+  let directError: unknown;
+  let response: Response | undefined;
   try {
-    response = await fetch(url, { signal });
+    response = await fetchAttempt(url.href, signal);
   } catch (error) {
     if (signal.aborted) throw error;
-    // Some catalog endpoints do not expose CORS headers to browser clients.
-    response = await fetch(`https://proxy.shakespeare.diy/?url=${encodeURIComponent(url.href)}`, { signal });
+    directError = error;
   }
-  if (!response.ok) throw new Error(`Wavlake returned ${response.status}${response.status === 429 ? ' (rate limit)' : ''}`);
+  // Client errors and rate limits are final; network errors, timeouts, and
+  // server errors get one bounded attempt through the configured proxy.
+  if (response && !response.ok && response.status < 500) throw responseError(response);
+  if (response && !response.ok) directError = responseError(response);
+
+  if (!response?.ok) {
+    try {
+      // Some catalog endpoints do not expose CORS headers to browser clients.
+      response = await fetchAttempt(`https://proxy.shakespeare.diy/?url=${encodeURIComponent(url.href)}`, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw directError instanceof Error ? directError : error;
+    }
+  }
+  if (!response.ok) throw responseError(response);
   return response.json() as Promise<unknown>;
 }
 
