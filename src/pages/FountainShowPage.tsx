@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { ChevronLeft, ChevronRight, Heart, Mic, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart, Mic, Play, ListPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackCard } from "@/components/music/TrackCard";
 import { fountainShowFavorite, useFountainRssEpisodes, useFountainShow, usePodcastFavoriteActions, usePodcastFavorites } from "@/hooks/usePodcasts";
@@ -18,10 +19,13 @@ export default function FountainShowPage() {
   const favoriteActions = usePodcastFavoriteActions();
   const player = usePlayer();
   const [episodePage, setEpisodePage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const allTracks = episodes.data ?? [];
   const pageCount = Math.max(1, Math.ceil(allTracks.length / 20));
   const currentPage = Math.min(episodePage, pageCount);
-  const tracks = useMemo(() => allTracks.slice((currentPage - 1) * 20, currentPage * 20), [allTracks, currentPage]);
+  const tracks = allTracks.slice((currentPage - 1) * 20, currentPage * 20);
+  const selectedTracks = allTracks.filter(track => selectedIds.includes(track.id));
+  const allSelected = allTracks.length > 0 && selectedTracks.length === allTracks.length;
   const episodesPagination = (position: "top" | "bottom") => <nav aria-label={`Podcast episode pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t pt-4"}`}><Button type="button" variant="outline" onClick={() => setEpisodePage(page => Math.max(1, page - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} <span className="hidden sm:inline">· {allTracks.length} episodes</span></p><Button type="button" variant="outline" onClick={() => setEpisodePage(page => Math.min(pageCount, page + 1))} disabled={currentPage >= pageCount}>Next <ChevronRight className="size-4" /></Button></nav>;
   const image = sanitizeUrl(show.data?.image);
   const favorite = show.data ? fountainShowFavorite(show.data) : undefined;
@@ -42,6 +46,7 @@ export default function FountainShowPage() {
 
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Episodes</h2><p className="text-sm text-muted-foreground">Latest playable episodes from RSS, with Podcast Index as a fallback.</p></div><Button type="button" disabled={!allTracks.length || showLoadFailed || showIsLoading} onClick={() => player.playQueue(allTracks)}><Play className="size-4 fill-current" /> Play loaded episodes</Button></div>
+      {(allTracks.length > 0 || episodes.isLoading) && <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-card/50 px-3 py-2"><Checkbox checked={allSelected ? true : selectedTracks.length ? "indeterminate" : false} aria-label="Select all podcast episodes" onCheckedChange={checked => setSelectedIds(checked === true ? allTracks.map(track => track.id) : [])} /><span className="min-w-0 flex-1 text-sm">{selectedTracks.length ? `${selectedTracks.length} of ${allTracks.length} episodes selected` : `Select all ${allTracks.length} episodes`}</span>{selectedTracks.length > 0 && <Button type="button" size="sm" variant="outline" onClick={() => { player.addToQueue(selectedTracks); setSelectedIds([]); }}><ListPlus className="size-4" /> Add selected to queue</Button>}</div>}
       {showLoadFailed ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">Show details could not be loaded, so its RSS episodes are unavailable.</div> : showIsLoading || episodes.isLoading ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="space-y-3"><Skeleton className="aspect-square rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}</div> : !show.data?.feedUrl ? <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">A public RSS feed could not be resolved for this show.</div> : episodes.isError ? <div role="alert" className="rounded-xl border border-dashed p-8 text-center"><p className="text-destructive">Couldn’t load this show’s episodes from RSS or Podcast Index.</p><Button className="mt-4" variant="outline" onClick={() => void episodes.refetch()}>Try again</Button></div> : <>{tracks.length ? <>{episodesPagination("top")}<div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{tracks.map(track => <TrackCard key={track.id} track={track} showPlaylistAction showLikeAction />)}</div></> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found in this show’s RSS feed.</div>}{allTracks.length > 20 && episodesPagination("bottom")}</>}
     </section>
   </div>;

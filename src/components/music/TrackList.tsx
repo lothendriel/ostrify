@@ -3,7 +3,9 @@ import type { Track } from "@/lib/music";
 import { TrackRow } from "./TrackRow";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, ListPlus } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { usePlayer } from "@/hooks/usePlayer";
 
 export const TRACKS_PER_PAGE = 20;
 
@@ -13,8 +15,9 @@ interface TrackListProps {
   onCreatePlaylist?: () => void;
   onRemove?: (track: Track) => void;
   emptyMessage?: string;
-  playTrackOnSelect?: boolean;
   onReorder?: (tracks: Track[]) => void;
+  bulkSelect?: boolean;
+  selectionLabel?: string;
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: (requiredTrackCount: number) => Promise<boolean>;
@@ -22,8 +25,10 @@ interface TrackListProps {
   onPageChange?: (page: number) => void;
 }
 
-export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, playTrackOnSelect = false, onReorder, hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange }: TrackListProps) {
+export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, onReorder, bulkSelect = true, selectionLabel = 'tracks', hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange }: TrackListProps) {
+  const player = usePlayer();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const tracksKey = tracks.map(track => track.id).join('|');
   const [paginationState, setPaginationState] = useState({ tracksKey, page: 1 });
   const localPage = paginationState.tracksKey === tracksKey ? paginationState.page : 1;
@@ -38,6 +43,9 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
   };
   const pageStart = (displayedPage - 1) * TRACKS_PER_PAGE;
   const visibleTracks = tracks.slice(pageStart, pageStart + TRACKS_PER_PAGE);
+  const selectedTracks = tracks.filter(track => selectedIds.includes(track.id));
+  const allSelected = tracks.length > 0 && selectedTracks.length === tracks.length;
+  const setTrackSelected = (trackId: string, selected: boolean) => setSelectedIds(ids => selected ? [...new Set([...ids, trackId])] : ids.filter(id => id !== trackId));
   const canLoadMore = hasMore && !!onLoadMore;
   const nextPageAvailable = displayedPage < pageCount || displayedPage === pageCount && canLoadMore;
   const next = async () => {
@@ -98,8 +106,14 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
   return (
     <div>
       {pagination('top')}
+      {bulkSelect && <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-card/50 px-3 py-2">
+        <Checkbox checked={allSelected ? true : selectedTracks.length > 0 ? "indeterminate" : false} aria-label={`Select all ${selectionLabel}`} onCheckedChange={checked => setSelectedIds(checked === true ? tracks.map(track => track.id) : [])} />
+        <span className="min-w-0 flex-1 text-sm">{selectedTracks.length ? `${selectedTracks.length} of ${tracks.length} ${selectionLabel} selected` : `Select all ${tracks.length} ${selectionLabel}`}</span>
+        {selectedTracks.length > 0 && <Button type="button" size="sm" variant="outline" onClick={() => { player.addToQueue(selectedTracks); setSelectedIds([]); }}><ListPlus className="size-4" /> Add selected to queue</Button>}
+      </div>}
       {/* Header row */}
-      <div className="grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 px-3 py-2 border-b border-border/50 text-xs uppercase tracking-wider text-muted-foreground">
+      <div className={`grid ${bulkSelect ? 'grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto]' : 'grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto]'} items-center gap-3 px-3 py-2 border-b border-border/50 text-xs uppercase tracking-wider text-muted-foreground`}>
+        {bulkSelect && <span aria-hidden="true" />}
         <span className="text-center">#</span>
         <span>Title</span>
         <span className="hidden md:block">Category</span>
@@ -114,8 +128,9 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
             key={track.id}
             track={track}
             index={index}
-            queue={tracks}
-            playTrackOnSelect={playTrackOnSelect}
+            selectable={bulkSelect}
+            selected={selectedIds.includes(track.id)}
+            onSelectedChange={selected => setTrackSelected(track.id, selected)}
             onCreatePlaylist={onCreatePlaylist}
             onRemove={onRemove ? () => onRemove(track) : undefined}
             draggable={!!onReorder}

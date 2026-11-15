@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronUp, GripVertical, Play, Pause } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatDuration, type Track } from "@/lib/music";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -11,10 +12,10 @@ import { QueueActionsMenu } from "./QueueActionsMenu";
 interface TrackRowProps {
   track: Track;
   index: number;
-  /** All tracks in the current context, so clicking plays the whole list by default. */
-  queue: Track[];
-  /** Play this row without replacing the current queue. */
-  playTrackOnSelect?: boolean;
+  /** Optional selection controls for explicit bulk queue actions. */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
   onCreatePlaylist?: () => void;
   onRemove?: () => void;
   onMoveUp?: () => void;
@@ -26,7 +27,7 @@ interface TrackRowProps {
   draggable?: boolean;
 }
 
-export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCreatePlaylist, onRemove, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd, draggable = false }: TrackRowProps) {
+export function TrackRow({ track, index, selectable = false, selected = false, onSelectedChange, onCreatePlaylist, onRemove, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd, draggable = false }: TrackRowProps) {
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
@@ -35,15 +36,14 @@ export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCre
     if (isCurrent) {
       player.togglePlay();
     } else {
-      if (playTrackOnSelect) player.playTrack(track);
-      else player.playQueue(queue, queue.findIndex((t) => t.id === track.id));
+      player.playTrack(track);
     }
   };
 
   return (
     <div
       className={cn(
-        "group grid grid-cols-[2rem_1fr_auto] md:grid-cols-[2rem_1fr_minmax(0,14rem)_auto] items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/10 cursor-pointer",
+        cn("group grid items-center gap-3 px-3 py-2 rounded-md hover:bg-accent/10 cursor-pointer", selectable ? "grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto]" : "grid-cols-[2rem_minmax(0,1fr)_auto] md:grid-cols-[2rem_minmax(0,1fr)_minmax(0,14rem)_auto]"),
         isCurrent && "bg-accent/10",
       )}
       draggable={draggable}
@@ -64,12 +64,11 @@ export function TrackRow({ track, index, queue, playTrackOnSelect = false, onCre
         }
       }}
     >
+      {selectable && <Checkbox checked={selected} aria-label={`${selected ? "Deselect" : "Select"} ${track.title}`} onCheckedChange={checked => onSelectedChange?.(checked === true)} onClick={event => event.stopPropagation()} />}
       {/* Index / play indicator */}
       <div className="relative flex w-8 items-center justify-center text-sm text-muted-foreground">
         {draggable && <GripVertical className="absolute -left-2 size-3.5 cursor-grab text-muted-foreground/60" aria-hidden="true" />}
-        <span className={cn("group-hover:opacity-0", isPlaying ? "opacity-0" : isCurrent && "text-primary")}>
-          {index + 1}
-        </span>
+        <span className={cn("group-hover:opacity-0", isPlaying ? "opacity-0" : isCurrent && "text-primary")}>{index + 1}</span>
         <span className="absolute inset-0 hidden group-hover:flex items-center justify-center text-foreground">
           {isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
         </span>

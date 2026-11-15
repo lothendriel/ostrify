@@ -85,7 +85,6 @@ const CategoryPage = () => {
         <TrackList
           tracks={tracks}
           isLoading={isLoading || isWavlakeLoading}
-          playTrackOnSelect
           emptyMessage={`No ${category.label} tracks found right now. We look for the genre in Nostr tags and catalog track metadata — check back later or browse another genre.`}
         />
         </section>

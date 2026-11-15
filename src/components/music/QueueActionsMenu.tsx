@@ -37,7 +37,7 @@ export function QueueActionsMenu({ track }: { track: Track }) {
         onClick={event => event.stopPropagation()}
         onSelect={() => player.playNext([track])}
       >
-        <ListEnd className="size-4" /> Play next
+        <ListEnd className="size-4" /> Add as next to play
       </DropdownMenuItem>
       <DropdownMenuItem
         data-queue-action="true"

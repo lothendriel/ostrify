@@ -398,11 +398,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const nextIndex = pickNextIndex(index);
     if (nextIndex === -1) {
       setIsPlaying(false);
-      void continueWithAutoplay();
       return;
     }
     setIndex(nextIndex);
-  }, [pickNextIndex, index, continueWithAutoplay]);
+  }, [pickNextIndex, index]);
 
   // Wire up audio element events.
   useEffect(() => {
