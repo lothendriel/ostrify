@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Library, Music2, UserRound, Mic, Play, Shuffle, Disc3 } from 'lucide-react';
+import { Library, Music2, UserRound, Mic, Play, Shuffle, Disc3, Upload } from 'lucide-react';
 import { LoginArea } from '@/components/auth/LoginArea';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -18,6 +20,7 @@ import { usePodcastFavorites } from '@/hooks/usePodcasts';
 import { useSavedAlbums } from '@/hooks/useSavedAlbums';
 import { savedAlbumPath } from '@/lib/savedAlbums';
 import { usePlayer } from '@/hooks/usePlayer';
+import { PublishMusicPanel } from '@/components/music/PublishMusicPanel';
 
 function FollowedPersonTile({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
@@ -36,6 +39,7 @@ function ArtistTile({ reference }: { reference: string }) {
 }
 
 export default function MyProfile() {
+  const [publishOpen, setPublishOpen] = useState(false);
   useSeoMeta({ title: 'My Profile — Ostrify' });
   const { user, metadata } = useCurrentUser();
   const playlists = usePlaylists();
@@ -60,9 +64,11 @@ export default function MyProfile() {
       <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
       <div className="relative z-20 flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
         <div className="size-36 shrink-0 overflow-hidden rounded-full bg-emerald-950 shadow-2xl ring-1 ring-white/15 sm:size-52">{picture ? <img src={picture} alt={name} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-4xl font-bold text-white sm:text-6xl">{initials}</div>}</div>
-        <div className="min-w-0 pb-1 text-white"><p className="text-sm font-medium">Your Ostrify profile</p><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{tracks.length} liked {tracks.length === 1 ? 'track' : 'tracks'} · {artists.data?.length ?? 0} artists · {followedPeople.people.length} Ostrify friends</p></div>
+        <div className="min-w-0 flex-1 pb-1 text-white"><p className="text-sm font-medium">Your Ostrify profile</p><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{tracks.length} liked {tracks.length === 1 ? 'track' : 'tracks'} · {artists.data?.length ?? 0} artists · {followedPeople.people.length} Ostrify friends</p></div>
       </div>
+      <Button type="button" aria-expanded={publishOpen} aria-controls="publish-music-panel" onClick={() => setPublishOpen(open => !open)} className="absolute bottom-4 right-4 z-20 rounded-full shadow-lg sm:bottom-6 sm:right-6"><Upload className="size-4" />{publishOpen ? 'Close publishing' : 'Publish'}</Button>
     </header>
+    <div id="publish-music-panel" hidden={!publishOpen}><PublishMusicPanel artist={name} artistPubkey={user.pubkey} /></div>
     <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
       <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5"><button type="button" aria-label="Play liked songs" disabled={!tracks.length} className="grid size-14 place-items-center rounded-full bg-primary text-primary-foreground transition hover:scale-105 disabled:opacity-40" onClick={() => player.playQueue(tracks)}><Play className="size-6 fill-current" /></button><button type="button" aria-label="Shuffle liked songs" disabled={!tracks.length} className="grid size-11 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-40" onClick={() => { player.toggleShuffle(); player.playQueue(tracks); }}><Shuffle className="size-5" /></button></div>
       {privacy.isError && <p role="alert" className="py-4 text-sm text-destructive">Couldn’t load your profile privacy settings. Profile sections are hidden for now. <button className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
