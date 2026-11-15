@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { ChevronLeft, ChevronRight, Music, Search, Radio } from 'lucide-react';
@@ -10,6 +10,7 @@ import { TrackList } from '@/components/music/TrackList';
 import { FollowButton } from '@/components/music/FollowButton';
 import { useRadio } from '@/hooks/useRadio';
 import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
+import type { Track } from '@/lib/music';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
   if (!items.length) return null;
@@ -37,7 +38,7 @@ function ReleaseLinks({ items }: { items: WavlakeRelease[] }) {
   ))}</div>;
 }
 
-function CatalogTracks({ artistId }: { artistId?: string }) {
+function CatalogTracks({ artistId, onTracksChange }: { artistId?: string; onTracksChange?: (tracks: Track[]) => void }) {
   const catalog = useWavlakeCatalog(artistId);
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPage = Number(searchParams.get('page') ?? '1');
@@ -54,6 +55,7 @@ function CatalogTracks({ artistId }: { artistId?: string }) {
   }, [catalog.data]);
   const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
   const visiblePage = Math.min(page, pageCount);
+  useEffect(() => { onTracksChange?.(tracks); }, [onTracksChange, tracks]);
   const loadWavlakeTracks = async (requiredTrackCount: number) => {
     if (catalog.isFetchingNextPage) return false;
     let loadedTracks = tracks.length;
@@ -184,15 +186,17 @@ export function WavlakeDiscovery() {
 function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }) {
   const release = useWavlakeRelease(type, itemId);
   const radio = useRadio();
+  const [catalogTracks, setCatalogTracks] = useState<Track[]>([]);
+  const updateCatalogTracks = useCallback((tracks: Track[]) => setCatalogTracks(tracks), []);
   if (release.isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. </div>;
   const { title, artist, image, albums, tracks } = release.data;
   return <div className="p-4 sm:p-6 space-y-8">
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
     {type === 'album' && itemId && <div className="space-y-2"><SaveAlbumButton album={{ id: itemId, title }} artist={artist} image={image} className="rounded-full" /><p className="text-sm text-muted-foreground">Saved Albums sync across your devices. Private albums are hidden from your Ostrify profile, but bookmark data remains public on Nostr.</p></div>}
-    {type === 'artist' && itemId && <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><FollowButton pubkey={`wavlake:${itemId}`} /><Button type="button" variant="outline" className="rounded-full gap-2" disabled={!tracks.length} onClick={() => radio.startArtistRadio(`wavlake:${itemId}`, tracks)}><Radio className="size-4" /> Start artist radio</Button></div><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
+    {type === 'artist' && itemId && <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><FollowButton pubkey={`wavlake:${itemId}`} /><Button type="button" variant="outline" className="rounded-full gap-2" disabled={!tracks.length && !catalogTracks.length} onClick={() => radio.startArtistRadio(`wavlake:${itemId}`, catalogTracks.length ? catalogTracks : tracks)}><Radio className="size-4" /> Start artist radio</Button></div><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
     {albums.length > 0 && <section className="space-y-4"><h2 className="text-2xl font-bold">Albums</h2><CatalogLinks items={albums} /></section>}
-    {type === 'album' ? <section className="space-y-4"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={tracks} /></section> : <CatalogTracks artistId={itemId} />}
+    {type === 'album' ? <section className="space-y-4"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={tracks} /></section> : <CatalogTracks artistId={itemId} onTracksChange={updateCatalogTracks} />}
   </div>;
 }
 
