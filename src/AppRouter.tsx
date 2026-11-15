@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import PodcastsPage, { CombinedPodcastEpisodesPage, FountainBrowsePage, PodcastBrowsePage } from "./pages/PodcastsPage";
 import FountainShowPage from "./pages/FountainShowPage";
 import SavedPodcastsPage from "./pages/SavedPodcastsPage";
+import SavedAlbumsPage from "./pages/SavedAlbumsPage";
 import WavlakePage, { RankedReleasesPage } from "./pages/WavlakePage";
 import MusicDiscovery from "./pages/MusicDiscovery";
 import { NostrCollectionsPage } from "./components/music/NostrCollections";
@@ -58,6 +59,7 @@ export function AppRouter() {
                 <Route path="/podcasts/nostr/episodes" element={<PodcastBrowsePage type="episodes" />} />
                 <Route path="/podcasts/fountain/:feedGuid" element={<FountainShowPage />} />
                 <Route path="/podcast-library" element={<SavedPodcastsPage />} />
+                <Route path="/saved-albums" element={<SavedAlbumsPage />} />
                 <Route path="/audiobook-library" element={<AudiobookLibraryPage />} />
                 <Route path="/audiobook-library/:id" element={<AudiobookLibraryPage />} />
                 <Route path="/audiobooks" element={<AudiobooksPage />} />

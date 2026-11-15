@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { wavlakeTrackUrl, wavlakeArtistId } from '@/hooks/useWavlake';
 import { isOstrifyMusicPlaylist, playlistTrackRefs } from '@/lib/musicPlaylists';
 import { eventToTrack } from '@/lib/music';
+import { parseSavedAlbums, SAVED_ALBUMS_ID } from '@/lib/savedAlbums';
 
 /** Public library content is always queried for the specific profile owner. */
 export function useFriendLibrary(pubkey: string | undefined) {
@@ -13,6 +14,7 @@ export function useFriendLibrary(pubkey: string | undefined) {
       if (!pubkey) throw new Error('Missing profile');
       const events = await nostr.query([
         { kinds: [30003], authors: [pubkey], limit: 100 },
+        { kinds: [30003], authors: [pubkey], '#d': [SAVED_ALBUMS_ID], limit: 10 },
         { kinds: [30000], authors: [pubkey], '#d': ['ostrify-artists', 'ostrify-people'], limit: 20 },
       ], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
       const byId = new Map<string, typeof events[number]>();
@@ -21,6 +23,8 @@ export function useFriendLibrary(pubkey: string | undefined) {
         if (d && (!byId.has(d) || byId.get(d)!.created_at < event.created_at)) byId.set(d, event);
       }
       const candidates = [...byId.entries()];
+      const savedAlbumsEvent = candidates.find(([id]) => id === SAVED_ALBUMS_ID)?.[1];
+      const albums = parseSavedAlbums(savedAlbumsEvent).filter(album => album.isListed);
       // Other apps also use bookmark sets for books and articles. Resolve only
       // unmarked event references and include a foreign list only when at least
       // one reference actually resolves to supported audio (or a Wavlake track).
@@ -55,7 +59,7 @@ export function useFriendLibrary(pubkey: string | undefined) {
       });
       const peopleEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey && e.tags.some(([n, d]) => n === 'd' && d === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
       const people = peopleEvent?.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'people') ? [] : [...new Set((peopleEvent?.tags ?? []).filter(([name, value]) => name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '') && value !== pubkey).map(([, value]) => value))];
-      return { playlists, artists, people, otherListsUnverified };
+      return { playlists, artists, people, albums, otherListsUnverified };
     },
   });
 }

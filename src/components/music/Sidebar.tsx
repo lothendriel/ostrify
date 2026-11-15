@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3 } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LIKED_SONGS_ID, usePlaylists, type Playlist } from "@/hooks/usePlaylists";
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
+import { useSavedAlbums } from '@/hooks/useSavedAlbums';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const navItems = [
@@ -32,6 +33,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { data: playlists, isLoading } = usePlaylists();
   const audiobookLibrary = useAudiobookLibrary();
   const podcastFavorites = usePodcastFavorites();
+  const savedAlbums = useSavedAlbums();
   const [createOpen, setCreateOpen] = useState(false);
   const savedBookIds = new Set([
     ...audiobookLibrary.favoriteBooks.map(book => book.id),
@@ -93,6 +95,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
               </NavLink>
               <PlaylistLibraryItem playlist={likedPlaylist} liked onNavigate={onNavigate} />
+              <SavedAlbumsLibraryItem count={savedAlbums.albums.length} onNavigate={onNavigate} />
               <AudiobookLibraryItem books={savedAudiobooks} favoriteCount={audiobookLibrary.favoriteBooks.length} collectionCount={audiobookLibrary.collections.length} onNavigate={onNavigate} />
               <PodcastLibraryItem favorites={podcastFavorites.data} onNavigate={onNavigate} />
               {isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">Loading…</p>}
@@ -153,6 +156,13 @@ function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist
       <div className="text-xs text-muted-foreground">{playlist.trackIds.length} songs</div>
     </NavLink>
   </div>;
+}
+
+function SavedAlbumsLibraryItem({ count, onNavigate }: { count: number; onNavigate?: () => void }) {
+  return <NavLink to="/saved-albums" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10", isActive && "bg-accent/10")}>
+    <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-emerald-600 to-teal-900"><Disc3 className="size-5 text-white" /></div>
+    <div className="min-w-0"><div className="truncate text-sm font-medium">Saved Albums</div><div className="text-xs text-muted-foreground">{count} {count === 1 ? 'album' : 'albums'}</div></div>
+  </NavLink>;
 }
 
 function AudiobookLibraryItem({ books, favoriteCount, collectionCount, onNavigate }: { books: SavedAudiobook[]; favoriteCount: number; collectionCount: number; onNavigate?: () => void }) {

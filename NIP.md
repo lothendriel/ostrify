@@ -12,7 +12,7 @@ not define any new event kinds — it aggregates and reuses existing NIPs.
 | `54`    | NIP-F4 podcast episode                   | Podcast episodes                                 |
 | `1063`  | NIP-94 file metadata                     | Music tracks (`m` = `audio/*` or audio URL)     |
 | `10154` | NIP-F4 podcast metadata                  | Podcast show info                                |
-| `30003` | NIP-51 bookmark set                      | User playlists (incl. Liked Songs)              |
+| `30003` | NIP-51 bookmark set                      | User playlists, Liked Songs, and Saved Albums   |
 | `30440` | Wavlake NOM track                        | Artist-published music tracks (`stream_url`)    |
 | `31337` | zapstr.live / lightning.fm audio track   | Artist-published music tracks (`media`/`url`)   |
 | `32123` | Legacy Wavlake track                     | Music tracks (JSON metadata in `content`)       |
@@ -75,6 +75,12 @@ referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73
   their playlist contents remain public on Nostr. Other bookmark sets are only
   shown on public music profiles when a supported Wavlake reference or a
   resolvable audio event is found.
+- Saved Wavlake albums use a separate bookmark set with `d=ostrify-wavlake-albums-v1`
+  and `title=Saved Albums`. An `i` tag references the Wavlake album URL, while
+  `ostrify-album` stores the stable album ID, title, artist, image, and Ostrify
+  visibility (`public` or `private`). Private is a display/discovery preference, not
+  access control: the data remains public on Nostr. Album state syncs between devices
+  through the user's authored replaceable bookmark set.
 - Because these are addressable, replaceable events, all reads are filtered by the
   user's `authors` pubkey.
 
