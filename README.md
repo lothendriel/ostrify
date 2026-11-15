@@ -80,7 +80,7 @@ Choose which relays Ostrify reads from and publishes to, independently of your N
 ### Make a library
 
 - **Liked Songs and playlists:** create and organize music playlists, reorder tracks, and publish lists as Nostr events.
-- **Saved albums:** bookmark Wavlake albums in a separate Nostr-synced library, with per-album public/private display controls.
+- **Saved albums:** bookmark Wavlake and Nostr publisher albums in a Nostr-synced library, with per-album public/private display controls.
 - **Follow artists:** keep track of Nostr and Wavlake artists in your own follow list.
 - **Save podcasts:** keep shows and episodes together in your Nostr-synced podcast library.
 - **Audiobook favorites and collections:** organize books on this device, and optionally sync the library privately across devices.

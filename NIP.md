@@ -75,12 +75,16 @@ referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73
   their playlist contents remain public on Nostr. Other bookmark sets are only
   shown on public music profiles when a supported Wavlake reference or a
   resolvable audio event is found.
-- Saved Wavlake albums use a separate bookmark set with `d=ostrify-wavlake-albums-v1`
-  and `title=Saved Albums`. An `i` tag references the Wavlake album URL, while
-  `ostrify-album` stores the stable album ID, title, artist, image, and Ostrify
-  visibility (`public` or `private`). Private is a display/discovery preference, not
-  access control: the data remains public on Nostr. Album state syncs between devices
-  through the user's authored replaceable bookmark set.
+- Saved albums use a separate bookmark set with `d=ostrify-wavlake-albums-v1` and
+  `title=Saved Albums`. Wavlake albums have an `i` tag referencing the catalog URL;
+  `ostrify-album` stores their stable catalog ID, title, artist, image, and Ostrify
+  visibility (`public` or `private`). Inferred Nostr albums use `ostrify-nostr-album`
+  tags containing the publisher pubkey, album title, artist, image, and visibility.
+  Their identity is the publisher pubkey plus normalized album title; they are groups
+  inferred from track metadata, not canonical album events. Private is an Ostrify
+  display/discovery preference, not access control: bookmark data remains public on
+  Nostr. Album state syncs between devices through the user's authored replaceable
+  bookmark set.
 - Because these are addressable, replaceable events, all reads are filtered by the
   user's `authors` pubkey.
 

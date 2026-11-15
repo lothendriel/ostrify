@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { SaveAlbumButton } from '@/components/music/SaveAlbumButton';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
@@ -47,7 +48,7 @@ export default function ArtistAlbumPage() {
       <div className="size-40 shrink-0 overflow-hidden rounded-lg bg-secondary shadow-xl sm:size-52">{image ? <img src={image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Disc3 className="size-16 text-white/60" /></div>}</div>
       <div className="min-w-0 flex-1 text-white"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Nostr album</p><h1 className="mt-2 break-words text-4xl font-extrabold tracking-tight sm:text-6xl">{album.title}</h1><Link to={artistPath} className="mt-3 inline-block text-sm text-white/80 hover:text-white hover:underline">{artist}</Link><p className="mt-2 text-sm text-white/70">{album.tracks.length} {album.tracks.length === 1 ? 'track' : 'tracks'}</p></div>
     </header>
-    <div className="flex flex-wrap items-center gap-3"><Button type="button" size="icon" className="size-12 rounded-full" aria-label={`Play ${album.title}`} onClick={() => player.playQueue(album.tracks)}><Play className="size-5 fill-current" /></Button><span className="text-sm text-muted-foreground">Tracks are grouped by the album name published with each track. Availability depends on your enabled relays.</span></div>
+    <div className="space-y-2"><div className="flex flex-wrap items-center gap-3"><SaveAlbumButton album={{ title: album.title ?? title }} artist={artist} image={image} artistPubkey={pubkey} className="rounded-full" /><Button type="button" size="icon" className="size-12 rounded-full" aria-label={`Play ${album.title}`} onClick={() => player.playQueue(album.tracks)}><Play className="size-5 fill-current" /></Button><span className="text-sm text-muted-foreground">Tracks are grouped by the album name published with each track. Availability depends on your enabled relays.</span></div><p className="text-xs text-muted-foreground">Saved Albums sync across your devices. Private albums are hidden from your Ostrify profile, but bookmark data remains public on Nostr.</p></div>
     <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2><TrackList tracks={album.tracks} /></section>
   </div>;
 }
