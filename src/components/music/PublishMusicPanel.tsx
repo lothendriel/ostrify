@@ -24,6 +24,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
   const [trackTitle, setTrackTitle] = useState("");
   const [trackUrl, setTrackUrl] = useState("");
   const [trackFile, setTrackFile] = useState<File | undefined>();
+  const [trackImage, setTrackImage] = useState<File | undefined>();
   const [trackGenre, setTrackGenre] = useState("");
   const [albumTitle, setAlbumTitle] = useState("");
   const [albumId, setAlbumId] = useState(() => newId());
@@ -74,17 +75,24 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       }
       if (!url) throw new Error("Choose an audio file to upload or enter a valid HTTPS audio URL.");
       if (!trackFile && !AUDIO_EXT_RE.test(url)) throw new Error("Enter a URL ending in a recognized audio extension, or upload the file through Blossom.");
+      let imageUrl: string | undefined;
+      if (trackImage) {
+        const imageTags = await upload.mutateAsync(trackImage);
+        imageUrl = sanitizeUrl(uploadUrl(imageTags));
+        if (!imageUrl) throw new Error("The image upload did not return a usable URL.");
+      }
       const tags: string[][] = [
         ["d", newId()], ["title", trackTitle.trim()], ["url", url], ["artist", artist], ["artist_pubkey", artistPubkey],
         ["alt", "Music track"], ...mediaTags.filter(([name]) => name !== "url"),
       ];
+      if (trackImage && imageUrl) tags.push(["image", imageUrl]);
       if (trackGenre.trim()) tags.push(["t", trackGenre.trim().toLowerCase()]);
       const mime = trackFile?.type;
       if (mime?.startsWith("audio/") && !tags.some(([name]) => name === "m")) tags.push(["m", mime]);
       await publish.mutateAsync({ kind: 36787, content: "", tags });
       await queryClient.invalidateQueries({ queryKey: ["artist-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["tracks"] });
-      setTrackTitle(""); setTrackUrl(""); setTrackFile(undefined); setTrackGenre("");
+      setTrackTitle(""); setTrackUrl(""); setTrackFile(undefined); setTrackImage(undefined); setTrackGenre("");
       setMessage({ text: "Track published to your configured write relays.", error: false });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : "Could not publish this track.", error: true });
@@ -173,6 +181,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
             <label className="space-y-2 text-sm font-medium">Genre (optional)<Input value={trackGenre} onChange={event => setTrackGenre(event.target.value)} maxLength={80} placeholder="Ambient, folk, rock…" /></label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Audio file (Blossom upload)<Input type="file" accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => chooseTrack(event.target.files?.[0])} /></label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Or existing HTTPS audio URL<Input type="url" value={trackUrl} onChange={event => { setTrackUrl(event.target.value); if (event.target.value) setTrackFile(undefined); }} placeholder="https://…/track.mp3" /></label>
+            <label className="space-y-2 text-sm font-medium sm:col-span-2">Track image (optional)<Input type="file" accept="image/*" onChange={event => { const file = event.target.files?.[0]; if (file && !file.type.startsWith("image/")) { setMessage({ text: "Please choose an image file.", error: true }); return; } setMessage(undefined); setTrackImage(file); }} /></label>
             <div className="flex flex-wrap items-center gap-3 sm:col-span-2"><Button type="submit" disabled={busy || !trackTitle.trim()}><Upload className="size-4" />{busy ? "Publishing…" : "Publish track"}</Button>{trackFile && <span className="text-sm text-muted-foreground">{trackFile.name}</span>}</div>
           </form>
         </TabsContent>
