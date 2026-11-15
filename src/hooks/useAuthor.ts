@@ -2,11 +2,14 @@ import { type NostrEvent, type NostrMetadata, NSchema as n } from '@nostrify/nos
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 
-export function useAuthor(pubkey: string | undefined) {
+export function useAuthor(pubkey: string | undefined, options: { persistForPublicArtistPage?: boolean } = {}) {
   const { nostr } = useNostr();
+  const queryKey = options.persistForPublicArtistPage
+    ? ['nostr', 'author', pubkey ?? '', 'public-artist-page']
+    : ['nostr', 'author', pubkey ?? ''];
 
   return useQuery<{ event?: NostrEvent; metadata?: NostrMetadata }>({
-    queryKey: ['nostr', 'author', pubkey ?? ''],
+    queryKey,
     queryFn: async () => {
       if (!pubkey) {
         return {};

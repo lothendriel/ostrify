@@ -65,7 +65,7 @@ export function ArtistPage({ pubkey: propPubkey }: { pubkey?: string } = {}) {
 
 function ArtistProfile({ pubkey }: { pubkey: string }) {
   const { nostr } = useNostr();
-  const author = useAuthor(pubkey);
+  const author = useAuthor(pubkey, { persistForPublicArtistPage: true });
   const publisherTrackQuery = useArtistTracks(pubkey);
   const artistTracks = useQuery({
     queryKey: ["artist-identified-tracks", pubkey],
@@ -89,7 +89,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey && (!track.artistPubkey || track.artistPubkey === pubkey));
   const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.url, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
-  const isError = publisherTrackQuery.isError && artistTracks.isError;
+  const isError = publisherTrackQuery.isError && artistTracks.isError && !publisherTrackQuery.data && !artistTracks.data;
   const publishedMusicTracks = publisherTracks.filter(track => track.kind === 'music');
   // Treat every playable music item published by this account as part of its station,
   // even when it lacks an explicit artist tag. Explicitly credited tracks remain included too.

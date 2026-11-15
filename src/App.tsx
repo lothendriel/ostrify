@@ -4,7 +4,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { InferSeoMetaPlugin } from 'unhead/plugins';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
@@ -14,6 +14,7 @@ import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 import { ServiceWorkerUpdateNotice } from '@/components/ServiceWorkerUpdateNotice';
+import { restorePublicPageCache, watchPublicPageCache } from '@/lib/publicPageCache';
 import AppRouter from './AppRouter';
 
 const head = createHead({
@@ -42,6 +43,28 @@ const defaultConfig: AppConfig = {
   },
   useAppBlossomServers: true,
 };
+
+function PublicPageCacheSync({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let stopWatching: (() => void) | undefined;
+    void restorePublicPageCache(queryClient).finally(() => {
+      if (!active) return;
+      stopWatching = watchPublicPageCache(queryClient);
+      setReady(true);
+    });
+    return () => {
+      active = false;
+      stopWatching?.();
+    };
+  }, []);
+
+  // Avoid mounting page queries before persisted data has been restored; this
+  // lets visited pages render the cache first and then revalidate as usual.
+  return ready ? children : null;
+}
 
 function LibraryRefreshSync() {
   useEffect(() => {
@@ -85,7 +108,9 @@ export function App() {
                 <Toaster />
                 <ServiceWorkerUpdateNotice />
                 <Suspense>
-                  <AppRouter />
+                  <PublicPageCacheSync>
+                    <AppRouter />
+                  </PublicPageCacheSync>
                 </Suspense>
               </TooltipProvider>
             </NostrProvider>

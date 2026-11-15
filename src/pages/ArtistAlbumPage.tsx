@@ -26,7 +26,7 @@ export default function ArtistAlbumPage() {
       // Invalid identifiers are handled by the not-found state below.
     }
   }
-  const author = useAuthor(pubkey);
+  const author = useAuthor(pubkey, { persistForPublicArtistPage: true });
   const query = useArtistTracks(pubkey);
   const player = usePlayer();
   const album = useMemo(() => groupIntoAlbums(query.data ?? []).albums.find(item => item.title?.toLocaleLowerCase() === title.toLocaleLowerCase()), [query.data, title]);
