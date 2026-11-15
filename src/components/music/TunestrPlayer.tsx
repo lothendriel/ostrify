@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import Hls from 'hls.js';
 import { Maximize2, Minimize2, PictureInPicture2, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,14 @@ export function useTunestrPlayer() {
   return context;
 }
 
+function isHlsManifest(url: string): boolean {
+  try {
+    return new URL(url).pathname.toLowerCase().endsWith('.m3u8');
+  } catch {
+    return false;
+  }
+}
+
 function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   stream: TunestrStream;
   docked: boolean;
@@ -41,15 +50,41 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   onClose: () => void;
 }) {
   const playerRef = useRef<HTMLDivElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [failedStream, setFailedStream] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const failed = failedStream === stream.id;
+  const hlsManifest = stream.format === 'nip53' && isHlsManifest(stream.externalUrl);
 
   useEffect(() => {
     const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerRef.current);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  useEffect(() => {
+    if (!hlsManifest || stream.format !== 'nip53' || failedStream === stream.id) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    setFailedStream(null);
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = stream.externalUrl;
+      return () => { video.pause(); video.removeAttribute('src'); video.load(); };
+    }
+    if (!Hls.isSupported()) {
+      setFailedStream(stream.id);
+      return;
+    }
+
+    const hls = new Hls({ enableWorker: false, lowLatencyMode: true });
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) setFailedStream(stream.id);
+    });
+    hls.loadSource(stream.externalUrl);
+    hls.attachMedia(video);
+    return () => { hls.destroy(); video.pause(); video.removeAttribute('src'); video.load(); };
+  }, [failedStream, hlsManifest, stream.externalUrl, stream.format, stream.id]);
 
   const closePlayer = () => {
     if (document.fullscreenElement === playerRef.current) void document.exitFullscreen().catch(() => {});
@@ -103,19 +138,30 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
           {controls}
         </div>
         {failed
-          ? <div className="p-6 text-sm text-muted-foreground">This stream could not be played. It may have ended or the host may not allow browser playback.</div>
+          ? <div className="aspect-video w-full bg-black p-6 text-sm text-white">This stream could not be played in this browser. You can still open the original stream source below.</div>
           : stream.format === 'n94' && stream.event && stream.variant
             ? <N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} />
-            : <iframe
-              key={stream.id}
-              src={stream.url}
-              title={stream.title}
-              allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen"
-              allowFullScreen
-              className="aspect-video w-full border-0 bg-black"
-              onError={() => setFailedStream(stream.id)}
-            />}
-        {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open raw stream source</a><span className="ml-2 text-xs text-muted-foreground">A raw .m3u8 manifest isn’t directly viewable as a web page.</span></div>}
+            : hlsManifest
+              ? <video
+                key={stream.id}
+                ref={videoRef}
+                controls
+                playsInline
+                autoPlay
+                className="aspect-video w-full bg-black"
+                aria-label={stream.title}
+                onError={() => setFailedStream(stream.id)}
+              />
+              : <iframe
+                key={stream.id}
+                src={stream.url}
+                title={stream.title}
+                allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen"
+                allowFullScreen
+                className="aspect-video w-full border-0 bg-black"
+                onError={() => setFailedStream(stream.id)}
+              />}
+        {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open raw stream source</a>{hlsManifest && <span className="ml-2 text-xs text-muted-foreground">HLS video stream · use the player controls to start or pause.</span>}</div>}
       </div>
     </DialogContent>
   </Dialog>;
