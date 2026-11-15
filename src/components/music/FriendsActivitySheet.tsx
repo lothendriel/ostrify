@@ -72,7 +72,7 @@ export function FriendsActivityPanel({ open, onClose, onSwitch }: { open: boolea
   const { user } = useCurrentUser();
   const followedPeople = useFollowedPeople();
   const statuses = useFriendStatuses(followedPeople.people);
-  return <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-card" aria-label="Friends listening activity">
+  return <section className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70" aria-label="Friends listening activity">
     <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

@@ -54,7 +54,7 @@ export function QueuePanel({ open, onClose, onSwitch }: { open: boolean; onClose
     });
   };
 
-  const queuePanelContent = <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-card" aria-label="Player queue">
+  const queuePanelContent = <section className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70" aria-label="Player queue">
       <Tabs defaultValue="queue" className="flex min-h-0 flex-1 flex-col gap-0">
         <SheetHeader className="shrink-0 border-b px-4 py-4">
           <div className="flex items-start justify-between gap-2">

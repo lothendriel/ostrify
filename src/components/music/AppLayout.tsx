@@ -13,6 +13,7 @@ import { NotificationsBell } from "./NotificationsBell";
 import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
 import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 function AudiobookLibrarySyncService() {
   useAudiobookLibrarySync();
@@ -22,6 +23,7 @@ function AudiobookLibrarySyncService() {
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<'friends' | 'queue' | null>(null);
+  const isMobile = useIsMobile();
   const togglePanel = (panel: 'friends' | 'queue') => setActivePanel(current => current === panel ? null : panel);
 
   return (
@@ -76,10 +78,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="min-w-0 max-w-full overflow-x-hidden pb-6">{children}</div>
           </ScrollArea>
         </div>
-        <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' || activePanel === 'queue' ? 'w-[min(26rem,calc(100vw-120px))] opacity-100 md:w-[min(26rem,36vw)]' : 'w-0 opacity-0'}`}>
+        {!isMobile && <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : activePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : 'w-0 opacity-0'}`}>
           {activePanel === 'friends' && <FriendsActivityPanel open onClose={() => setActivePanel(null)} onSwitch={() => togglePanel('queue')} />}
           {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} onSwitch={() => togglePanel('friends')} />}
-        </aside>
+        </aside>}
+        {isMobile && activePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-20 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
+        {isMobile && <div className={`fixed inset-x-0 bottom-20 z-40 transition-[transform,opacity] duration-300 ease-in-out ${activePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!activePanel} inert={!activePanel}>
+          <div className="mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl pb-[env(safe-area-inset-bottom)]">
+            {activePanel === 'friends' && <FriendsActivityPanel open onClose={() => setActivePanel(null)} onSwitch={() => togglePanel('queue')} />}
+            {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} onSwitch={() => togglePanel('friends')} />}
+          </div>
+        </div>}
         </div>
       </div>
  
