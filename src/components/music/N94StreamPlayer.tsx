@@ -183,7 +183,7 @@ export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant
   }, [nostr, relayKey, event, variant]);
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} controls playsInline className="size-full" aria-label="TuneStr live stream" />
+    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" />
     {error && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
   </div>;
 }
