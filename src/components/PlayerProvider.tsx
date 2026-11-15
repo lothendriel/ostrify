@@ -375,7 +375,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         ...(nostrResult.status === "fulfilled" ? nostrResult.value.data ?? [] : []),
         ...(wavlakeResult.status === "fulfilled" ? wavlakeResult.value.data?.pages.flatMap(page => page.tracks) ?? [] : []),
         ...history.filter(track => track.kind === "music"),
-      ];
+      ].filter(track => track.title.trim().toLocaleLowerCase() !== "original sound");
       const excluded = new Set([...startingQueue, ...history].map(track => track.id));
       const excludedUrls = new Set([...startingQueue, ...history].map(track => track.url));
       const station = buildRadioStation({ seed, candidates, limit: 16 }).filter(track =>
