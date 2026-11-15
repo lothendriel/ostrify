@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { BackLink } from '@/components/music/BackLink';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
 import { useQuery } from '@tanstack/react-query';
@@ -156,7 +155,7 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
     <header className="relative isolate flex min-h-[320px] flex-col justify-start gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-16 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
       {banner && <img src={banner} alt="" className="absolute inset-0 z-0 size-full object-cover opacity-40" />}
       <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#121212]/70 via-emerald-950/25 to-black/5" aria-hidden="true" />
-      <BackLink to="/friends" className="absolute left-5 top-5 z-20 rounded-full bg-black/35 px-3 py-1.5 text-sm text-white/90 backdrop-blur hover:bg-black/50 sm:left-6" />
+
       <div className="relative z-20 flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-end sm:gap-6">
         <div className="size-36 shrink-0 overflow-hidden rounded-full bg-emerald-950 shadow-2xl ring-1 ring-white/15 sm:size-52">{picture ? <img src={picture} alt={name} className="size-full object-cover" /> : <div className="flex size-full items-center justify-center text-4xl font-bold text-white sm:text-6xl">{initials}</div>}</div>
         <div className="min-w-0 pb-1 text-white"><p className="text-sm font-medium">{publisherMusic.length ? hasArtistCredit ? 'Artist & Publisher' : 'Music Publisher' : 'Ostrify profile'}</p><h1 className="mt-1 break-words text-5xl font-extrabold tracking-tight sm:text-7xl lg:text-8xl">{name}</h1><p className="mt-3 text-sm text-white/85">{publisherMusic.length} published tracks <span className="px-1">·</span> {allTracks.length} liked tracks <span className="px-1">·</span> {library.data?.artists.length ?? 0} artists <span className="px-1">·</span> {library.data?.people.length ?? 0} Ostrify friends</p></div>

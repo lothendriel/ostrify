@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Disc3, Globe, LockKeyhole, Music, Trash2 } from 'lucide-react';
-import { BackLink } from '@/components/music/BackLink';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
@@ -25,7 +24,7 @@ export default function SavedAlbumsPage() {
 
   return <div className="space-y-8 p-4 sm:p-6">
     <header className="rounded-xl bg-gradient-to-br from-emerald-950 via-teal-950 to-card p-6 sm:p-8">
-      <BackLink to="/music?source=wavlake" className="inline-flex items-center gap-2 text-sm text-emerald-100 hover:underline">Back to music</BackLink>
+
       <p className="mt-5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-emerald-200"><Disc3 className="size-4" /> Your library</p>
       <h1 className="mt-2 text-4xl font-bold tracking-tight">Saved Albums</h1>
       <p className="mt-2 text-muted-foreground">Nostr and Wavlake albums saved to your account. Your collection syncs across devices.</p>

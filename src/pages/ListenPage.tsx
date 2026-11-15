@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { BackLink } from '@/components/music/BackLink';
 import { ExternalLink, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TrackArtwork } from '@/components/music/TrackArtwork';
@@ -42,7 +41,6 @@ export default function ListenPage() {
     return <div className="mx-auto max-w-xl space-y-4 px-6 py-16 text-center">
       <h1 className="text-2xl font-bold">This Ostrify listening link is incomplete</h1>
       <p className="text-muted-foreground">The track details or audio link could not be read.</p>
-      <Button asChild variant="outline"><BackLink to="/" /></Button>
     </div>;
   }
 
@@ -50,7 +48,6 @@ export default function ListenPage() {
   const isPlaying = isCurrent && player.isPlaying;
 
   return <main className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-8 sm:py-12">
-    <BackLink to="/" className="text-sm text-muted-foreground hover:text-foreground" />
     <article className="grid gap-6 rounded-2xl border bg-card p-5 sm:grid-cols-[15rem_1fr] sm:items-center sm:p-8">
       <TrackArtwork track={track} className="aspect-square w-full rounded-xl" />
       <div className="min-w-0 space-y-4">

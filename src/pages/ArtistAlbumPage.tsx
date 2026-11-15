@@ -3,7 +3,7 @@ import { SaveAlbumButton } from '@/components/music/SaveAlbumButton';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
-import { ArrowLeft, Disc3, Play } from 'lucide-react';
+import { Disc3, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
@@ -33,17 +33,16 @@ export default function ArtistAlbumPage() {
   const artist = author.data?.metadata?.display_name || author.data?.metadata?.name || (pubkey ? genUserName(pubkey) : 'Nostr artist');
   useSeoMeta({ title: title ? `${title} — ${artist} — Ostrify` : 'Album — Ostrify' });
 
-  if (!pubkey || !title) return <div className="p-6"><h1 className="text-2xl font-bold">Album not found</h1><Link to="/music" className="mt-3 inline-flex items-center gap-2 text-primary underline"><ArrowLeft className="size-4" /> Browse music</Link></div>;
+  if (!pubkey || !title) return <div className="p-6"><h1 className="text-2xl font-bold">Album not found</h1></div>;
 
   const artistPath = `/artist/${identifier}`;
-  const backLink = <Link to={artistPath} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground hover:underline"><ArrowLeft className="size-4" /> Back to {artist}</Link>;
-  if (query.isLoading) return <div className="space-y-6 p-4 sm:p-6">{backLink}<Skeleton className="h-48 w-full rounded-xl" /><Skeleton className="h-72 w-full rounded-xl" /></div>;
-  if (query.isError) return <div className="space-y-4 p-6">{backLink}<p role="alert" className="text-sm text-destructive">Couldn’t load this album’s tracks from your selected relays. <button className="underline" onClick={() => void query.refetch()}>Try again</button></p></div>;
-  if (!album) return <div className="space-y-4 p-6">{backLink}<div className="rounded-lg border border-dashed p-8 text-center"><h1 className="text-2xl font-bold">Album not found</h1><p className="mt-2 text-sm text-muted-foreground">This album title is not present in the tracks currently returned by your relays.</p></div></div>;
+
+  if (query.isLoading) return <div className="space-y-6 p-4 sm:p-6"><Skeleton className="h-48 w-full rounded-xl" /><Skeleton className="h-72 w-full rounded-xl" /></div>;
+  if (query.isError) return <div className="space-y-4 p-6"><p role="alert" className="text-sm text-destructive">Couldn’t load this album’s tracks from your selected relays. <button className="underline" onClick={() => void query.refetch()}>Try again</button></p></div>;
+  if (!album) return <div className="space-y-4 p-6"><div className="rounded-lg border border-dashed p-8 text-center"><h1 className="text-2xl font-bold">Album not found</h1><p className="mt-2 text-sm text-muted-foreground">This album title is not present in the tracks currently returned by your relays.</p></div></div>;
 
   const image = sanitizeUrl(album.image);
   return <div className="space-y-6 p-4 sm:p-6">
-    {backLink}
     <header className="flex flex-col items-start gap-5 rounded-xl bg-gradient-to-br from-emerald-950 via-teal-950 to-card p-5 sm:flex-row sm:items-end sm:p-8">
       <div className="size-40 shrink-0 overflow-hidden rounded-lg bg-secondary shadow-xl sm:size-52">{image ? <img src={image} alt="" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Disc3 className="size-16 text-white/60" /></div>}</div>
       <div className="min-w-0 flex-1 text-white"><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">Nostr album</p><h1 className="mt-2 break-words text-4xl font-extrabold tracking-tight sm:text-6xl">{album.title}</h1><Link to={artistPath} className="mt-3 inline-block text-sm text-white/80 hover:text-white hover:underline">{artist}</Link><p className="mt-2 text-sm text-white/70">{album.tracks.length} {album.tracks.length === 1 ? 'track' : 'tracks'}</p></div>

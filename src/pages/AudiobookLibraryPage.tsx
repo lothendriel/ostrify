@@ -1,5 +1,4 @@
 import { Link, useParams } from 'react-router-dom';
-import { BackLink } from '@/components/music/BackLink';
 import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,7 @@ export default function AudiobookLibraryPage() {
 
   useSeoMeta({ title: id ? `${collection?.title ?? 'Audiobook Collection'} — Ostrify` : 'Saved Audiobooks — Ostrify' });
 
-  if (id && !collection) return <div className="p-6"><h1 className="text-2xl font-bold">Collection not found</h1><BackLink to="/audiobook-library" className="mt-3 inline-block text-primary underline">Back</BackLink></div>;
+  if (id && !collection) return <div className="p-6"><h1 className="text-2xl font-bold">Collection not found</h1></div>;
 
   return <div className="space-y-8 p-4 sm:p-6">
     <header className="rounded-xl bg-gradient-to-br from-rose-950 via-violet-950 to-card p-6 sm:p-8">
@@ -47,7 +46,6 @@ export default function AudiobookLibraryPage() {
                   : sync.isPartial ? <p>Your saved library is available on this device, but relays did not finish the latest check. Sync will retry when relay connections recover.</p>
                     : <p>Your library syncs as private, NIP-44-encrypted data on your read relays. Other clients cannot read its contents.</p>}
       </div>}
-      {collection && <BackLink to="/audiobook-library" className="mt-4 inline-block text-sm text-primary underline">Back</BackLink>}
     </header>
 
     {!id && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><ListMusic className="size-5" /> Collections</h2>
