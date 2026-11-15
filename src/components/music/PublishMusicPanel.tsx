@@ -7,9 +7,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { useUploadFile } from "@/hooks/useUploadFile";
 import { sanitizeUrl } from "@/lib/sanitize";
-import { AUDIO_EXT_RE } from "@/lib/music";
+import { AUDIO_EXT_RE, type Track } from "@/lib/music";
+import { groupIntoAlbums, useArtistTracks } from "@/hooks/useArtistTracks";
 
-type ReleaseTrack = { id: string; file?: File; title: string; url: string; trackNumber?: number };
+type ReleaseTrack = { id: string; file?: File; title: string; url: string; trackNumber?: number; existing?: Track };
+type AlbumTarget = { id: string; title: string; image?: string };
+
+function albumTargetId(id: string, title: string | undefined): string {
+  return id.startsWith("id:") ? id.slice(3) : `legacy-${encodeURIComponent((title ?? "").normalize("NFKC").trim().toLocaleLowerCase())}`;
+}
 
 function newId(): string {
   return crypto.randomUUID();
@@ -28,13 +34,25 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
   const [trackGenre, setTrackGenre] = useState("");
   const [albumTitle, setAlbumTitle] = useState("");
   const [albumId, setAlbumId] = useState(() => newId());
+  const [selectedAlbumId, setSelectedAlbumId] = useState("");
   const [albumCover, setAlbumCover] = useState<File | undefined>();
   const [albumGenre, setAlbumGenre] = useState("");
   const [albumTracks, setAlbumTracks] = useState<ReleaseTrack[]>([]);
+  const [selectedExistingIds, setSelectedExistingIds] = useState<string[]>([]);
+  const [existingSearch, setExistingSearch] = useState("");
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
   const publish = useNostrPublish();
   const upload = useUploadFile();
   const queryClient = useQueryClient();
+  const existingQuery = useArtistTracks(artistPubkey);
+  const existingTracks = (existingQuery.data ?? []).filter(track => track.kind === "music" && track.event?.kind === 36787 && !!track.addressableId && track.pubkey === artistPubkey);
+  const albums = groupIntoAlbums(existingTracks).albums;
+  const selectedAlbum = albums.find(album => albumTargetId(album.id, album.title) === selectedAlbumId);
+  const selectedAlbumMemberIds = new Set(selectedAlbum?.tracks.map(track => track.id) ?? []);
+  const availableExistingTracks = existingTracks
+    .filter(track => !!track.addressableId && !selectedAlbumMemberIds.has(track.id))
+    .filter(track => `${track.title} ${track.artist ?? ""} ${track.album ?? ""}`.toLocaleLowerCase().includes(existingSearch.trim().toLocaleLowerCase()));
+  const targets: AlbumTarget[] = albums.map(album => ({ id: albumTargetId(album.id, album.title), title: album.title ?? "Untitled album", image: album.image }));
   const busy = publish.isPending || upload.isPending;
 
   const chooseTrack = (file: File | undefined) => {
@@ -110,9 +128,15 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       setMessage({ text: "Every album track needs a title.", error: true });
       return;
     }
+    if (!albumTitle.trim() && !selectedAlbum) {
+      setMessage({ text: "Enter a new album title or choose an existing album.", error: true });
+      return;
+    }
 
     try {
-      let coverUrl: string | undefined;
+      const targetAlbumTitle = selectedAlbum?.title ?? albumTitle.trim();
+      const targetAlbumId = selectedAlbumId.startsWith("legacy-") ? albumId : selectedAlbum ? selectedAlbumId : albumId;
+      let coverUrl: string | undefined = selectedAlbum?.image;
       if (albumCover) {
         const coverTags = await upload.mutateAsync(albumCover);
         coverUrl = sanitizeUrl(uploadUrl(coverTags));
@@ -130,16 +154,22 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
             url = sanitizeUrl(uploadUrl(mediaTags));
           }
           if (!url) throw new Error("Upload did not return a usable audio URL.");
-          if (!track.file && !AUDIO_EXT_RE.test(url)) throw new Error("Track URL must end with a recognized audio file extension.");
-          const tags: string[][] = [
-            ["d", track.id], ["title", track.title.trim()], ["url", url], ["artist", artist], ["artist_pubkey", artistPubkey],
-            ["album", albumTitle.trim()], ["album_id", albumId], ["track_number", String(track.trackNumber ?? 1)],
-            ["alt", "Music track"], ...mediaTags.filter(([name]) => name !== "url"),
-          ];
+          if (!track.existing && !track.file && !AUDIO_EXT_RE.test(url)) throw new Error("Track URL must end with a recognized audio file extension.");
+          const tags: string[][] = track.existing?.event
+            ? track.existing.event.tags
+              .filter(([name]) => name !== "title" && name !== "album" && name !== "album_id" && name !== "track_number" && name !== "image" && name !== "client")
+              .map(tag => [...tag])
+            : [
+              ["d", track.id], ["url", url], ["artist", artist], ["artist_pubkey", artistPubkey],
+              ["alt", "Music track"], ...mediaTags.filter(([name]) => name !== "url"),
+            ];
+          if (!tags.some(([name]) => name === "d")) throw new Error("This track has no stable addressable ID and can’t be safely updated.");
           if (coverUrl) tags.push(["image", coverUrl]);
-          if (albumGenre.trim()) tags.push(["t", albumGenre.trim().toLowerCase()]);
+          else if (track.existing?.image) tags.push(["image", track.existing.image]);
+          tags.push(["title", track.title.trim()], ["album", targetAlbumTitle], ["album_id", targetAlbumId], ["track_number", String(track.trackNumber ?? 1)]);
+          if (albumGenre.trim() && !track.existing) tags.push(["t", albumGenre.trim().toLowerCase()]);
           if (track.file?.type.startsWith("audio/") && !tags.some(([name]) => name === "m")) tags.push(["m", track.file.type]);
-          await publish.mutateAsync({ kind: 36787, content: "", tags });
+          await publish.mutateAsync({ kind: 36787, content: track.existing?.event?.content ?? "", tags });
           successful += 1;
         } catch (error) {
           failedIds.add(track.id);
@@ -151,8 +181,10 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       if (failures.length) {
         setMessage({ text: `${successful} of ${albumTracks.length} tracks published. Failed tracks remain in the form for retry: ${failures.join("; ")}`, error: true });
         setAlbumTracks(current => current.filter(track => failedIds.has(track.id)));
+        setSelectedExistingIds(current => current.filter(id => albumTracks.some(track => track.existing?.id === id && failedIds.has(track.id))));
       } else {
-        setAlbumTitle(""); setAlbumId(newId()); setAlbumCover(undefined); setAlbumGenre(""); setAlbumTracks([]);
+        if (!selectedAlbum) { setAlbumTitle(""); setAlbumId(newId()); }
+        setSelectedAlbumId(""); setSelectedExistingIds([]); setExistingSearch(""); setAlbumCover(undefined); setAlbumGenre(""); setAlbumTracks([]);
         setMessage({ text: `Album published: all ${successful} track${successful === 1 ? "" : "s"} sent to your configured write relays.`, error: false });
       }
     } catch (error) {
@@ -188,14 +220,21 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
         <TabsContent value="album" className="space-y-4 pt-4">
           <form onSubmit={event => void submitAlbum(event)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium">Album title<Input required value={albumTitle} onChange={event => setAlbumTitle(event.target.value)} maxLength={200} placeholder="Album title" /></label>
+              <label className="space-y-2 text-sm font-medium">Add to album<select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={selectedAlbumId} onChange={event => { const value = event.target.value; setSelectedAlbumId(value); setMessage(undefined); const target = albums.find(album => albumTargetId(album.id, album.title) === value); const previousNewTracks = albumTracks.filter(track => !track.existing); const alreadyInTarget = target?.tracks.filter(track => track.addressableId).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: track.trackNumber })) ?? []; const previouslyChosen = existingTracks.filter(track => selectedExistingIds.includes(track.id) && !target?.tracks.some(member => member.id === track.id)).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: undefined as number | undefined })); setAlbumTracks([...alreadyInTarget, ...previouslyChosen, ...previousNewTracks].map((track, index) => ({ ...track, trackNumber: track.trackNumber ?? index + 1 }))); setAlbumId(newId()); setAlbumTitle(""); }}><option value="">Create a new album</option>{targets.map(target => <option key={target.id} value={target.id}>{target.title}</option>)}</select></label>
+              <label className="space-y-2 text-sm font-medium">Album title<Input required={!selectedAlbum} disabled={!!selectedAlbum} value={selectedAlbum?.title ?? albumTitle} onChange={event => { setAlbumTitle(event.target.value); if (selectedAlbumId.startsWith("legacy-")) setAlbumId(newId()); }} maxLength={200} placeholder="Album title" /></label>
               <label className="space-y-2 text-sm font-medium">Genre (optional)<Input value={albumGenre} onChange={event => setAlbumGenre(event.target.value)} maxLength={80} placeholder="Ambient, folk, rock…" /></label>
-              <label className="space-y-2 text-sm font-medium">Cover image (optional)<Input type="file" accept="image/*" onChange={event => setAlbumCover(event.target.files?.[0])} /></label>
+              <label className="space-y-2 text-sm font-medium">Cover image (optional){selectedAlbum?.image && !albumCover && <span className="ml-2 text-xs font-normal text-muted-foreground">Existing cover will be kept</span>}<Input type="file" accept="image/*" onChange={event => { const file = event.target.files?.[0]; if (file && !file.type.startsWith("image/")) { setMessage({ text: "Please choose an image file.", error: true }); return; } setAlbumCover(file); setMessage(undefined); }} /></label>
               <label className="space-y-2 text-sm font-medium">Add audio tracks<Input type="file" multiple accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => { onAlbumFiles(event.target.files); event.target.value = ""; }} /></label>
             </div>
-            {albumTracks.length > 0 && <ol className="space-y-2" aria-label="Album track order">{albumTracks.map((track, index) => <li key={track.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/10 p-2"><span className="w-7 text-center text-sm tabular-nums text-muted-foreground">{index + 1}</span><Input aria-label={`Track ${index + 1} title`} value={track.title} onChange={event => setAlbumTracks(current => current.map(item => item.id === track.id ? { ...item, title: event.target.value } : item))} /><span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:block">{track.file?.name}</span><Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => moveTrack(index, -1)}><ArrowUp className="size-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} down`} disabled={index === albumTracks.length - 1} onClick={() => moveTrack(index, 1)}><ArrowDown className="size-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${track.title}`} onClick={() => setAlbumTracks(current => current.filter(item => item.id !== track.id).map((item, position) => ({ ...item, trackNumber: position + 1 })))}><X className="size-4" /></Button></li>)}</ol>}
+            <section className="space-y-3 rounded-lg border border-white/10 p-3" aria-label="Add existing tracks">
+              <div><h3 className="font-semibold">Add previously published tracks</h3><p className="text-xs text-muted-foreground">Select your own kind 36787 tracks. Ostrify will update their existing addressable events, preserving their audio and IDs.</p></div>
+              <Input aria-label="Search published tracks" placeholder="Search your tracks" value={existingSearch} onChange={event => setExistingSearch(event.target.value)} />
+              {existingQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading your published tracks…</p> : existingQuery.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load your published tracks from your read relays. Check relay settings and retry.</p> : availableExistingTracks.length ? <div className="max-h-52 space-y-1 overflow-y-auto">{availableExistingTracks.map(track => <label key={track.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-white/[0.06]"><input type="checkbox" checked={selectedExistingIds.includes(track.id) || albumTracks.some(item => item.existing?.id === track.id)} onChange={event => { const checked = event.target.checked; setSelectedExistingIds(current => checked ? [...new Set([...current, track.id])] : current.filter(id => id !== track.id)); if (checked) setAlbumTracks(current => [...current, { id: track.addressableId ?? track.id, title: track.title, url: track.url, existing: track, trackNumber: selectedAlbum ? Math.max(0, ...(selectedAlbum.tracks.map(item => item.trackNumber ?? 0)), ...current.map(item => item.trackNumber ?? 0)) + 1 : current.length + 1 }]); else setAlbumTracks(current => current.filter(item => item.existing?.id !== track.id).map((item, index) => ({ ...item, trackNumber: selectedAlbum && index < (selectedAlbum.tracks.length ?? 0) ? item.trackNumber : index + 1 }))); }} className="size-4 accent-primary" /><span className="min-w-0 flex-1 truncate text-sm">{track.title}</span><span className="truncate text-xs text-muted-foreground">{track.album ? `From ${track.album}` : "Single"}</span></label>)}</div> : <p className="text-sm text-muted-foreground">No more eligible published tracks found.</p>}
+            </section>
+                          {selectedAlbum && <p className="text-xs text-muted-foreground">Existing album tracks are preloaded. Reordering or adding tracks updates their track numbers when you publish.</p>}
+              {albumTracks.length > 0 && <ol className="space-y-2" aria-label="Album track order">{albumTracks.map((track, index) => <li key={track.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/10 p-2"><span className="w-7 text-center text-sm tabular-nums text-muted-foreground">{index + 1}</span><Input aria-label={`Track ${index + 1} title`} value={track.title} onChange={event => setAlbumTracks(current => current.map(item => item.id === track.id ? { ...item, title: event.target.value } : item))} /><span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:block">{track.file?.name}</span><Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => moveTrack(index, -1)}><ArrowUp className="size-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} down`} disabled={index === albumTracks.length - 1} onClick={() => moveTrack(index, 1)}><ArrowDown className="size-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${track.title}`} onClick={() => setAlbumTracks(current => current.filter(item => item.id !== track.id).map((item, position) => ({ ...item, trackNumber: position + 1 })))}><X className="size-4" /></Button></li>)}</ol>}
             {albumTracks.length === 0 && <div className="rounded-lg border border-dashed border-white/15 px-4 py-8 text-center text-sm text-muted-foreground"><Plus className="mx-auto mb-2 size-5" />Choose multiple audio files to start building the album. Reorder tracks before publishing.</div>}
-            <Button type="submit" disabled={busy || !albumTitle.trim() || albumTracks.length === 0}><Upload className="size-4" />{busy ? <><LoaderCircle className="size-4 animate-spin" /> Publishing album…</> : "Publish album"}</Button>
+            <Button type="submit" disabled={busy || (!selectedAlbum && !albumTitle.trim()) || albumTracks.length === 0}><Upload className="size-4" />{busy ? <><LoaderCircle className="size-4 animate-spin" /> Publishing album…</> : "Publish album"}</Button>
           </form>
         </TabsContent>
       </Tabs>

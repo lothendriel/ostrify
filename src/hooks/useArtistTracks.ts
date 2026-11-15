@@ -36,16 +36,21 @@ export function useArtistTracks(pubkey: string | undefined) {
         throw new Error("Could not load audio published by this account from your read relays.");
       }
 
-      const byUrl = new Map<string, Track>();
+      const byIdentity = new Map<string, Track>();
       for (const result of relayResults) {
         if (result.status !== "fulfilled") continue;
         for (const event of result.value) {
           if (event.pubkey !== pubkey) continue;
           const track = eventToTrack(event);
-          if (track) byUrl.set(track.url, track);
+          if (!track) continue;
+          const identity = track.addressableId && track.event
+            ? `${track.event.kind}:${track.pubkey}:${track.addressableId}`
+            : track.url;
+          const current = byIdentity.get(identity);
+          if (!current || track.createdAt > current.createdAt) byIdentity.set(identity, track);
         }
       }
-      return [...byUrl.values()].sort((a, b) => b.createdAt - a.createdAt);
+      return [...byIdentity.values()].sort((a, b) => b.createdAt - a.createdAt);
     },
   });
 }
