@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Bell, ListMusic, Trash2, UserRoundPlus, Users, X } from 'lucide-react';
+import { Bell, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -222,15 +222,13 @@ export function NotificationsBell({ open, onToggle }: { open: boolean; onToggle:
   </Button>;
 }
 
-export function NotificationsPanel({ onClose, onSwitchFriends, onSwitchQueue }: { onClose: () => void; onSwitchFriends: () => void; onSwitchQueue: () => void }) {
+export function NotificationsPanel({ onClose }: { onClose: () => void }) {
   const { user, relayKey, followQuery, store, unreadCount, markAllRead, clearNotifications } = useNotificationsModel();
   return <section className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70" aria-label="Ostrify notifications">
     <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex min-w-0 items-center gap-2 font-semibold"><Bell className="size-5 text-primary" /> Notifications</h2>
         <div className="flex shrink-0 items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open friends activity" title="Friends activity" onClick={onSwitchFriends}><Users className="size-4" /></Button>
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open player queue" title="Queue" onClick={onSwitchQueue}><ListMusic className="size-4" /></Button>
           <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close notifications" onClick={onClose}><X className="size-4" /></Button>
         </div>
       </div>

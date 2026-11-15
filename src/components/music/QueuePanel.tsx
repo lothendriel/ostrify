@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Clock3, GripVertical, ListMusic, ListPlus, Plus, Sparkles, Trash2, Users, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3, GripVertical, ListMusic, ListPlus, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDuration, type Track } from '@/lib/music';
@@ -14,7 +14,7 @@ import { CreatePlaylistDialog } from './CreatePlaylistDialog';
 import { TrackArtwork } from './TrackArtwork';
 import { ArtistLink } from './ArtistLink';
 
-export function QueuePanel({ open, onClose, onSwitch }: { open: boolean; onClose: () => void; onSwitch: () => void }) {
+export function QueuePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const player = usePlayer();
   const { user } = useCurrentUser();
   const { data: playlists } = usePlaylists();
@@ -63,7 +63,6 @@ export function QueuePanel({ open, onClose, onSwitch }: { open: boolean; onClose
               <p className="sr-only">Manage upcoming tracks or browse recently played audio.</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open friends activity" title="Friends activity" onClick={onSwitch}><Users className="size-4" /></Button>
               <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close queue" onClick={onClose}><X className="size-4" /></Button>
             </div>
           </div>

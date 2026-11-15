@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Headphones, ListMusic, LoaderCircle, Users, X } from 'lucide-react';
+import { Headphones, LoaderCircle, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SheetHeader } from '@/components/ui/sheet';
@@ -68,7 +68,7 @@ export function FriendsActivitySheet({ open, onToggle }: { open: boolean; onTogg
   </Button>;
 }
 
-export function FriendsActivityPanel({ open, onClose, onSwitch }: { open: boolean; onClose: () => void; onSwitch: () => void }) {
+export function FriendsActivityPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useCurrentUser();
   const followedPeople = useFollowedPeople();
   const statuses = useFriendStatuses(followedPeople.people);
@@ -80,7 +80,6 @@ export function FriendsActivityPanel({ open, onClose, onSwitch }: { open: boolea
           <p className="mt-1 text-sm text-muted-foreground">Friends and their current public listening status.</p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open player queue" title="Open queue" onClick={onSwitch}><ListMusic className="size-4" /></Button>
           <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close friends activity" onClick={onClose}><X className="size-4" /></Button>
         </div>
       </div>
