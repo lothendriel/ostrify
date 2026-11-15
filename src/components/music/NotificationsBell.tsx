@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Bell, Trash2, UserRoundPlus } from 'lucide-react';
+import { Bell, ListMusic, Trash2, UserRoundPlus, Users, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -11,7 +11,7 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { SheetHeader } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type FollowNotification = {
@@ -31,6 +31,7 @@ const STORAGE_KEY_PREFIX = 'ostrify-device-notifications-v1:';
 const EMPTY_STORE: NotificationStore = { initialized: false, knownFollowers: [], notifications: [] };
 const HEX_PUBKEY = /^[0-9a-f]{64}$/;
 const OSTRIFY_FOLLOW_SET_IDS = ['ostrify-artists', 'ostrify-people'];
+const NOTIFICATIONS_UPDATED_EVENT = 'ostrify-notifications-updated';
 
 function readStore(pubkey: string): NotificationStore {
   try {
@@ -61,37 +62,16 @@ function readStore(pubkey: string): NotificationStore {
 function writeStore(pubkey: string, store: NotificationStore): void {
   try {
     window.localStorage.setItem(`${STORAGE_KEY_PREFIX}${pubkey}`, JSON.stringify(store));
+    window.dispatchEvent(new Event(NOTIFICATIONS_UPDATED_EVENT));
   } catch {
     // Notifications still work for this session when storage is unavailable.
   }
 }
 
-function FollowNotificationRow({ notification, close }: { notification: FollowNotification; close: () => void }) {
-  const author = useAuthor(notification.pubkey);
-  const metadata = author.data?.metadata;
-  const name = metadata?.display_name || metadata?.name || genUserName(notification.pubkey);
-  const avatar = sanitizeUrl(metadata?.picture);
-
-  return <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-3">
-    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">
-      {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}
-    </div>
-    <div className="min-w-0 flex-1">
-      <Link to={`/${nip19.npubEncode(notification.pubkey)}`} onClick={close} className="font-semibold hover:underline">{name}</Link>
-      <p className="text-sm text-muted-foreground">followed you on Ostrify</p>
-      <time className="text-xs text-muted-foreground" dateTime={new Date(notification.createdAt * 1000).toISOString()}>
-        {new Date(notification.createdAt * 1000).toLocaleString()}
-      </time>
-    </div>
-    {!notification.read && <span aria-label="Unread" className="size-2 shrink-0 rounded-full bg-primary" />}
-  </article>;
-}
-
-export function NotificationsBell() {
+function useNotificationsModel() {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
-  const [open, setOpen] = useState(false);
   const [accountStore, setAccountStore] = useState<{ pubkey: string; store: NotificationStore } | null>(() =>
     user ? { pubkey: user.pubkey, store: readStore(user.pubkey) } : null,
   );
@@ -174,16 +154,26 @@ export function NotificationsBell() {
     setAccountStore({ pubkey: user.pubkey, store: next });
   }, [user?.pubkey, followQuery.data]);
 
+  useEffect(() => {
+    const refresh = () => {
+      if (user) setAccountStore({ pubkey: user.pubkey, store: readStore(user.pubkey) });
+    };
+    window.addEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_UPDATED_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, [user?.pubkey]);
+
   const store = accountStore && accountStore.pubkey === user?.pubkey ? accountStore.store : EMPTY_STORE;
   const unreadCount = store.notifications.filter(notification => !notification.read).length;
-
   const markAllRead = () => {
     if (!user) return;
     const next = { ...store, notifications: store.notifications.map(notification => ({ ...notification, read: true })) };
     writeStore(user.pubkey, next);
     setAccountStore({ pubkey: user.pubkey, store: next });
   };
-
   const clearNotifications = () => {
     if (!user || store.notifications.length === 0) return;
     const next = { ...store, notifications: [] };
@@ -191,39 +181,72 @@ export function NotificationsBell() {
     setAccountStore({ pubkey: user.pubkey, store: next });
   };
 
-  return <Sheet open={open} onOpenChange={setOpen}>
-    <SheetTrigger asChild>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="relative rounded-full"
-        aria-label={`Ostrify notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
-        title="Ostrify notifications"
-      >
-        <Bell className="size-5" />
-        {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{unreadCount > 9 ? '9+' : unreadCount}</span>}
-      </Button>
-    </SheetTrigger>
-    <SheetContent side="right" className="w-[min(24rem,90vw)] gap-0 p-0 sm:max-w-md">
-      <SheetHeader className="border-b border-border/70 pr-12">
-        <div className="flex items-center justify-between gap-3">
-          <SheetTitle className="flex items-center gap-2"><Bell className="size-5 text-primary" /> Ostrify notifications</SheetTitle>
-          <div className="flex shrink-0 items-center gap-1">
-            {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" onClick={markAllRead}>Mark all read</Button>}
-            {store.notifications.length > 0 && <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={clearNotifications}><Trash2 className="mr-1 size-4" /> Clear</Button>}
-          </div>
+  return { user, relayKey, followQuery, store, unreadCount, markAllRead, clearNotifications };
+}
+
+function FollowNotificationRow({ notification, close }: { notification: FollowNotification; close: () => void }) {
+  const author = useAuthor(notification.pubkey);
+  const metadata = author.data?.metadata;
+  const name = metadata?.display_name || metadata?.name || genUserName(notification.pubkey);
+  const avatar = sanitizeUrl(metadata?.picture);
+
+  return <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-3">
+    <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">
+      {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}
+    </div>
+    <div className="min-w-0 flex-1">
+      <Link to={`/${nip19.npubEncode(notification.pubkey)}`} onClick={close} className="font-semibold hover:underline">{name}</Link>
+      <p className="text-sm text-muted-foreground">followed you on Ostrify</p>
+      <time className="text-xs text-muted-foreground" dateTime={new Date(notification.createdAt * 1000).toISOString()}>
+        {new Date(notification.createdAt * 1000).toLocaleString()}
+      </time>
+    </div>
+    {!notification.read && <span aria-label="Unread" className="size-2 shrink-0 rounded-full bg-primary" />}
+  </article>;
+}
+
+export function NotificationsBell({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const { unreadCount } = useNotificationsModel();
+  return <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    className={`relative rounded-full ${open ? 'bg-accent text-foreground' : ''}`}
+    aria-label={`${open ? 'Close' : 'Open'} Ostrify notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
+    aria-pressed={open}
+    title="Ostrify notifications"
+    onClick={onToggle}
+  >
+    <Bell className="size-5" />
+    {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+  </Button>;
+}
+
+export function NotificationsPanel({ onClose, onSwitchFriends, onSwitchQueue }: { onClose: () => void; onSwitchFriends: () => void; onSwitchQueue: () => void }) {
+  const { user, relayKey, followQuery, store, unreadCount, markAllRead, clearNotifications } = useNotificationsModel();
+  return <section className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70" aria-label="Ostrify notifications">
+    <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex min-w-0 items-center gap-2 font-semibold"><Bell className="size-5 text-primary" /> Notifications</h2>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open friends activity" title="Friends activity" onClick={onSwitchFriends}><Users className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open player queue" title="Queue" onClick={onSwitchQueue}><ListMusic className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close notifications" onClick={onClose}><X className="size-4" /></Button>
         </div>
-        <SheetDescription>Updates from Ostrify, saved only on this device.</SheetDescription>
-      </SheetHeader>
-      <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-4">
-        {!user ? <div className="py-10 text-center"><Bell className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Sign in for notifications</p><p className="mt-1 text-sm text-muted-foreground">Ostrify follow notifications will appear here.</p></div>
-          : !relayKey ? <div className="py-10 text-center"><Bell className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Notifications unavailable</p><p className="mt-1 text-sm text-muted-foreground">Enable a read relay to check for Ostrify follows.</p></div>
-            : followQuery.isLoading ? <div className="space-y-3" aria-label="Loading notifications"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
-              : followQuery.isError ? <div role="alert" className="py-8 text-center"><p className="font-semibold">Could not check for new follows</p><p className="mt-1 text-sm text-muted-foreground">Your saved notifications are still available below.</p><Button type="button" variant="link" onClick={() => void followQuery.refetch()}>Try again</Button>{store.notifications.length > 0 && <div className="mt-4 space-y-3">{store.notifications.map(notification => <FollowNotificationRow key={notification.id} notification={notification} close={() => setOpen(false)} />)}</div>}</div>
-                : store.notifications.length > 0 ? <div className="space-y-3">{store.notifications.map(notification => <FollowNotificationRow key={notification.id} notification={notification} close={() => setOpen(false)} />)}</div>
-                  : <div className="py-10 text-center"><UserRoundPlus className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">You’re all caught up</p><p className="mt-1 text-sm text-muted-foreground">When someone follows you on Ostrify, it’ll show up here.</p></div>}
-      </ScrollArea>
-    </SheetContent>
-  </Sheet>;
+      </div>
+      <p className="text-sm text-muted-foreground">Updates from Ostrify, saved only on this device.</p>
+      <div className="flex flex-wrap items-center gap-1">
+        {unreadCount > 0 && <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={markAllRead}>Mark all read</Button>}
+        {store.notifications.length > 0 && <Button type="button" variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive hover:text-destructive" onClick={clearNotifications}><Trash2 className="mr-1 size-3.5" /> Clear</Button>}
+      </div>
+    </SheetHeader>
+    <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-4">
+      {!user ? <div className="py-10 text-center"><Bell className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Sign in for notifications</p><p className="mt-1 text-sm text-muted-foreground">Ostrify follow notifications will appear here.</p></div>
+        : !relayKey ? <div className="py-10 text-center"><Bell className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Notifications unavailable</p><p className="mt-1 text-sm text-muted-foreground">Enable a read relay to check for Ostrify follows.</p></div>
+          : followQuery.isLoading ? <div className="space-y-3" aria-label="Loading notifications"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div>
+            : followQuery.isError ? <div role="alert" className="py-8 text-center"><p className="font-semibold">Could not check for new follows</p><p className="mt-1 text-sm text-muted-foreground">Your saved notifications are still available below.</p><Button type="button" variant="link" onClick={() => void followQuery.refetch()}>Try again</Button>{store.notifications.length > 0 && <div className="mt-4 space-y-3">{store.notifications.map(notification => <FollowNotificationRow key={notification.id} notification={notification} close={onClose} />)}</div>}</div>
+              : store.notifications.length > 0 ? <div className="space-y-3">{store.notifications.map(notification => <FollowNotificationRow key={notification.id} notification={notification} close={onClose} />)}</div>
+                : <div className="py-10 text-center"><UserRoundPlus className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">You’re all caught up</p><p className="mt-1 text-sm text-muted-foreground">When someone follows you on Ostrify, it’ll show up here.</p></div>}
+    </ScrollArea>
+  </section>;
 }
