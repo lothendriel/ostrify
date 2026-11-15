@@ -38,6 +38,12 @@ export function useTunestrPlayer() {
 
 type SourceFormat = 'hls' | 'dash' | 'media' | 'embed';
 
+function sameOriginMediaUrl(url: string): string {
+  const proxyUrl = new URL('/api/tunestr/media', window.location.origin);
+  proxyUrl.searchParams.set('url', url);
+  return proxyUrl.href;
+}
+
 function sourceFormat(stream: TunestrStream): SourceFormat {
   // Preserve provider player pages (for example Cloudflare Stream's /iframe)
   // even when their original URL was an HLS manifest.
@@ -83,10 +89,12 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
     if (format === 'embed') return;
     setFailedStream(null);
 
+    const mediaUrl = format === 'hls' ? sameOriginMediaUrl(stream.externalUrl) : stream.externalUrl;
+
     if (format === 'hls') {
       if (!Hls.isSupported()) {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = stream.externalUrl;
+          video.src = mediaUrl;
           void video.play().catch(() => {});
           return () => { video.pause(); video.removeAttribute('src'); video.load(); };
         }
@@ -99,19 +107,19 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
         if (data.fatal) setFailedStream(stream.id);
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => { void video.play().catch(() => {}); });
-      hls.loadSource(stream.externalUrl);
+      hls.loadSource(mediaUrl);
       hls.attachMedia(video);
       return () => { hls.destroy(); video.pause(); video.removeAttribute('src'); video.load(); };
     }
 
     if (format === 'dash') {
       const player = dashjs.MediaPlayer().create();
-      player.initialize(video, stream.externalUrl, true);
+      player.initialize(video, mediaUrl, true);
       player.on(dashjs.MediaPlayer.events.ERROR, () => setFailedStream(stream.id));
       return () => { player.reset(); video.pause(); video.removeAttribute('src'); video.load(); };
     }
 
-    video.src = stream.externalUrl;
+    video.src = mediaUrl;
     void video.play().catch(() => {});
     return () => { video.pause(); video.removeAttribute('src'); video.load(); };
   }, [failedStream, format, stream.externalUrl, stream.id]);
@@ -190,7 +198,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
                 aria-label={stream.title}
                 onError={() => setFailedStream(stream.id)}
               />
-              {failed && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/85 p-3 text-sm text-white">Playback failed. This source may not permit browser access (CORS), or its codec may not be supported. Try the original source link below.</div>}
+              {failed && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/85 p-3 text-sm text-white">Could not fetch this stream. Confirm Ostrify’s Cloudflare Worker is deployed with the media relay, and that this stream host is supported. You can still open the original source below.</div>}
             </div>}
         {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open original source</a><span className="ml-2 text-xs text-muted-foreground">{format === 'embed' ? 'Embedded player' : format === 'hls' ? 'HLS stream' : format === 'dash' ? 'DASH stream' : 'Direct media stream'}</span></div>}
       </div>
