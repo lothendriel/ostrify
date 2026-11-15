@@ -10,11 +10,15 @@ function artistKeys(track: Track): string[] {
   return keys.filter((key): key is string => !!key);
 }
 
+function isRadioTrack(track: Track): boolean {
+  return track.kind === "music" && track.title.trim().toLocaleLowerCase() !== "original sound";
+}
+
 function uniqueTracks(tracks: Track[]): Track[] {
   const ids = new Set<string>();
   const urls = new Set<string>();
   return tracks.filter(track => {
-    if (ids.has(track.id) || urls.has(track.url)) return false;
+    if (!isRadioTrack(track) || ids.has(track.id) || urls.has(track.url)) return false;
     ids.add(track.id);
     urls.add(track.url);
     return true;

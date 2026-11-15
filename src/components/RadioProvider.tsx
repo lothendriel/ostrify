@@ -37,7 +37,9 @@ export function RadioProvider({ children }: { children: React.ReactNode }) {
   }, [startRadio]);
 
   const startArtistRadio = useCallback((artistKey: string, artistTracks: Track[]) => {
-    const tracks = artistTracks.filter(track => track.kind === "music");
+    const tracks = artistTracks.filter(track =>
+      track.kind === "music" && track.title.trim().toLocaleLowerCase() !== "original sound",
+    );
     const seed = tracks[0];
     if (seed) void startRadio(seed, tracks, [artistKey]);
   }, [startRadio]);
