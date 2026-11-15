@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Home, Menu } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, Home, Menu } from "lucide-react";
+import { usePreviousLocation } from "@/components/NavigationHistory";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,6 +25,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | null>(null);
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const { previousTo } = usePreviousLocation();
   const togglePanel = (panel: 'friends' | 'queue' | 'notifications') => setActivePanel(current => current === panel ? null : panel);
 
   return (
@@ -60,7 +63,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </Sheet>
             </div>
             <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1 sm:px-4">
-              <Link to="/" aria-label="Home" title="Home" className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary sm:flex">
+              <Button type="button" variant="ghost" size="icon" aria-label="Back" title="Back" onClick={() => previousTo ? navigate(-1) : navigate("/", { replace: true })} className="flex size-10 shrink-0 rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">
+                <ArrowLeft className="size-5" />
+              </Button>
+              <Link to="/" aria-label="Home" title="Home" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">
                 <Home className="size-5 fill-current" />
               </Link>
               <GlobalSearch />
