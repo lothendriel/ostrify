@@ -10,6 +10,8 @@ interface UseTracksOptions {
   topic?: string;
   /** Restrict to a single author pubkey. */
   author?: string;
+  /** Restrict results to these author pubkeys. */
+  authors?: string[];
   /** Defer discovery until a feature explicitly needs the track pool. */
   enabled?: boolean;
 }
@@ -22,10 +24,12 @@ interface UseTracksOptions {
  */
 export function useTracks(options: UseTracksOptions = {}) {
   const { nostr } = useNostr();
-  const { limit = 200, topic, author, enabled = true } = options;
+  const { limit = 200, topic, author, authors, enabled = true } = options;
+  const authorKey = authors?.slice().sort().join('|') ?? '';
 
   return useQuery({
-    queryKey: ["tracks", limit, topic ?? "", author ?? ""],
+    queryKey: ["tracks", limit, topic ?? "", author ?? "", authorKey],
+    staleTime: author || authors?.length ? 60_000 : 0,
     enabled,
     queryFn: async (c) => {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
@@ -33,6 +37,7 @@ export function useTracks(options: UseTracksOptions = {}) {
       const base: Record<string, unknown> = {};
       if (topic) base["#t"] = [topic];
       if (author) base.authors = [author];
+      else if (authors?.length) base.authors = authors;
 
       const filters: NostrFilter[] = [
         // Dedicated music-track kinds (Wavlake, zapstr, lightning.fm, etc.)
@@ -43,8 +48,8 @@ export function useTracks(options: UseTracksOptions = {}) {
         { kinds: [1], limit, ...base },
       ];
 
-      // Always pull the featured catalogs (unless a specific author is requested).
-      if (!author && FEATURED_MUSIC_PUBKEYS.length > 0) {
+      // Always pull featured catalogs only for the general discovery feed.
+      if (!author && !authors?.length && FEATURED_MUSIC_PUBKEYS.length > 0) {
         filters.push({
           kinds: [...MUSIC_TRACK_KINDS],
           authors: FEATURED_MUSIC_PUBKEYS,

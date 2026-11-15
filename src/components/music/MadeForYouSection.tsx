@@ -1,22 +1,26 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Play, RefreshCw, Sparkles } from "lucide-react";
+import { Pause, Play, RefreshCw, Sparkles } from "lucide-react";
 import { usePlayer } from "@/hooks/usePlayer";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
-import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildPersonalizedMix } from "@/lib/personalizedMix";
 import type { Track } from "@/lib/music";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackCard } from "./TrackCard";
+import { TrackArtwork } from "./TrackArtwork";
+import { useTracks } from "@/hooks/useTracks";
+import { useWavlakeCatalog } from "@/hooks/useWavlake";
 
 export function MadeForYouSection({ candidates, isLoading }: { candidates: Track[]; isLoading: boolean }) {
   const player = usePlayer();
   const [mixVariation, setMixVariation] = useState(0);
   const playlists = usePlaylists();
   const followedArtists = useFollowedArtists();
+  const followedAuthorPubkeys = useMemo(() => (followedArtists.data ?? []).filter(reference => /^[0-9a-f]{64}$/i.test(reference)).slice(0, 25), [followedArtists.data]);
+  const followedTracks = useTracks({ limit: 20, authors: followedAuthorPubkeys, enabled: followedAuthorPubkeys.length > 0 });
   const wavlake = useWavlakeCatalog();
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
   const likedTracks = useTracksByIds(likedPlaylist?.trackIds);
@@ -31,6 +35,31 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
     variation: mixVariation,
   }), [mixCandidates, liked, player.history, followedArtists.data, mixVariation]);
   const mixTracks = mix.map(item => item.track);
+  const followedSet = useMemo(() => new Set((followedArtists.data ?? []).map(reference => reference.toLowerCase())), [followedArtists.data]);
+  const allTracks = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
+  const newFromFollows = useMemo(() => {
+    const unique = new Map<string, Track>();
+    const recentAfter = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+    for (const track of [...allTracks, ...(followedTracks.data ?? [])]) {
+      if (track.createdAt < recentAfter) continue;
+      if (!unique.has(track.id)) unique.set(track.id, track);
+    }
+    return [...unique.values()]
+    .filter(track => {
+      const artistPubkey = track.artistPubkey?.toLowerCase();
+      const publisher = track.pubkey.toLowerCase();
+      const artistId = track.artistId ? `wavlake:${track.artistId.toLowerCase()}` : undefined;
+      return (artistPubkey && followedSet.has(artistPubkey)) || (artistId && followedSet.has(artistId)) || followedSet.has(publisher);
+    })
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 4);
+  }, [allTracks, followedTracks.data, followedSet]);
+  const spokenProgress = useMemo(() => {
+    const track = player.current;
+    if (!track || (track.kind !== 'podcast' && track.kind !== 'audiobook')) return [];
+    if (player.progress < 30 || (track.duration && player.progress >= track.duration - 30)) return [];
+    return [{ track, progress: player.progress, duration: player.duration || track.duration }];
+  }, [player.current, player.progress, player.duration]);
   const tasteCount = liked.length + player.history.filter(track => track.kind === "music").length + (followedArtists.data?.length ?? 0);
   const isPersonalDataLoading = playlists.isLoading || likedTracks.isLoading || followedArtists.isLoading;
   const catalogFailure = wavlake.isError && !wavlakeTracks.length;
@@ -81,6 +110,33 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
           </div>
         </div>
       )}
+      {(newFromFollows.length > 0 || spokenProgress.length > 0) && <div className="space-y-4 border-t border-white/10 px-4 py-4 sm:px-5">
+        {newFromFollows.length > 0 && <section aria-labelledby="new-from-follows-heading" className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0"><h3 id="new-from-follows-heading" className="font-semibold">New from people you follow</h3><p className="text-xs text-muted-foreground">Recent releases from your followed artists</p></div>
+            <Link to="/artists" className="shrink-0 text-xs font-semibold text-primary hover:underline">See all</Link>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {newFromFollows.map(track => <button key={track.id} type="button" onClick={() => player.playTrack(track)} aria-label={`Play ${track.title}`} className="flex min-w-0 items-center gap-2 rounded-lg bg-black/10 p-2 text-left transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-primary">
+              <TrackArtwork track={track} className="size-11" />
+              <span className="min-w-0"><span className="block truncate text-sm font-medium">{track.title}</span><span className="block truncate text-xs text-muted-foreground">{track.artist ?? 'New release'}</span></span>
+            </button>)}
+          </div>
+        </section>}
+        {spokenProgress.length > 0 && <section aria-labelledby="resume-listening-heading" className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0"><h3 id="resume-listening-heading" className="font-semibold">Pick up where you left off</h3><p className="text-xs text-muted-foreground">Continue spoken audio on this device</p></div>
+            <Link to={spokenProgress[0].track.kind === 'audiobook' ? '/audiobook-library' : '/podcast-library'} className="shrink-0 text-xs font-semibold text-primary hover:underline">See all</Link>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {spokenProgress.map(({ track, progress, duration }) => <button key={track.id} type="button" onClick={() => player.togglePlay()} aria-label={`${player.isPlaying ? 'Pause' : 'Resume'} ${track.title}`} className="flex min-w-0 items-center gap-3 rounded-lg bg-black/10 p-2 text-left transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-primary">
+              <TrackArtwork track={track} className="size-12" />
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{track.title}</span><span className="block truncate text-xs text-muted-foreground">{track.artist ?? 'Spoken audio'} · {Math.floor(progress / 60)} min listened{duration ? ` · ${Math.max(1, Math.ceil((duration - progress) / 60))} min left` : ''}</span><span className="mt-1 block h-1 overflow-hidden rounded-full bg-white/15"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, duration ? (progress / duration) * 100 : 8))}%` }} /></span></span>
+              {player.isPlaying ? <Pause className="size-4 shrink-0 text-primary" aria-hidden="true" /> : <Play className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+            </button>)}
+          </div>
+        </section>}
+      </div>}
     </section>
   );
 }

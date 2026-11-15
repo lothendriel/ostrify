@@ -30,6 +30,7 @@ export function useFollowedArtists() {
 
   return useQuery({
     queryKey,
+    staleTime: 60_000,
     placeholderData: (previousData: string[] | undefined, previousQuery) =>
       previousQuery?.queryKey[1] === user?.pubkey ? previousData : undefined,
     queryFn: async (c) => {
