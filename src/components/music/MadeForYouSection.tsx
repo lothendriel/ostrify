@@ -13,6 +13,7 @@ import { TrackCard } from "./TrackCard";
 import { TrackArtwork } from "./TrackArtwork";
 import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
+import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 
 export function MadeForYouSection({ candidates, isLoading }: { candidates: Track[]; isLoading: boolean }) {
   const player = usePlayer();
@@ -27,13 +28,30 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
   const liked = likedTracks.data?.tracks ?? [];
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const mixCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
-  const mix = useMemo(() => buildPersonalizedMix({
+  const personalizedMix = useMemo(() => buildPersonalizedMix({
     candidates: mixCandidates,
     liked,
     history: player.history,
     followedArtists: followedArtists.data ?? [],
     variation: mixVariation,
   }), [mixCandidates, liked, player.history, followedArtists.data, mixVariation]);
+  const diversifiedMix = useMemo(() => personalizedMix.length ? buildVariedHomeShelf({
+    candidates: mixCandidates,
+    liked,
+    history: player.history,
+    followedArtists: followedArtists.data ?? [],
+    limit: 24,
+    variation: mixVariation,
+    familiarSlots: 4,
+    excludeIds: [...new Set([...personalizedMix.map(item => item.track.id), ...player.history.map(track => track.id), ...liked.map(track => track.id)])],
+    excludeUrls: [...new Set([...personalizedMix.map(item => item.track.url), ...player.history.map(track => track.url), ...liked.map(track => track.url)])],
+  }) : [], [personalizedMix, mixCandidates, liked, player.history, followedArtists.data, mixVariation]);
+  const mix = useMemo(() => {
+    const reasons = new Map(personalizedMix.map(item => [item.track.id, item.reason]));
+    const personalizedIds = new Set(personalizedMix.map(item => item.track.id));
+    const extras = diversifiedMix.filter(track => !personalizedIds.has(track.id)).map(track => ({ track, reason: reasons.get(track.id) ?? 'A fresh find in a sound you enjoy' }));
+    return [...personalizedMix, ...extras];
+  }, [personalizedMix, diversifiedMix]);
   const mixTracks = mix.map(item => item.track);
   const followedSet = useMemo(() => new Set((followedArtists.data ?? []).map(reference => reference.toLowerCase())), [followedArtists.data]);
   const allTracks = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
@@ -97,7 +115,7 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
               </div>
             ))}
           </div>
-          <p className="px-4 pb-3 text-[11px] text-muted-foreground sm:px-5">{mix.length} in today’s mix · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"}{catalogFailure ? " · Wavlake unavailable" : ""} · private to this browser</p>
+          <p className="px-4 pb-3 text-[11px] text-muted-foreground sm:px-5">{mix.length} in today’s mix · focused on your taste with occasional nearby discoveries · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"}{catalogFailure ? " · Wavlake unavailable" : ""} · private to this browser</p>
         </>
       ) : (
         <div className="px-4 pb-4 sm:px-5">

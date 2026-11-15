@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
@@ -6,11 +6,15 @@ import { useTracks } from "@/hooks/useTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { usePlayer } from "@/hooks/usePlayer";
+import { usePlaylists } from "@/hooks/usePlaylists";
+import { useTracksByIds } from "@/hooks/useTracksByIds";
+import { useFollowedArtists } from "@/hooks/useFollowedArtists";
 import { Shelf } from "@/components/music/Shelf";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { CATEGORIES, tracksInCategory } from "@/lib/categories";
+import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 
 function shuffled<T>(items: readonly T[]): T[] {
   const result = [...items];
@@ -27,13 +31,30 @@ const Index = () => {
     description: "A Spotify-style player for music and podcasts published on the Nostr network.",
   });
 
-  const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 150 });
+  const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 300 });
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
   const player = usePlayer();
   const wavlake = useWavlakeCatalog();
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
-
-  const fresh = useMemo(() => shuffled(tracks).slice(0, 10), [tracks]);
+  const playlists = usePlaylists();
+  const followedArtists = useFollowedArtists();
+  const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
+  const likedTracksQuery = useTracksByIds(likedPlaylist?.trackIds);
+  const likedTracks = likedTracksQuery.data?.tracks ?? [];
+  const [shelfVariation, setShelfVariation] = useState(0);
+  const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
+  const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
+  const fresh = useMemo(() => buildVariedHomeShelf({
+    candidates: nostrTracks,
+    history: player.history,
+    liked: likedTracks,
+    followedArtists: followedArtists.data ?? [],
+    limit: 10,
+    variation: shelfVariation,
+    familiarSlots: 1,
+  }), [nostrTracks, player.history, likedTracks, followedArtists.data, shelfVariation]);
+  const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.id))], [player.history, likedTracks, fresh]);
+  const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.url))], [player.history, likedTracks, fresh]);
   const shuffledPodcasts = useMemo(() => {
     const nostrPodcasts = podcasts.filter(track => track.source !== "fountain");
     const fountainPodcasts = podcasts.filter(track => track.source === "fountain");
@@ -46,22 +67,28 @@ const Index = () => {
     return shuffled([...selected, ...remaining]).slice(0, 10);
   }, [podcasts]);
   const categoryShelves = useMemo(() => {
-    return CATEGORIES.map((category) => {
-      const nostrMatches = tracksInCategory(tracks, category.id).filter(track => track.source !== "wavlake");
-      const nostrKeys = new Set(nostrMatches.flatMap(track => [track.id, track.url]));
-      const wavlakeMatches = tracksInCategory(wavlakeTracks, category.id).filter(track => !nostrKeys.has(track.id) && !nostrKeys.has(track.url));
-      const selected = [
-        ...shuffled(nostrMatches).slice(0, 5),
-        ...shuffled(wavlakeMatches).slice(0, 5),
-      ];
-      const selectedKeys = new Set(selected.flatMap(track => [track.id, track.url]));
-      const remaining = shuffled([...nostrMatches, ...wavlakeMatches].filter(track => !selectedKeys.has(track.id) && !selectedKeys.has(track.url)));
-      return {
-        category,
-        tracks: shuffled([...selected, ...remaining]).slice(0, 10),
-      };
-    }).filter(shelf => shelf.tracks.length > 0);
-  }, [tracks, wavlakeTracks]);
+    const usedIds = new Set([...fresh, ...player.history, ...likedTracks].map(track => track.id));
+    const usedUrls = new Set([...fresh, ...player.history, ...likedTracks].map(track => track.url));
+    return CATEGORIES.flatMap(category => {
+      const categoryTracks = tracksInCategory(allMusic, category.id);
+      const selected = buildVariedHomeShelf({
+        candidates: categoryTracks,
+        history: player.history,
+        liked: likedTracks,
+        followedArtists: followedArtists.data ?? [],
+        limit: 10,
+        variation: shelfVariation,
+        familiarSlots: 1,
+        excludeIds: [...usedIds],
+        excludeUrls: [...usedUrls],
+      });
+      for (const track of selected) {
+        usedIds.add(track.id);
+        usedUrls.add(track.url);
+      }
+      return selected.length ? [{ category, tracks: selected }] : [];
+    });
+  }, [allMusic, player.history, likedTracks, followedArtists.data, shelfVariation, fresh]);
 
   const { greeting, greetingImage } = (() => {
     const hour = new Date().getHours();
@@ -88,11 +115,11 @@ const Index = () => {
       </section>
 
       <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
-      <MadeForYouSection candidates={tracks} isLoading={tracksLoading} />
-      <DailyDiscoverySection candidates={tracks} isLoading={tracksLoading} />
+      <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading} />
+      <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading} excludeTrackIds={discoveryExcludedIds} excludeTrackUrls={discoveryExcludedUrls} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />
 
       <MusicNewsSection />
-      <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays" tracks={fresh} isLoading={tracksLoading} dense />
+      <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays, across your tastes and beyond" tracks={fresh} isLoading={tracksLoading || wavlake.isLoading} dense />
 
       <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense seeAllHref="/podcasts/episodes" />
 

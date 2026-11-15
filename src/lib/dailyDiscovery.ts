@@ -160,6 +160,9 @@ export function buildDailyDiscovery({
   feedback,
   date = new Date(),
   limit = 12,
+  variation = 0,
+  excludeTrackIds = [],
+  excludeTrackUrls = [],
 }: {
   candidates: Track[];
   liked: Track[];
@@ -168,14 +171,25 @@ export function buildDailyDiscovery({
   feedback: DiscoveryFeedback;
   date?: Date;
   limit?: number;
+  /** Local refresh count used to reveal another deterministic set during the same day. */
+  variation?: number;
+  /** Tracks already featured in another Home shelf. */
+  excludeTrackIds?: string[];
+  excludeTrackUrls?: string[];
 }): DailyDiscoveryTrack[] {
   const unique = new Map<string, Track>();
+  const candidateUrls = new Set<string>();
   for (const track of candidates) {
-    if (track.kind === "music") unique.set(track.id, track);
+    if (track.kind !== "music" || unique.has(track.id) || candidateUrls.has(track.url)) continue;
+    unique.set(track.id, track);
+    candidateUrls.add(track.url);
   }
   const likedIds = new Set(liked.map(track => track.id));
+  const likedUrls = new Set(liked.map(track => track.url));
   const heardIds = new Set(history.map(track => track.id));
-  const hiddenIds = new Set(feedback.hiddenTrackIds);
+  const heardUrls = new Set(history.map(track => track.url));
+  const hiddenIds = new Set([...feedback.hiddenTrackIds, ...excludeTrackIds]);
+  const excludedUrls = new Set(excludeTrackUrls);
   const today = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   const dailyHiddenIds = new Set(feedback.hiddenDailyTrackKeys.filter(key => key.startsWith(`${today}:`)).map(key => key.slice(today.length + 1)));
   const blocked = new Set(feedback.blockedArtists);
@@ -185,9 +199,9 @@ export function buildDailyDiscovery({
   const followed = new Set(followedArtists.flatMap(value => value.startsWith("wavlake:") ? [value.toLowerCase(), `wavlake:${value.slice(8).toLowerCase()}`] : [`pubkey:${value.toLowerCase()}`, value.toLowerCase()]));
   const likedTopics = new Set(liked.flatMap(discoveryTopics));
   const recentTopics = new Set(history.slice(0, 30).flatMap(discoveryTopics));
-  const seed = dailySeed(date);
+  const seed = dailySeed(date) ^ Math.imul(variation + 1, 0x9e3779b1);
   const scored = [...unique.values()].flatMap(track => {
-    if (likedIds.has(track.id) || heardIds.has(track.id) || hiddenIds.has(track.id) || dailyHiddenIds.has(track.id)) return [];
+    if (likedIds.has(track.id) || likedUrls.has(track.url) || heardIds.has(track.id) || heardUrls.has(track.url) || hiddenIds.has(track.id) || excludedUrls.has(track.url) || dailyHiddenIds.has(track.id)) return [];
     const artists = discoveryArtistKeys(track);
     if (artists.some(key => blocked.has(key))) return [];
     const topics = discoveryTopics(track);
@@ -201,7 +215,8 @@ export function buildDailyDiscovery({
     const freshDays = track.createdAt > 0 ? Math.max(0, (date.getTime() / 1000 - track.createdAt) / 86400) : 365;
     const freshness = Math.max(0, 3 - freshDays / 20);
     const exploration = (followedMatch || likedArtistMatch ? 0.5 : 1.5);
-    const score = freshness + exploration + (followedMatch ? 2.5 : 0) + (likedArtistMatch ? 1 : 0)
+    const refreshRotation = stableHash(track, seed ^ 0x9e3779b1) / 0xffffffff * 1.25;
+    const score = freshness + refreshRotation + exploration + (followedMatch ? 2.5 : 0) + (likedArtistMatch ? 1 : 0)
       + (genreMatch ? 1.5 : 0) + (artistBoost ? 3 : 0) + (topicBoost ? 2 : 0)
       - (artistDown ? 1.5 : 0) - topicDownCount * 0.5;
     let reason = track.source === "wavlake" ? "New on Wavlake" : "New from Nostr";
@@ -215,13 +230,19 @@ export function buildDailyDiscovery({
   scored.sort((left, right) => right.score - left.score || left.dailyOrder - right.dailyOrder);
   const selected: typeof scored = [];
   const selectedIds = new Set<string>();
+  const selectedUrls = new Set<string>();
+  const topicCounts = new Map<string, number>();
   const artistCounts = new Map<string, number>();
   const take = (enforceCap: boolean) => {
     for (const item of scored) {
-      if (selectedIds.has(item.track.id)) continue;
+      if (selectedIds.has(item.track.id) || selectedUrls.has(item.track.url)) continue;
       if (enforceCap && item.artists.some(key => (artistCounts.get(key) ?? 0) >= 2)) continue;
+      const topics = discoveryTopics(item.track);
+      if (enforceCap && topics.some(topic => (topicCounts.get(topic) ?? 0) >= 5)) continue;
       selected.push(item);
       selectedIds.add(item.track.id);
+      selectedUrls.add(item.track.url);
+      for (const topic of topics) topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
       for (const key of item.artists) artistCounts.set(key, (artistCounts.get(key) ?? 0) + 1);
       return true;
     }

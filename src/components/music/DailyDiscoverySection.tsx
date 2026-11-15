@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Ban, CalendarDays, Heart, Sparkles, ThumbsDown } from "lucide-react";
+import { Ban, Heart, RefreshCw, Sparkles, ThumbsDown } from "lucide-react";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -22,7 +22,7 @@ function artistLabel(key: string): string {
   return key.replace(/^publisher:/, "Publisher ").slice(0, 32);
 }
 
-export function DailyDiscoverySection({ candidates, isLoading }: { candidates: Track[]; isLoading: boolean }) {
+export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds = [], excludeTrackUrls = [], variation = 0, onRefresh }: { candidates: Track[]; isLoading: boolean; excludeTrackIds?: string[]; excludeTrackUrls?: string[]; variation?: number; onRefresh?: () => void }) {
   const player = usePlayer();
   const playlists = usePlaylists();
   const followedArtists = useFollowedArtists();
@@ -65,7 +65,10 @@ export function DailyDiscoverySection({ candidates, isLoading }: { candidates: T
     feedback,
     date,
     limit: 12 + dismissedToday.length,
-  }).filter(item => !dismissedToday.includes(item.track.id)).slice(0, 12), [allCandidates, liked, player.history, followedArtists.data, feedback, todayKey(date), dismissedToday]);
+    variation,
+    excludeTrackIds,
+    excludeTrackUrls,
+  }).filter(item => !dismissedToday.includes(item.track.id)).slice(0, 12), [allCandidates, liked, player.history, followedArtists.data, feedback, todayKey(date), dismissedToday, variation, excludeTrackIds.join('|'), excludeTrackUrls.join('|')]);
   const blockedTracks = useMemo(() => {
     const candidatesByArtist = new Map<string, { track: Track; keys: string[] }>();
     for (const track of allCandidates) {
@@ -83,9 +86,12 @@ export function DailyDiscoverySection({ candidates, isLoading }: { candidates: T
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-2">
           <h2 id="daily-discovery-heading" className="text-xl font-bold tracking-tight">Discover something new</h2>
-          <span className="hidden text-xs font-medium text-emerald-300 sm:inline">Daily · {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+          <span className="hidden text-xs font-medium text-emerald-300 sm:inline">Fresh · {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
         </div>
-        <p className="text-xs text-muted-foreground">Nostr + Wavlake · feedback stays local</p>
+        <div className="flex items-center gap-2">
+          <p className="hidden text-xs text-muted-foreground sm:block">Fresh finds shaped by your listening · feedback stays local</p>
+          {onRefresh && <Button type="button" variant="ghost" size="icon" onClick={onRefresh} aria-label="Refresh discoveries" title="Show another set of discoveries" className="size-8 rounded-full text-muted-foreground hover:text-foreground"><RefreshCw className="size-4" /></Button>}
+        </div>
       </header>
 
       {pending || (isLoading && !allCandidates.length) ? (

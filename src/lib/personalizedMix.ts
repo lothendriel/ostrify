@@ -65,6 +65,7 @@ export function buildPersonalizedMix({
   const musicCandidates = uniqueTracks([...candidates, ...musicHistory]).filter(track => track.kind === "music");
   const likedIds = new Set(musicLiked.map(track => track.id));
   const likedUrls = new Set(musicLiked.map(track => track.url));
+  const historyUrls = new Set(musicHistory.map(track => track.url));
   const likedArtists = new Set(musicLiked.flatMap(artistKeys));
   const historyArtists = new Set(musicHistory.flatMap(artistKeys));
   const followed = new Set(followedArtists);
@@ -82,7 +83,7 @@ export function buildPersonalizedMix({
 
   const seed = dailySeed(date, variation);
   const scored = musicCandidates.flatMap(track => {
-    if (likedIds.has(track.id) || likedUrls.has(track.url)) return [];
+    if (likedIds.has(track.id) || likedUrls.has(track.url) || historyUrls.has(track.url)) return [];
     const keys = artistKeys(track);
     const followedMatch = keys.some(key => followed.has(key));
     const likedArtistMatch = keys.some(key => likedArtists.has(key));
@@ -123,7 +124,9 @@ export function buildPersonalizedMix({
 
   const selected: typeof scored = [];
   const selectedIds = new Set<string>();
+  const selectedUrls = new Set<string>();
   const artistCounts = new Map<string, number>();
+  const topicCounts = new Map<string, number>();
   let familiarIndex = 0;
   let discoveryIndex = 0;
   let chooseFamiliar = true;
@@ -132,11 +135,15 @@ export function buildPersonalizedMix({
   const takeNext = (items: typeof scored, startIndex: number, enforceCap: boolean): number => {
     for (let index = startIndex; index < items.length; index++) {
       const item = items[index];
-      if (selectedIds.has(item.track.id)) continue;
+      if (selectedIds.has(item.track.id) || selectedUrls.has(item.track.url)) continue;
       if (enforceCap && item.artists.some(artist => (artistCounts.get(artist) ?? 0) >= varietyCap)) continue;
+      const topics = [...new Set(item.track.topics.map(topic => topic.toLowerCase()))];
+      if (enforceCap && topics.some(topic => (topicCounts.get(topic) ?? 0) >= 5)) continue;
       selected.push(item);
       selectedIds.add(item.track.id);
+      selectedUrls.add(item.track.url);
       for (const artist of item.artists) artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1);
+      for (const topic of topics) topicCounts.set(topic, (topicCounts.get(topic) ?? 0) + 1);
       return index + 1;
     }
     return startIndex;
