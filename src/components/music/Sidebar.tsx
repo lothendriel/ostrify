@@ -145,7 +145,7 @@ function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist
   const Icon = liked ? Heart : playlist.image ? undefined : Music;
   return <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
     <Button type="button" variant="ghost" size="icon" className={cn("group relative size-11 shrink-0 rounded-md text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring", liked ? "bg-gradient-to-br from-violet-500 to-primary" : "overflow-hidden bg-secondary")} onClick={handlePlay} disabled={shouldLoad && tracksQuery.isLoading} aria-label={isPlayingHere ? `Pause ${playlist.title}` : `Play ${playlist.title}`} title={isPlayingHere ? `Pause ${playlist.title}` : `Play ${playlist.title}`}>
-      {playlist.image && !liked ? <img src={playlist.image} alt="" className="absolute inset-0 size-full object-cover opacity-70 group-hover:opacity-30" /> : Icon && <Icon className={cn("size-5 group-hover:hidden", liked && "fill-white")} />}
+      {playlist.image && !liked ? <img src={playlist.image} alt="" className="absolute inset-0 size-full object-cover opacity-70 group-hover:opacity-30" /> : !isPlayingHere && Icon && <Icon className={cn("size-5 group-hover:hidden", liked && "fill-white")} />}
       {isPlayingHere ? <Pause className="relative z-10 size-5 fill-current" /> : <Play className="absolute z-10 hidden size-5 fill-current group-hover:block" />}
     </Button>
     <NavLink to={liked ? "/liked" : `/playlist/${playlist.id}`} onClick={onNavigate} className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}>
