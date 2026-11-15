@@ -33,16 +33,14 @@ export function NostrSync() {
           if (event.created_at > config.blossomServerMetadata.updatedAt) {
             const fetchedServers = parseBlossomServerList(event);
 
-            if (fetchedServers.length > 0) {
-              console.log('Syncing Blossom server list from Nostr:', fetchedServers);
-              updateConfig((current) => ({
-                ...current,
-                blossomServerMetadata: {
-                  servers: fetchedServers,
-                  updatedAt: event.created_at,
-                },
-              }));
-            }
+            console.log('Syncing Blossom server list from Nostr:', fetchedServers);
+            updateConfig((current) => ({
+              ...current,
+              blossomServerMetadata: {
+                servers: fetchedServers,
+                updatedAt: event.created_at,
+              },
+            }));
           }
         }
       } catch (error) {

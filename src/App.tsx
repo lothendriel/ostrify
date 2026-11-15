@@ -37,11 +37,7 @@ const defaultConfig: AppConfig = {
   theme: "dark",
   relayMetadata: APP_RELAYS,
   blossomServerMetadata: {
-    servers: [
-      'https://blossom.ditto.pub/',
-      'https://blossom.dreamith.to/',
-      'https://blossom.primal.net/',
-    ],
+    servers: [],
     updatedAt: 0,
   },
   useAppBlossomServers: true,

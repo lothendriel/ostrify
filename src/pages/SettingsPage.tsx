@@ -1,5 +1,5 @@
 import { useSeoMeta } from "@unhead/react";
-import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users, Mic } from "lucide-react";
+import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users, Mic, HardDriveUpload } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RelayListManager } from "@/components/RelayListManager";
@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { useDirectoryEnrollment } from "@/hooks/useOstrifyDirectory";
 import { useToast } from "@/hooks/useToast";
 import { useProfilePrivacy } from "@/hooks/useProfilePrivacy";
+import { BlossomServerManager } from "@/components/BlossomServerManager";
 
 const SettingsPage = () => {
   useSeoMeta({ title: "Settings — Ostrify" });
@@ -39,6 +40,21 @@ const SettingsPage = () => {
         </CardHeader>
         <CardContent>
           <RelayListManager />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <HardDriveUpload className="size-5 text-primary" />
+            Blossom servers
+          </CardTitle>
+          <CardDescription>
+            Choose public servers for uploading profile images and other media, or add your own. Ostrify’s defaults are free to use, but operated by independent services and may have their own limits or terms. Your server choices are separate from your Nostr relay list.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BlossomServerManager />
         </CardContent>
       </Card>
 
