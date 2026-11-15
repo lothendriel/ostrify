@@ -39,9 +39,12 @@ export interface TunestrStream {
   track: Track;
 }
 
-function cloudflarePlaybackUrl(url: string): string {
+function streamPlaybackUrl(url: string): string {
   try {
     const parsed = new URL(url);
+    if (parsed.hostname === 'stream.zapclub.io' && parsed.pathname === '/live/basement.m3u8') {
+      return 'https://zapclub.io/club/c6f0f845fb2a3792';
+    }
     if (!parsed.hostname.endsWith('.cloudflarestream.com')) return url;
     const match = parsed.pathname.match(/^\/([a-f0-9]{32})\/(?:manifest\/video\.m3u8|watch)$/i);
     return match ? `https://${parsed.hostname}/${match[1]}/iframe` : url;
@@ -126,7 +129,7 @@ function parseStream(event: NostrEvent): TunestrStream | null {
 
   const isLive = eventStatus === 'live' && event.created_at >= Date.now() / 1000 - 60 * 60;
   const sourceUrl = isLive ? streamingUrl || recordingUrl : recordingUrl || streamingUrl;
-  const url = sourceUrl ? cloudflarePlaybackUrl(sourceUrl) : undefined;
+  const url = sourceUrl ? streamPlaybackUrl(sourceUrl) : undefined;
   if (!url || !sourceUrl) return null;
 
   const summary = tagValue(event, 'summary');
