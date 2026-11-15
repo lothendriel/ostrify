@@ -204,7 +204,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
 
   return <section aria-label="Publish music" className="border-b border-white/10 bg-black/20 px-4 py-5 sm:px-6 lg:px-7">
     <div className="mx-auto w-full max-w-5xl space-y-4">
-      <div><h2 className="text-xl font-bold">Publish music</h2><p className="mt-1 text-sm text-muted-foreground">Publish signed kind 36787 track events to your configured Nostr write relays.</p></div>
+      <div><h2 className="text-xl font-bold">Publish music</h2><p className="mt-1 text-sm text-muted-foreground">Publish signed kind 36787 track events to your configured Nostr write relays.</p><aside className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm leading-relaxed text-muted-foreground"><p className="font-semibold text-foreground">For original artists</p><p className="mt-1">If you made the music, you can publish it through Ostrify. Only upload or link audio and artwork that you have the rights to share. Ostrify does not review uploads and is not responsible for copyright infringement or unauthorized material; you are responsible for ensuring your uploads comply with copyright law.</p></aside></div>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid w-full max-w-sm grid-cols-2"><TabsTrigger value="track">Track</TabsTrigger><TabsTrigger value="album">Album</TabsTrigger></TabsList>
         <TabsContent value="track" className="pt-4">
