@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import Hls from 'hls.js';
+import * as dashjs from 'dashjs';
 import { Maximize2, Minimize2, PictureInPicture2, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
   return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { setStream(nextStream); setDocked(false); } }}>
     {children}
     {stream && <TunestrVideoPlayer
+      key={stream.id}
       stream={stream}
       docked={docked}
       onDock={() => setDocked(true)}
@@ -34,12 +36,23 @@ export function useTunestrPlayer() {
   return context;
 }
 
-function isHlsManifest(url: string): boolean {
+type SourceFormat = 'hls' | 'dash' | 'media' | 'embed';
+
+function sourceFormat(stream: TunestrStream): SourceFormat {
+  // Preserve provider player pages (for example Cloudflare Stream's /iframe)
+  // even when their original URL was an HLS manifest.
+  if (stream.url !== stream.externalUrl) return 'embed';
   try {
-    return new URL(url).pathname.toLowerCase().endsWith('.m3u8');
+    const path = new URL(stream.externalUrl).pathname.toLowerCase();
+    if (/\.m3u8$/.test(path)) return 'hls';
+    if (/\.mpd$/.test(path)) return 'dash';
+    if (/\.(mp4|m4v|webm|ogv|mov|mp3|m4a|aac|oga|wav|ts)$/.test(path)) return 'media';
   } catch {
-    return false;
+    return 'embed';
   }
+  // Keep non-media endpoints and provider pages in the iframe path that has
+  // historically worked for streams which publish an embeddable URL.
+  return 'embed';
 }
 
 function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
@@ -54,7 +67,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   const [failedStream, setFailedStream] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const failed = failedStream === stream.id;
-  const hlsManifest = stream.format === 'nip53' && isHlsManifest(stream.externalUrl);
+  const format = sourceFormat(stream);
 
   useEffect(() => {
     const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerRef.current);
@@ -63,28 +76,45 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   }, []);
 
   useEffect(() => {
-    if (!hlsManifest || stream.format !== 'nip53' || failedStream === stream.id) return;
+    if (failedStream === stream.id) return;
     const video = videoRef.current;
     if (!video) return;
 
+    if (format === 'embed') return;
     setFailedStream(null);
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = stream.externalUrl;
-      return () => { video.pause(); video.removeAttribute('src'); video.load(); };
-    }
-    if (!Hls.isSupported()) {
-      setFailedStream(stream.id);
-      return;
+
+    if (format === 'hls') {
+      if (!Hls.isSupported()) {
+        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          video.src = stream.externalUrl;
+          void video.play().catch(() => {});
+          return () => { video.pause(); video.removeAttribute('src'); video.load(); };
+        }
+        setFailedStream(stream.id);
+        return;
+      }
+
+      const hls = new Hls({ enableWorker: false, lowLatencyMode: true });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) setFailedStream(stream.id);
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { void video.play().catch(() => {}); });
+      hls.loadSource(stream.externalUrl);
+      hls.attachMedia(video);
+      return () => { hls.destroy(); video.pause(); video.removeAttribute('src'); video.load(); };
     }
 
-    const hls = new Hls({ enableWorker: false, lowLatencyMode: true });
-    hls.on(Hls.Events.ERROR, (_event, data) => {
-      if (data.fatal) setFailedStream(stream.id);
-    });
-    hls.loadSource(stream.externalUrl);
-    hls.attachMedia(video);
-    return () => { hls.destroy(); video.pause(); video.removeAttribute('src'); video.load(); };
-  }, [failedStream, hlsManifest, stream.externalUrl, stream.format, stream.id]);
+    if (format === 'dash') {
+      const player = dashjs.MediaPlayer().create();
+      player.initialize(video, stream.externalUrl, true);
+      player.on(dashjs.MediaPlayer.events.ERROR, () => setFailedStream(stream.id));
+      return () => { player.reset(); video.pause(); video.removeAttribute('src'); video.load(); };
+    }
+
+    video.src = stream.externalUrl;
+    void video.play().catch(() => {});
+    return () => { video.pause(); video.removeAttribute('src'); video.load(); };
+  }, [failedStream, format, stream.externalUrl, stream.id]);
 
   const closePlayer = () => {
     if (document.fullscreenElement === playerRef.current) void document.exitFullscreen().catch(() => {});
@@ -137,31 +167,32 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
           </div>
           {controls}
         </div>
-        {failed
-          ? <div className="aspect-video w-full bg-black p-6 text-sm text-white">This stream could not be played in this browser. You can still open the original stream source below.</div>
-          : stream.format === 'n94' && stream.event && stream.variant
-            ? <N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} />
-            : hlsManifest
-              ? <video
+        {stream.format === 'n94' && stream.event && stream.variant
+          ? <N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} />
+          : format === 'embed'
+            ? <iframe
+              key={stream.id}
+              src={stream.url}
+              title={stream.title}
+              allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen; picture-in-picture"
+              allowFullScreen
+              className="aspect-video w-full border-0 bg-black"
+            />
+            : <div className="relative aspect-video w-full bg-black">
+              <video
                 key={stream.id}
                 ref={videoRef}
                 controls
                 playsInline
                 autoPlay
-                className="aspect-video w-full bg-black"
+                preload="metadata"
+                className="size-full"
                 aria-label={stream.title}
                 onError={() => setFailedStream(stream.id)}
               />
-              : <iframe
-                key={stream.id}
-                src={stream.url}
-                title={stream.title}
-                allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen"
-                allowFullScreen
-                className="aspect-video w-full border-0 bg-black"
-                onError={() => setFailedStream(stream.id)}
-              />}
-        {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open raw stream source</a>{hlsManifest && <span className="ml-2 text-xs text-muted-foreground">HLS video stream · use the player controls to start or pause.</span>}</div>}
+              {failed && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/85 p-3 text-sm text-white">Playback failed. This source may not permit browser access (CORS), or its codec may not be supported. Try the original source link below.</div>}
+            </div>}
+        {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open original source</a><span className="ml-2 text-xs text-muted-foreground">{format === 'embed' ? 'Embedded player' : format === 'hls' ? 'HLS stream' : format === 'dash' ? 'DASH stream' : 'Direct media stream'}</span></div>}
       </div>
     </DialogContent>
   </Dialog>;
