@@ -21,7 +21,7 @@ import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
 import { ArtistLink } from "./ArtistLink";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
-import { QueuePanel } from "./QueuePanel";
+import { QueuePanelButton } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
 
 function PodcastShowLink({ track }: { track: Track }) {
@@ -44,7 +44,7 @@ function PodcastShowLink({ track }: { track: Track }) {
   return <Link to={to} className="hover:text-foreground hover:underline focus-visible:underline" title="Open this podcast show">{track.artist || "Podcast show"}</Link>;
 }
 
-export function PlayerBar() {
+export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle: () => void; queueOpen?: boolean }) {
   const player = usePlayer();
   const { current } = player;
 
@@ -152,7 +152,7 @@ export function PlayerBar() {
       {/* Queue and volume */}
       <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
         <ShareTrackButton track={current} />
-        <QueuePanel />
+        <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         <div className="hidden md:flex items-center gap-2">
           <Button
             variant="ghost"

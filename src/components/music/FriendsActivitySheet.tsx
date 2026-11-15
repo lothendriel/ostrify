@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Headphones, LoaderCircle, Users } from 'lucide-react';
+import { Headphones, ListMusic, LoaderCircle, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { SheetHeader } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollowedPeople } from '@/hooks/useFollowedPeople';
@@ -52,33 +52,39 @@ function FriendsActivityContent({ close, user, followedPeople, statuses }: { clo
       </ScrollArea>;
 }
 
-export function FriendsActivitySheet() {
-  const [open, setOpen] = useState(false);
-  const [liveFriendCount, setLiveFriendCount] = useState(0);
+export function FriendsActivitySheet({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { user } = useCurrentUser();
   const followedPeople = useFollowedPeople();
-  const friendKeys = followedPeople.people;
-  const statuses = useFriendStatuses(friendKeys);
-  const friendCount = statuses.data?.length ?? 0;
+  const statuses = useFriendStatuses(followedPeople.people);
+  const liveFriendCount = statuses.data?.length ?? 0;
   useEffect(() => {
     if (!user || !open || !followedPeople.hasReadRelays) return;
     void followedPeople.refetch();
   }, [user, open, followedPeople.hasReadRelays, followedPeople.refetch]);
-  useEffect(() => setLiveFriendCount(friendCount), [friendCount]);
 
-  return <Sheet open={open} onOpenChange={setOpen}>
-    <SheetTrigger asChild>
-      <Button type="button" variant="ghost" size="icon" className="relative rounded-full" aria-label="Friends listening activity" title="Friends activity">
-        <Users className="size-5" />
-        {liveFriendCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{liveFriendCount > 9 ? '9+' : liveFriendCount}</span>}
-      </Button>
-    </SheetTrigger>
-    <SheetContent side="right" className="w-[min(24rem,90vw)] gap-0 p-0 sm:max-w-md">
-      <SheetHeader className="border-b border-border/70 pr-12">
-        <SheetTitle className="flex items-center gap-2"><Users className="size-5 text-primary" /> Friends activity</SheetTitle>
-        <SheetDescription>Friends and their current public listening status.</SheetDescription>
-      </SheetHeader>
-      {open && <FriendsActivityContent close={() => setOpen(false)} user={user} followedPeople={followedPeople} statuses={statuses} />}
-    </SheetContent>
-  </Sheet>;
+  return <Button type="button" variant="ghost" size="icon" className={`relative rounded-full ${open ? 'bg-accent text-foreground' : ''}`} aria-label={open ? 'Close friends listening activity' : 'Friends listening activity'} aria-pressed={open} title="Friends activity" onClick={onToggle}>
+    <Users className="size-5" />
+    {liveFriendCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{liveFriendCount > 9 ? '9+' : liveFriendCount}</span>}
+  </Button>;
 }
+
+export function FriendsActivityPanel({ open, onClose, onSwitch }: { open: boolean; onClose: () => void; onSwitch: () => void }) {
+  const { user } = useCurrentUser();
+  const followedPeople = useFollowedPeople();
+  const statuses = useFriendStatuses(followedPeople.people);
+  return <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-card" aria-label="Friends listening activity">
+    <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 font-semibold"><Users className="size-5 text-primary" /> Friends activity</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Friends and their current public listening status.</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open player queue" title="Open queue" onClick={onSwitch}><ListMusic className="size-4" /></Button>
+          <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close friends activity" onClick={onClose}><X className="size-4" /></Button>
+        </div>
+      </div>
+    </SheetHeader>
+    {open && <FriendsActivityContent close={onClose} user={user} followedPeople={followedPeople} statuses={statuses} />}
+  </section>;
+};

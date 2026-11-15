@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Clock3, GripVertical, ListMusic, ListPlus, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3, GripVertical, ListMusic, ListPlus, Plus, Sparkles, Trash2, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDuration, type Track } from '@/lib/music';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { SheetHeader } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayer } from '@/hooks/usePlayer';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -14,7 +14,7 @@ import { CreatePlaylistDialog } from './CreatePlaylistDialog';
 import { TrackArtwork } from './TrackArtwork';
 import { ArtistLink } from './ArtistLink';
 
-export function QueuePanel() {
+export function QueuePanel({ open, onClose, onSwitch }: { open: boolean; onClose: () => void; onSwitch: () => void }) {
   const player = usePlayer();
   const { user } = useCurrentUser();
   const { data: playlists } = usePlaylists();
@@ -54,17 +54,23 @@ export function QueuePanel() {
     });
   };
 
-  return <Sheet>
-    <SheetTriggerButton queueLength={upcoming.length} />
-    <SheetContent side="right" className="w-[min(420px,90vw)] gap-0 p-0 sm:max-w-[420px]">
+  const queuePanelContent = <section className="flex h-full min-w-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-card" aria-label="Player queue">
       <Tabs defaultValue="queue" className="flex min-h-0 flex-1 flex-col gap-0">
-        <SheetHeader className="border-b px-5 py-5 pr-14">
-          <SheetTitle className="flex items-center gap-2 text-lg"><ListMusic className="size-5" /> Player</SheetTitle>
+        <SheetHeader className="shrink-0 border-b px-4 py-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="flex items-center gap-2 text-lg font-semibold"><ListMusic className="size-5" /> Player</h2>
+              <p className="sr-only">Manage upcoming tracks or browse recently played audio.</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Open friends activity" title="Friends activity" onClick={onSwitch}><Users className="size-4" /></Button>
+              <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close queue" onClick={onClose}><X className="size-4" /></Button>
+            </div>
+          </div>
           <TabsList className="mt-3 grid w-full grid-cols-2">
             <TabsTrigger value="queue">Queue ({upcoming.length})</TabsTrigger>
             <TabsTrigger value="history">Recently played</TabsTrigger>
           </TabsList>
-          <SheetDescription className="sr-only">Manage upcoming tracks or browse recently played audio.</SheetDescription>
         </SheetHeader>
         <TabsContent value="queue" className="min-h-0 flex-1 overflow-hidden">
           <ScrollArea className="h-full">
@@ -150,7 +156,10 @@ export function QueuePanel() {
           </ScrollArea>
         </TabsContent>
       </Tabs>
-    </SheetContent>
+    </section>;
+
+  return <>
+    {open && <div className="flex h-full min-w-0 flex-col">{queuePanelContent}</div>}
     <Dialog open={chooserOpen} onOpenChange={setChooserOpen}>
       <DialogContent>
         <DialogHeader>
@@ -185,23 +194,23 @@ export function QueuePanel() {
         toast({ title: `Playlist created with ${addedCount} ${addedCount === 1 ? 'track' : 'tracks'}`, description: unsupportedCount ? `${unsupportedCount} unsupported queue item(s) skipped.` : undefined });
       }}
     />
-  </Sheet>;
+  </>;
 }
 
-function SheetTriggerButton({ queueLength }: { queueLength: number }) {
-  return <SheetTrigger asChild>
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={`Open queue${queueLength ? `, ${queueLength} upcoming` : ''}`}
-      title="Open queue"
-      className="relative size-8 rounded-full text-muted-foreground hover:text-foreground"
-    >
-      <ListMusic className="size-4" />
-      {queueLength > 0 && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{queueLength > 9 ? '9+' : queueLength}</span>}
-    </Button>
-  </SheetTrigger>;
+export function QueuePanelButton({ queueLength, open, onClick }: { queueLength: number; open: boolean; onClick: () => void }) {
+  return <Button
+    type="button"
+    variant="ghost"
+    size="icon"
+    aria-label={`${open ? 'Close' : 'Open'} queue${queueLength ? `, ${queueLength} upcoming` : ''}`}
+    aria-pressed={open}
+    title={open ? 'Close queue' : 'Open queue'}
+    className={`relative size-8 rounded-full text-muted-foreground hover:text-foreground ${open ? 'bg-accent text-foreground' : ''}`}
+    onClick={onClick}
+  >
+    <ListMusic className="size-4" />
+    {queueLength > 0 && <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">{queueLength > 9 ? '9+' : queueLength}</span>}
+  </Button>;
 }
 
 function QueueTrack({ track, active = false, onPlay, onRemove, onMoveUp, onMoveDown, draggable = false, onDragStart, onDragEnd, onDragOver, onDrop, isDragging = false }: {

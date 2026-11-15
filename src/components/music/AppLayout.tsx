@@ -7,7 +7,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoginArea } from "@/components/auth/LoginArea";
 import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
-import { FriendsActivitySheet } from "./FriendsActivitySheet";
+import { QueuePanel } from "./QueuePanel";
+import { FriendsActivityPanel, FriendsActivitySheet } from "./FriendsActivitySheet";
 import { NotificationsBell } from "./NotificationsBell";
 import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
@@ -20,6 +21,8 @@ function AudiobookLibrarySyncService() {
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<'friends' | 'queue' | null>(null);
+  const togglePanel = (panel: 'friends' | 'queue') => setActivePanel(current => current === panel ? null : panel);
 
   return (
     <>
@@ -31,8 +34,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <Sidebar />
         </aside>
 
-        {/* Main content column */}
-        <div className="relative isolate flex-1 flex flex-col min-w-0 bg-card md:rounded-lg overflow-hidden">
+        {/* Main content and docked utility panels */}
+        <div className="flex min-h-0 min-w-0 flex-1 gap-0 overflow-hidden md:gap-2">
+        <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card md:rounded-lg">
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[500px] bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "linear-gradient(to bottom, color-mix(in srgb, var(--card) 30%, transparent) 0%, var(--card) 100%), url('/autumn-forest.png')" }} />
           {/* Top bar */}
           <header className="relative z-10 h-14 shrink-0 flex items-center justify-between gap-2 px-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
@@ -62,7 +66,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="ml-auto flex shrink-0 items-center gap-1">
               <DeveloperZapButton />
               <NotificationsBell />
-              <FriendsActivitySheet />
+              <FriendsActivitySheet open={activePanel === 'friends'} onToggle={() => togglePanel('friends')} />
               <LoginArea className="max-w-60" />
             </div>
           </header>
@@ -72,9 +76,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="min-w-0 max-w-full overflow-x-hidden pb-6">{children}</div>
           </ScrollArea>
         </div>
+        <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' || activePanel === 'queue' ? 'w-[min(26rem,calc(100vw-120px))] opacity-100 md:w-[min(26rem,36vw)]' : 'w-0 opacity-0'}`}>
+          {activePanel === 'friends' && <FriendsActivityPanel open onClose={() => setActivePanel(null)} onSwitch={() => togglePanel('queue')} />}
+          {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} onSwitch={() => togglePanel('friends')} />}
+        </aside>
+        </div>
       </div>
-
-      <PlayerBar />
+ 
+      <PlayerBar onQueueToggle={() => togglePanel('queue')} queueOpen={activePanel === 'queue'} />
     </div>
     </>
   );
