@@ -29,6 +29,7 @@ import AudiobooksPage from "./pages/AudiobooksPage";
 import AudiobookLibraryPage from "./pages/AudiobookLibraryPage";
 import { NIP19Page } from "./pages/NIP19Page";
 import { ArtistPage } from "./pages/ArtistPage";
+import ArtistAlbumPage from "./pages/ArtistAlbumPage";
 import NotFound from "./pages/NotFound";
 import ListenPage from "./pages/ListenPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
@@ -77,6 +78,7 @@ export function AppRouter() {
                 <Route path="/friends" element={<FriendsPage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/my-profile" element={<MyProfile />} />
+                <Route path="/artist/:nip19/album" element={<ArtistAlbumPage />} />
                 <Route path="/artist/:nip19" element={<ArtistPage />} />
                 <Route path="/friends/:nip19" element={<FriendsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

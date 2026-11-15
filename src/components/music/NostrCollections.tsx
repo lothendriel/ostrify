@@ -84,7 +84,7 @@ function collectionItems(tracks: Track[]) {
 }
 
 function AlbumCard({ track, count }: { track: Track; count: number }) {
-  return <Link to={`/artist/${nip19.npubEncode(track.pubkey)}#album-${encodeURIComponent(track.album ?? '')}`} className="rounded-lg bg-secondary/50 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary"><TrackArtwork track={track} className="w-full aspect-square mb-3" /><p className="font-semibold truncate">{track.album}</p><p className="text-sm text-muted-foreground truncate">{track.artist || 'Publisher'} · {count} {count === 1 ? 'track' : 'tracks'} here</p></Link>;
+  return <Link to={`/artist/${nip19.npubEncode(track.pubkey)}/album?title=${encodeURIComponent(track.album ?? '')}`} className="rounded-lg bg-secondary/50 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary"><TrackArtwork track={track} className="w-full aspect-square mb-3" /><p className="font-semibold truncate">{track.album}</p><p className="text-sm text-muted-foreground truncate">{track.artist || 'Publisher'} · {count} {count === 1 ? 'track' : 'tracks'} here</p></Link>;
 }
 
 function WavlakeReleaseCard({ release }: { release: WavlakeRelease }) {
