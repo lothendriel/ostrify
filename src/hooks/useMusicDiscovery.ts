@@ -14,7 +14,7 @@ interface Page { tracks: Track[]; next: Cursor; failed: string[]; succeeded: num
 const cursorKey = (relay: string, kind: number) => `${relay}|${kind}`;
 
 /** Browse each enabled read relay independently so a fast relay can't hide a slow one. */
-export function useMusicDiscovery() {
+export function useMusicDiscovery(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const relays = [...new Set(config.relayMetadata.relays.filter(r => r.read).map(r => r.url))].sort();
@@ -23,7 +23,8 @@ export function useMusicDiscovery() {
   return useInfiniteQuery({
     queryKey: ['music-discovery', relayKey],
     initialPageParam: {} as Cursor,
-    enabled: relays.length > 0,
+    enabled: enabled && relays.length > 0,
+    staleTime: 60_000,
     retry: false,
     queryFn: async ({ pageParam, signal }): Promise<Page> => {
       const next: Cursor = { ...pageParam };

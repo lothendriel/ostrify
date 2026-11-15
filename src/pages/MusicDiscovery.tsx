@@ -47,8 +47,8 @@ export default function MusicDiscovery() {
   const [visibleRecordingCount, setVisibleRecordingCount] = useState(24);
   const source = searchParams.get('source');
   const activeTab = source === 'wavlake' || source === 'tunestr' ? source : 'nostr';
-  const feed = useMusicDiscovery();
-  const tunestr = useTunestrStreams();
+  const feed = useMusicDiscovery(activeTab === 'nostr');
+  const tunestr = useTunestrStreams(activeTab === 'tunestr');
   const [hideClips, setHideClips] = useState(true);
   const { config } = useAppContext();
   const relayCount = config.relayMetadata.relays.filter(r => r.read).length;

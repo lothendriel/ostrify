@@ -156,7 +156,7 @@ function parseStream(event: NostrEvent): TunestrStream | null {
   return { id: `tunestr:${event.pubkey}:${d}`, title, summary, image, thumbnailSourceUrl, url, externalUrl: sourceUrl, createdAt: event.created_at, status, isLive, format: 'nip53', event, track };
 }
 
-export function useTunestrStreams() {
+export function useTunestrStreams(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const relays = [...new Set([
@@ -168,9 +168,9 @@ export function useTunestrStreams() {
   return useInfiniteQuery({
     queryKey: ['tunestr-live-streams', relayKey],
     initialPageParam: undefined as number | undefined,
-    enabled: relays.length > 0,
+    enabled: enabled && relays.length > 0,
     retry: false,
-    staleTime: 30_000,
+    staleTime: 5 * 60 * 1000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     refetchOnMount: true,

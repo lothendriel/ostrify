@@ -265,21 +265,21 @@ function FountainEpisodesPage() {
 
 const PodcastsPage = () => {
   useSeoMeta({ title: "Podcasts — Ostrify" });
-  const episodes = usePodcastEpisodes(120, 20);
-  const nostrShows = useNostrPodcastShows();
-  const fountainShows = useFountainPodcastShows();
-  const fountainRssShows = (fountainShows.data ?? []).filter(show => show.feedUrl && show.feedGuid);
-  const fountainTracks = (episodes.data ?? []).filter(track => track.source === "fountain");
-  const player = usePlayer();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSource = searchParams.get("source");
   const [source, setSource] = useState<"nostr" | "fountain" | "directory">(initialSource === "directory" ? "directory" : initialSource === "fountain" ? "fountain" : "nostr");
+  const episodes = usePodcastEpisodes(120, 20, source === "fountain");
+  const nostrShows = useNostrPodcastShows(source === "nostr");
+  const fountainShows = useFountainPodcastShows(source === "fountain");
+  const fountainRssShows = (fountainShows.data ?? []).filter(show => show.feedUrl && show.feedGuid);
+  const fountainTracks = (episodes.data ?? []).filter(track => track.source === "fountain");
+  const player = usePlayer();
   const nostrEpisodes = useNostrPodcastEpisodeFeed(source === "nostr");
   const [viewAllSource, setViewAllSource] = useState<"nostr" | "fountain" | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedShow, setSelectedShow] = useState<PodcastShow | null>(null);
-  const podcastSearch = usePodcastIndexSearch(debouncedSearch);
+  const podcastSearch = usePodcastIndexSearch(debouncedSearch, source === "directory");
   const selectedIndexShowId = searchParams.get("show");
   const cachedPodcastSearches = useQueryClient();
   const selectedIndexShow = useMemo(() => {
@@ -296,9 +296,9 @@ const PodcastsPage = () => {
   const podcastFavoriteActions = usePodcastFavoriteActions();
   const favoriteShowSelection = searchParams.get("show") ? podcastFavorites.data.find(item => item.id === searchParams.get("show") && !item.episode) : undefined;
   const activeShow = selectedShow ?? (favoriteShowSelection ? favoriteSelectionToShow(favoriteShowSelection) : null) ?? selectedIndexShow;
-  const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title);
-  const nostrTracks = (episodes.data ?? []).filter((track) => track.source !== "fountain" && track.kind === "podcast");
+  const directoryEpisodes = usePodcastIndexEpisodes(activeShow?.feedId, activeShow?.feedUrl, activeShow?.title, source === "directory" && !!activeShow);
   const relayedNostrTracks = (nostrEpisodes.data?.pages.flatMap(batch => batch.tracks) ?? []).filter(track => track.kind === "podcast");
+  const nostrTracks = relayedNostrTracks;
   const [nostrPage, setNostrPage] = useState(1);
   const nostrPageRef = useRef(1);
   const updateNostrPage = (nextPage: number) => { nostrPageRef.current = nextPage; setNostrPage(nextPage); };
@@ -317,6 +317,8 @@ const PodcastsPage = () => {
   const nostrTrackPageCount = Math.max(1, Math.ceil(relayedNostrTracks.length / 20));
   const nostrTrackPage = Math.min(nostrPage, nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0));
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
+  const selectedTracksLoading = source === "nostr" ? nostrEpisodes.isLoading : source === "fountain" && episodes.isLoading;
+  const selectedTracksError = source === "nostr" ? nostrEpisodes.isError : source === "fountain" && episodes.isError;
   const nostrShowList = nostrShows.data ?? [];
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 350);
@@ -393,7 +395,7 @@ const PodcastsPage = () => {
               <section className="space-y-4">
                 {source === "nostr" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">All Nostr episodes</h2><p className="text-sm text-muted-foreground">Recent episodes loaded from your relays.</p></div><div className="flex gap-2"><Button asChild variant="outline"><Link to="/podcasts/nostr/episodes">See all</Link></Button><Button variant="outline" onClick={() => void episodes.refetch()}>Refresh</Button></div></div>}
                 {source === "fountain" && <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold">Latest Fountain episodes</h2><p className="text-sm text-muted-foreground">Fountain episodes currently referenced on Nostr.</p></div><Button asChild variant="outline"><Link to="/podcasts/fountain/episodes">See all</Link></Button></div>}
-                {episodes.isLoading ? <TrackSkeletonGrid /> : episodes.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void episodes.refetch()}>Try again</button></p> : selectedTracks.length ? <>{source === "nostr" && <TrackList tracks={relayedNostrTracks} page={nostrTrackPage} onPageChange={nextPage => updateNostrPage(Math.min(nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0), nextPage))} hasMore={nostrEpisodes.hasNextPage} isLoadingMore={nostrEpisodes.isFetchingNextPage} onLoadMore={loadNostrEpisodePage} />}<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? fountainTracks.slice(0, 10) : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div></> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
+                {selectedTracksLoading ? <TrackSkeletonGrid /> : selectedTracksError ? <p role="alert" className="text-sm text-destructive">Couldn’t load podcast episodes. <button className="underline" onClick={() => void (source === "nostr" ? nostrEpisodes.refetch() : episodes.refetch())}>Try again</button></p> : selectedTracks.length ? <>{source === "nostr" && <TrackList tracks={relayedNostrTracks} page={nostrTrackPage} onPageChange={nextPage => updateNostrPage(Math.min(nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0), nextPage))} hasMore={nostrEpisodes.hasNextPage} isLoadingMore={nostrEpisodes.isFetchingNextPage} onLoadMore={loadNostrEpisodePage} />}<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">{(source === "fountain" ? fountainTracks.slice(0, 10) : selectedTracks.slice(0, 10)).map((episode) => <TrackCard key={episode.id} track={episode} showPlaylistAction showLikeAction />)}</div></> : <EmptyEpisodes source={source === "nostr" ? "nostr" : "fountain"} />}
               </section>
             </>
           )}

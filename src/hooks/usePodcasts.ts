@@ -263,11 +263,12 @@ async function lookupFountainEpisode(
  * Fetch podcast episodes. Combines true NIP-F4 episodes (kind 54), audio
  * tracks/notes tagged as podcasts, and Fountain episode GUID references.
  */
-export function usePodcastEpisodes(limit = 80, fountainLimit = 10) {
+export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = true) {
   const { nostr } = useNostr();
 
   const query = useQuery<Track[]>({
     queryKey: ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API],
+    enabled,
     placeholderData: (previousData) => previousData,
     retry: 1,
     staleTime: 5 * 60 * 1000,
@@ -421,10 +422,11 @@ export function useNostrPodcastEpisodeFeed(enabled = true) {
 }
 
 /** Fetch podcast show metadata (NIP-F4 kind:10154) for set of pubkeys. */
-export function useNostrPodcastShows() {
+export function useNostrPodcastShows(enabled = true) {
   const { nostr } = useNostr();
   const query = useInfiniteQuery({
     queryKey: ["podcast-shows", "nostr"],
+    enabled,
     initialPageParam: undefined as number | undefined,
     retry: 1,
     queryFn: async ({ pageParam, signal: querySignal }) => {
@@ -727,7 +729,7 @@ interface FountainShowsPageParam {
 }
 
 /** NIP-73 show GUIDs discovered in Nostr notes, resolved to Fountain records. */
-export function useFountainPodcastShows() {
+export function useFountainPodcastShows(enabled = true) {
   const { nostr } = useNostr();
   const initialPageParam: FountainShowsPageParam = {
     feedDone: false,
@@ -737,6 +739,7 @@ export function useFountainPodcastShows() {
   };
   const query = useInfiniteQuery({
     queryKey: ["podcast-shows", "fountain"],
+    enabled,
     initialPageParam,
     retry: 1,
     queryFn: async ({ pageParam, signal: querySignal }) => {
@@ -965,8 +968,8 @@ export async function fetchPodcastIndexEpisodes(episodeId: number, signal: Abort
   };
 }
 
-export function usePodcastIndexEpisodes(feedId: number | undefined, feedUrl?: string, showTitle?: string) {
-  const hasFeed = (feedId !== undefined && Number.isInteger(feedId) && feedId > 0) || !!feedUrl;
+export function usePodcastIndexEpisodes(feedId: number | undefined, feedUrl?: string, showTitle?: string, enabled = true) {
+  const hasFeed = enabled && ((feedId !== undefined && Number.isInteger(feedId) && feedId > 0) || !!feedUrl);
   return useQuery({
     queryKey: ["podcast-index", "episodes", feedId ?? feedUrl ?? "", showTitle ?? ""],
     enabled: hasFeed,
@@ -1036,11 +1039,11 @@ export function usePodcastIndexFeed(feedUrl: string | undefined) {
   });
 }
 
-export function usePodcastIndexSearch(term: string) {
+export function usePodcastIndexSearch(term: string, enabled = true) {
   const normalized = term.trim();
   return useQuery({
     queryKey: ["podcast-index", "search", normalized],
-    enabled: normalized.length >= 2,
+    enabled: enabled && normalized.length >= 2,
     staleTime: 10 * 60 * 1000,
     queryFn: async ({ signal }) => {
       const response = await fetch(`${PODCAST_INDEX_WORKER}/api/podcast-index/search/byterm?q=${encodeURIComponent(normalized)}`, { signal });
