@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
-import { useTracks } from "@/hooks/useTracks";
+import { useHomeTracks } from "@/hooks/useHomeTracks";
 import { useFreshNostrTracks } from "@/hooks/useFreshNostrTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
@@ -33,7 +33,9 @@ const Index = () => {
     description: "A Spotify-style player for music and podcasts published on the Nostr network.",
   });
 
-  const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 300 });
+  const homeTracksQuery = useHomeTracks();
+  const tracks = homeTracksQuery.data?.tracks ?? [];
+  const tracksLoading = homeTracksQuery.isLoading;
   const { data: newestNostrTracks = [], isLoading: freshLoading } = useFreshNostrTracks();
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
   const player = usePlayer();
@@ -68,29 +70,21 @@ const Index = () => {
     const remaining = shuffled(podcasts.filter(track => !selectedIds.has(track.id)));
     return shuffled([...selected, ...remaining]).slice(0, 10);
   }, [podcasts]);
-  const categoryShelves = useMemo(() => {
-    const usedIds = new Set([...fresh, ...player.history, ...likedTracks].map(track => track.id));
-    const usedUrls = new Set([...fresh, ...player.history, ...likedTracks].map(track => track.url));
-    return CATEGORIES.flatMap(category => {
+  const categoryShelves = useMemo(() => CATEGORIES.map(category => {
       const categoryTracks = tracksInCategory(allMusic, category.id);
       const selected = buildVariedHomeShelf({
         candidates: categoryTracks,
-        history: player.history,
-        liked: likedTracks,
+        // Category carousels may repeat tracks across shelves and include liked or heard music;
+        // repeating relevant matches is better than hiding a genre shelf entirely.
+        history: [],
+        liked: [],
         followedArtists: followedArtists.data ?? [],
-        limit: 15,
+        limit: categoryTracks.length,
         variation: shelfVariation,
         familiarSlots: 1,
-        excludeIds: [...usedIds],
-        excludeUrls: [...usedUrls],
       });
-      for (const track of selected) {
-        usedIds.add(track.id);
-        usedUrls.add(track.url);
-      }
-      return selected.length ? [{ category, tracks: selected }] : [];
-    });
-  }, [allMusic, player.history, likedTracks, followedArtists.data, shelfVariation, fresh]);
+      return { category, tracks: selected };
+  }), [allMusic, followedArtists.data, shelfVariation]);
 
   const { greeting, greetingImage } = (() => {
     const hour = new Date().getHours();
@@ -125,11 +119,12 @@ const Index = () => {
 
       <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense seeAllHref="/podcasts/episodes" />
 
-      {categoryShelves.map(({ category, tracks: catTracks }) => (
-        <Shelf key={category.id} title={category.label} tracks={catTracks} dense seeAllHref={`/category/${category.id}`} />
-      ))}
+      {homeTracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">Couldn’t load music from your read relays. Genre shelves may be unavailable. <button type="button" className="font-semibold text-primary underline" onClick={() => void homeTracksQuery.refetch()}>Try again</button></div>}
+      {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}
+      {wavlake.isError && <p role="status" className="text-xs text-muted-foreground">Wavlake catalog results aren’t available right now; genre shelves use music from responding relays.</p>}
+      {categoryShelves.map(({ category, tracks: catTracks }) => <Shelf key={category.id} title={category.label} tracks={catTracks} dense seeAllHref={`/category/${category.id}`} emptyMessage={!tracksLoading && !wavlake.isLoading && !homeTracksQuery.isError && !wavlake.isError ? "No matching tracks were found in the currently available music." : undefined} />)}
 
-      {!tracksLoading && tracks.length === 0 && !podcastsLoading && (
+      {!tracksLoading && !wavlake.isLoading && allMusic.length === 0 && !podcastsLoading && (
         <div className="border border-dashed border-border rounded-lg py-16 px-8 text-center">
           <p className="text-muted-foreground max-w-sm mx-auto">
             No audio found yet. Try again in a moment, or check your relay connections — music and

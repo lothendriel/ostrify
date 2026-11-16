@@ -13,10 +13,11 @@ interface ShelfProps {
   dense?: boolean;
   compactCards?: boolean;
   seeAllHref?: string;
+  emptyMessage?: string;
 }
 
-export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref }: ShelfProps) {
-  if (!isLoading && tracks.length === 0) return null;
+export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref, emptyMessage }: ShelfProps) {
+  if (!isLoading && tracks.length === 0 && !emptyMessage) return null;
 
   return (
     <section className="w-full min-w-0 max-w-full space-y-3 overflow-hidden">
@@ -31,7 +32,7 @@ export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compa
           </Link>
         )}
       </div>
-      <HorizontalCarousel label={`${title} tracks`}>
+      {tracks.length === 0 && !isLoading && emptyMessage ? <div className="rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">{emptyMessage}</div> : <HorizontalCarousel label={`${title} tracks`}>
         {isLoading
           ? Array.from({ length: 8 }, (_, index) => (
               <div key={index} className="min-w-0 snap-start space-y-3 p-2 sm:p-3">
@@ -45,7 +46,7 @@ export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compa
                 <TrackCard track={track} compact={compactCards || dense} />
               </div>
             ))}
-      </HorizontalCarousel>
+      </HorizontalCarousel>}
     </section>
   );
 }
