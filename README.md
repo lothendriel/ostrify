@@ -117,25 +117,6 @@ Ostrify combines Nostr events with the Wavlake catalog, the shared DROPS relay, 
 
 For event kinds, tags, and Ostrify-specific conventions, see **[NIP.md](NIP.md)**.
 
-## Project setup
-
-This project uses React, TypeScript, Vite, Tailwind CSS, and Nostrify. With Node.js and npm installed:
-
-```sh
-npm install
-npm run dev
-```
-
-Useful checks and build commands:
-
-```sh
-npm test                 # TypeScript, ESLint, Vitest, and production build
-npm run build            # Standard production build
-npm run build:cloudflare # Cloudflare deployment build
-```
-
-Some integrations need external configuration. In particular, Podcast Index API access is provided through the included server-side worker and requires Podcast Index API credentials in the deployment environment. Blossom uploads require an available upload server. Ostrify’s basic music discovery, playback, and Nostr library features use the browser and configured Nostr relays.
-
 ## Links
 
 - **Open the app:** [ostrify.shakespeare.wtf](https://ostrify.shakespeare.wtf)
