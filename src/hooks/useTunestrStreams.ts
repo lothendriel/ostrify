@@ -43,7 +43,7 @@ function streamPlaybackUrl(url: string): string {
   try {
     const parsed = new URL(url);
     if (parsed.hostname === 'stream.zapclub.io' && parsed.pathname === '/live/basement.m3u8') {
-      return 'https://zapclub.io/club/c6f0f845fb2a3792';
+      return 'https://stream.zapclub.io/live/basement.m3u8';
     }
     if (!parsed.hostname.endsWith('.cloudflarestream.com')) return url;
     const match = parsed.pathname.match(/^\/([a-f0-9]{32})\/(?:manifest\/video\.m3u8|watch)$/i);

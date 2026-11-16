@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import Hls from 'hls.js';
 import { Maximize2, Minimize2, PictureInPicture2, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,52 @@ export function useTunestrPlayer() {
   const context = useContext(TunestrPlayerContext);
   if (!context) throw new Error('useTunestrPlayer must be used within TunestrPlayerProvider');
   return context;
+}
+
+function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const isZapClubHls = stream.url === 'https://stream.zapclub.io/live/basement.m3u8';
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isZapClubHls) return;
+    setError(null);
+
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = stream.url;
+      return;
+    }
+
+    if (!Hls.isSupported()) {
+      setError('This browser does not support HLS video playback. Open the stream source in a new tab.');
+      return;
+    }
+
+    const player = new Hls({ enableWorker: false, lowLatencyMode: true });
+    player.loadSource(stream.url);
+    player.attachMedia(video);
+    player.on(Hls.Events.ERROR, (_event, data) => {
+      if (!data.fatal) return;
+      setError('The live stream could not be loaded. Please try opening the stream source directly.');
+      player.destroy();
+    });
+    return () => player.destroy();
+  }, [isZapClubHls, stream.id, stream.url]);
+
+  if (!isZapClubHls) return <iframe
+    key={stream.id}
+    src={stream.url}
+    title={stream.title}
+    allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen; picture-in-picture"
+    allowFullScreen
+    className="aspect-video w-full border-0 bg-black"
+  />;
+
+  return <div className="relative aspect-video w-full bg-black">
+    <video ref={videoRef} controls autoPlay playsInline className="size-full" aria-label={stream.title} />
+    {error && <div role="status" className="absolute inset-x-3 bottom-14 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
+  </div>;
 }
 
 function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
@@ -103,14 +150,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
         </div>
         {stream.format === 'n94' && stream.event && stream.variant
           ? <N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} />
-          : <iframe
-            key={stream.id}
-            src={stream.url}
-            title={stream.title}
-            allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen; picture-in-picture"
-            allowFullScreen
-            className="aspect-video w-full border-0 bg-black"
-          />}
+          : <TunestrVideoSurface stream={stream} />}
         {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a><span className="ml-2 text-xs text-muted-foreground">If playback is unavailable here, open the stream on its source site.</span></div>}
       </div>
     </DialogContent>
