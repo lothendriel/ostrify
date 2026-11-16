@@ -8,6 +8,8 @@ interface HomeSelectionOptions {
   followedArtists: string[];
   limit?: number;
   variation?: number;
+  /** Stable per-page-load seed for varying equally suitable shelf picks. */
+  seed?: string;
   /** How many familiar tracks to schedule before a discovery track. */
   familiarSlots?: number;
   excludeIds?: string[];
@@ -54,6 +56,7 @@ export function buildVariedHomeShelf({
   followedArtists,
   limit = 10,
   variation = 0,
+  seed: selectionSeed,
   familiarSlots: familiarSlotsPerRound = 2,
   excludeIds = [],
   excludeUrls = [],
@@ -76,7 +79,7 @@ export function buildVariedHomeShelf({
   const now = Date.now() / 1000;
   const excludedIds = new Set(excludeIds);
   const excludedUrls = new Set(excludeUrls);
-  const seed = `${new Date().toISOString().slice(0, 10)}:${variation}`;
+  const seed = `${selectionSeed ?? new Date().toISOString().slice(0, 10)}:${variation}`;
   const ranked = uniqueTracks(candidates).filter(track =>
     track.kind === 'music' && !excludedIds.has(track.id) && !excludedUrls.has(track.url) && !heardIds.has(track.id) && !heardUrls.has(track.url) && !likedIds.has(track.id) && !likedUrls.has(track.url),
   ).map(track => {
@@ -86,7 +89,9 @@ export function buildVariedHomeShelf({
     const topicMatch = topics.some(topic => allTasteTopics.has(topic));
     const familiar = artistMatch || topicMatch;
     const ageDays = track.createdAt > 0 ? Math.max(0, (now - track.createdAt) / 86400) : 365;
-    const freshness = Math.max(0, 5 - ageDays / 12);
+    // Treat tracks published on the same day as similarly fresh, so the per-load
+    // seed can vary picks within a fresh cohort instead of always favoring exact timestamps.
+    const freshness = Math.max(0, 5 - Math.floor(ageDays) / 12);
     const seedOrder = trackHash(track, seed);
     return { track, artists, topics, familiar, freshness, seedOrder };
   });

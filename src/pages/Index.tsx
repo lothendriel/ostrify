@@ -46,6 +46,7 @@ const Index = () => {
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
   const likedTracksQuery = useTracksByIds(likedPlaylist?.trackIds);
   const likedTracks = likedTracksQuery.data?.tracks ?? [];
+  const [pageSeed] = useState(() => crypto.randomUUID());
   const [shelfVariation, setShelfVariation] = useState(0);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
@@ -81,10 +82,11 @@ const Index = () => {
         followedArtists: followedArtists.data ?? [],
         limit: categoryTracks.length,
         variation: shelfVariation,
+        seed: pageSeed,
         familiarSlots: 1,
       });
       return { category, tracks: selected };
-  }), [allMusic, followedArtists.data, shelfVariation]);
+  }), [allMusic, followedArtists.data, shelfVariation, pageSeed]);
 
   const { greeting, greetingImage } = (() => {
     const hour = new Date().getHours();
