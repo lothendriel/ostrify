@@ -18,7 +18,7 @@ function PublicPlaylistCard({ playlist }: { playlist: PublicMusicPlaylist }) {
   const path = `/ostrify-playlist/${nip19.npubEncode(playlist.pubkey)}?d=${encodeURIComponent(playlist.id)}`;
   return <Link to={path} className="group overflow-hidden rounded-xl border border-border/70 bg-secondary/30 transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
     <div className="relative aspect-square bg-muted">
-      {image ? <img src={image} alt="" loading="lazy" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-900 to-teal-950"><Music className="size-12 text-white/70" /></div>}
+      {image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-900 to-teal-950"><Music className="size-12 text-white/70" /></div>}
     </div>
     <div className="p-3"><p className="truncate font-semibold" title={playlist.title}>{playlist.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{name}</p><p className="mt-1 text-xs text-muted-foreground">{playlist.trackIds.length} {playlist.trackIds.length === 1 ? 'track' : 'tracks'} · Ostrify</p></div>
   </Link>;

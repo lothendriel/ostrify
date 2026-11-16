@@ -39,6 +39,7 @@ export function TrackArtwork({ track, className, rounded = "rounded-md" }: Track
           src={track.image}
           alt=""
           loading="lazy"
+          decoding="async"
           onError={() => setErrored(true)}
           className="w-full h-full object-cover"
         />

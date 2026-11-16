@@ -192,7 +192,7 @@ function FollowNotificationRow({ notification, close }: { notification: FollowNo
 
   return <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-3">
     <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">
-      {avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}
+      {avatar ? <img src={avatar} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : name.slice(0, 1)}
     </div>
     <div className="min-w-0 flex-1">
       <Link to={`/${nip19.npubEncode(notification.pubkey)}`} onClick={close} className="font-semibold hover:underline">{name}</Link>

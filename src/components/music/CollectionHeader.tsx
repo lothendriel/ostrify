@@ -50,7 +50,7 @@ export function CollectionHeader({
       >
         <div className="size-44 rounded-md shadow-2xl overflow-hidden shrink-0 bg-black/20 flex items-center justify-center">
           {image ? (
-            <img src={image} alt="" className="w-full h-full object-cover" />
+            <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             icon
           )}

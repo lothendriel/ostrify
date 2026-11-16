@@ -7,7 +7,7 @@ import { useMusicNews } from "@/hooks/useMusicNews";
 import { genUserName } from "@/lib/sanitize";
 import { Skeleton } from "@/components/ui/skeleton";
 
-function newsTitle(event: NostrEvent): string {
+export function newsTitle(event: NostrEvent): string {
   const title = event.tags.find(([name]) => name === "title")?.[1]?.trim();
   if (title) return title;
 
@@ -67,8 +67,8 @@ export function MusicNewsCard({ event }: { event: NostrEvent }) {
   );
 }
 
-export function MusicNewsSection() {
-  const news = useMusicNews();
+export function MusicNewsSection({ enabled = true, home = false }: { enabled?: boolean; home?: boolean } = {}) {
+  const news = useMusicNews(enabled, home);
   const events = news.events.slice(0, 4);
 
   return (
@@ -80,7 +80,7 @@ export function MusicNewsSection() {
         </Link>
       </div>
       <p className="text-sm text-muted-foreground">Recent music updates and articles shared across your relays.</p>
-      {news.isLoading ? (
+      {!enabled || news.isLoading ? (
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-32 rounded-xl" />)}
         </div>

@@ -3,29 +3,34 @@ import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { useHomeTracks } from "@/hooks/useHomeTracks";
-import { useFreshNostrTracks } from "@/hooks/useFreshNostrTracks";
-import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
+import { useFreshNostrTracks } from "@/hooks/useFreshNostrTracks";
+import { useNearViewport } from "@/hooks/useNearViewport";
 import { usePlayer } from "@/hooks/usePlayer";
-import { usePlaylists } from "@/hooks/usePlaylists";
-import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
 import { Shelf } from "@/components/music/Shelf";
-import { FreshTracksCarousel } from "@/components/music/FreshTracksCarousel";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
+import { FreshTracksCarousel } from "@/components/music/FreshTracksCarousel";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
+import { DeferredHomeSection } from "@/components/music/DeferredHomeSection";
+import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
 import { CATEGORIES, tracksInCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
+import type { Track } from "@/lib/music";
 
-function shuffled<T>(items: readonly T[]): T[] {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index--) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-  }
-  return result;
+function HomeFreshTracks({ candidates, enabled }: { candidates: Track[]; enabled: boolean }) {
+  const query = useFreshNostrTracks(enabled);
+  const tracks = useMemo(() => {
+    const byUrl = new Map<string, Track>();
+    for (const track of [...(query.data ?? []), ...candidates.filter(candidate => candidate.kind === "music" && !!candidate.event)]) {
+      const existing = byUrl.get(track.url);
+      if (!existing || track.createdAt > existing.createdAt) byUrl.set(track.url, track);
+    }
+    return [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, 15);
+  }, [candidates, query.data]);
+  return <FreshTracksCarousel tracks={tracks} isLoading={query.isLoading} />;
 }
 
 const Index = () => {
@@ -34,71 +39,43 @@ const Index = () => {
     description: "A Spotify-style player for music and podcasts published on the Nostr network.",
   });
 
-  const homeTracksQuery = useHomeTracks();
+  const { ref: discoveryTriggerRef, isNearViewport: discoveryEnabled } = useNearViewport<HTMLDivElement>("100px 0px");
+  const homeTracksQuery = useHomeTracks(discoveryEnabled);
   const tracks = homeTracksQuery.data?.tracks ?? [];
   const tracksLoading = homeTracksQuery.isLoading;
-  const { data: newestNostrTracks = [], isLoading: freshLoading } = useFreshNostrTracks();
-  const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
-  const player = usePlayer();
-  const wavlake = useWavlakeCatalog();
+  const wavlake = useWavlakeCatalog(undefined, discoveryEnabled);
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
-  const playlists = usePlaylists();
-  const followedArtists = useFollowedArtists();
-  const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
-  const likedTracksQuery = useTracksByIds(likedPlaylist?.trackIds);
-  const likedTracks = likedTracksQuery.data?.tracks ?? [];
+  const player = usePlayer();
+  const followedArtists = useFollowedArtists(discoveryEnabled);
   const [pageSeed] = useState(() => crypto.randomUUID());
   const [shelfVariation, setShelfVariation] = useState(0);
   const [recentShelfHistory] = useState(readHomeShelfHistory);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
-  const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
-  const fresh = useMemo(() => {
-    const byUrl = new Map<string, (typeof newestNostrTracks)[number]>();
-    for (const track of [...newestNostrTracks, ...nostrTracks.filter(candidate => candidate.kind === "music" && !!candidate.event)]) {
-      const existing = byUrl.get(track.url);
-      if (!existing || track.createdAt > existing.createdAt) byUrl.set(track.url, track);
-    }
-    return [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, 15);
-  }, [newestNostrTracks, nostrTracks]);
-  const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.id))], [player.history, likedTracks, fresh]);
-  const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.url))], [player.history, likedTracks, fresh]);
-  const shuffledPodcasts = useMemo(() => {
-    const nostrPodcasts = podcasts.filter(track => track.source !== "fountain");
-    const fountainPodcasts = podcasts.filter(track => track.source === "fountain");
-    const selected = [
-      ...shuffled(nostrPodcasts).slice(0, 5),
-      ...shuffled(fountainPodcasts).slice(0, 5),
-    ];
-    const selectedIds = new Set(selected.map(track => track.id));
-    const remaining = shuffled(podcasts.filter(track => !selectedIds.has(track.id)));
-    return shuffled([...selected, ...remaining]).slice(0, 10);
-  }, [podcasts]);
   const categoryShelves = useMemo(() => CATEGORIES.map(category => {
-      const categoryTracks = tracksInCategory(allMusic, category.id);
-      const recentlyShown = new Set(recentShelfHistory[category.id] ?? []);
-      const alternateTracks = categoryTracks.filter(track => !recentlyShown.has(track.id));
-      const select = (candidates: typeof allMusic, limit: number) => buildVariedHomeShelf({
-        candidates,
-        // Home genre shelves intentionally allow repeat appearances, including liked or heard music.
-        history: [],
-        liked: [],
-        followedArtists: followedArtists.data ?? [],
-        limit,
-        variation: shelfVariation,
-        seed: pageSeed,
-        familiarSlots: 1,
-      });
-      const preferred = select(alternateTracks, 15);
-      const selected = preferred.length < 15
-        ? [...preferred, ...select(categoryTracks.filter(track => !preferred.some(item => item.id === track.id)), 15 - preferred.length)].slice(0, 15)
-        : preferred;
-      const selectedIds = new Set(selected.map(track => track.id));
-      const broadFallback = allMusic.filter(track => track.kind === "music" && !selectedIds.has(track.id));
-      const completed = selected.length < 15
-        ? [...selected, ...select(broadFallback, 15 - selected.length)].slice(0, 15)
-        : selected;
-      const isSupplemented = completed.some(track => !categoryTracks.some(categoryTrack => categoryTrack.id === track.id));
-      return { category, tracks: completed, isSupplemented };
+    const categoryTracks = tracksInCategory(allMusic, category.id);
+    const recentlyShown = new Set(recentShelfHistory[category.id] ?? []);
+    const alternateTracks = categoryTracks.filter(track => !recentlyShown.has(track.id));
+    const select = (candidates: typeof allMusic, limit: number) => buildVariedHomeShelf({
+      candidates,
+      history: [],
+      liked: [],
+      followedArtists: followedArtists.data ?? [],
+      limit,
+      variation: shelfVariation,
+      seed: pageSeed,
+      familiarSlots: 1,
+    });
+    const preferred = select(alternateTracks, 15);
+    const selected = preferred.length < 15
+      ? [...preferred, ...select(categoryTracks.filter(item => !preferred.some(track => track.id === item.id)), 15 - preferred.length)].slice(0, 15)
+      : preferred;
+    const selectedIds = new Set(selected.map(track => track.id));
+    const broadFallback = allMusic.filter(track => track.kind === "music" && !selectedIds.has(track.id));
+    const completed = selected.length < 15
+      ? [...selected, ...select(broadFallback, 15 - selected.length)].slice(0, 15)
+      : selected;
+    const isSupplemented = completed.some(track => !categoryTracks.some(categoryTrack => categoryTrack.id === track.id));
+    return { category, tracks: completed, isSupplemented };
   }), [allMusic, followedArtists.data, shelfVariation, pageSeed, recentShelfHistory]);
 
   useEffect(() => {
@@ -123,7 +100,7 @@ const Index = () => {
     <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
       <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
         <span>{greeting}</span>
-        <img src={greetingImage} alt="" aria-hidden="true" className="size-10 shrink-0 object-contain" />
+        <img src={greetingImage} alt="" aria-hidden="true" fetchPriority="high" decoding="async" className="size-10 shrink-0 object-contain" />
       </h1>
 
       <section aria-labelledby="browse-genres-heading" className="space-y-3 text-center">
@@ -137,24 +114,26 @@ const Index = () => {
       </section>
 
       <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
-      <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading} />
-      <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading} excludeTrackIds={discoveryExcludedIds} excludeTrackUrls={discoveryExcludedUrls} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />
+      <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
+      <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />}</DeferredHomeSection>
 
-      <MusicNewsSection />
-      <FreshTracksCarousel tracks={fresh} isLoading={freshLoading || tracksLoading || wavlake.isLoading} />
-
-      <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense seeAllHref="/podcasts/episodes" />
+      <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home />}</DeferredHomeSection>
+      <DeferredHomeSection title="Fresh on Nostr">{near => <HomeFreshTracks candidates={tracks} enabled={near} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Podcasts" rootMargin="0px">{near => <HomePodcastsSection enabled={near} />}</DeferredHomeSection>
 
       {homeTracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">Couldn’t load music from your read relays. Genre shelves may be unavailable. <button type="button" className="font-semibold text-primary underline" onClick={() => void homeTracksQuery.refetch()}>Try again</button></div>}
       {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}
       {wavlake.isError && <p role="status" className="text-xs text-muted-foreground">Wavlake catalog results aren’t available right now; genre shelves use music from responding relays.</p>}
-      {categoryShelves.map(({ category, tracks: catTracks, isSupplemented }) => (
-        <Shelf key={category.id} title={category.label} tracks={catTracks} dense seeAllHref={`/category/${category.id}`} subtitle={isSupplemented ? "Fresh picks first, with a few recent tracks to round out this shelf" : undefined} />
+      {categoryShelves.map(({ category, tracks: categoryTracks, isSupplemented }) => (
+        <DeferredHomeSection key={category.id} title={category.label}>
+          <Shelf title={category.label} tracks={categoryTracks} dense seeAllHref={`/category/${category.id}`} subtitle={isSupplemented ? "Fresh picks first, with a few recent tracks to round out this shelf" : undefined} />
+        </DeferredHomeSection>
       ))}
 
-      {!tracksLoading && !wavlake.isLoading && allMusic.length === 0 && !podcastsLoading && (
-        <div className="border border-dashed border-border rounded-lg py-16 px-8 text-center">
-          <p className="text-muted-foreground max-w-sm mx-auto">
+      {discoveryEnabled && !tracksLoading && !wavlake.isLoading && allMusic.length === 0 && (
+        <div className="rounded-lg border border-dashed border-border px-8 py-16 text-center">
+          <p className="mx-auto max-w-sm text-muted-foreground">
             No audio found yet. Try again in a moment, or check your relay connections — music and
             podcasts load live from Nostr.
           </p>

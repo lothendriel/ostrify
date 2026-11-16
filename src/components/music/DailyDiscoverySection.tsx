@@ -23,20 +23,20 @@ function artistLabel(key: string): string {
   return key.replace(/^publisher:/, "Publisher ").slice(0, 32);
 }
 
-export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds = [], excludeTrackUrls = [], variation = 0, onRefresh }: { candidates: Track[]; isLoading: boolean; excludeTrackIds?: string[]; excludeTrackUrls?: string[]; variation?: number; onRefresh?: () => void }) {
+export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds = [], excludeTrackUrls = [], variation = 0, onRefresh, active = true }: { candidates: Track[]; isLoading: boolean; excludeTrackIds?: string[]; excludeTrackUrls?: string[]; variation?: number; onRefresh?: () => void; active?: boolean }) {
   const player = usePlayer();
-  const playlists = usePlaylists();
-  const followedArtists = useFollowedArtists();
-  const wavlake = useWavlakeCatalog();
+  const playlists = usePlaylists(active);
+  const followedArtists = useFollowedArtists(active);
+  const wavlake = useWavlakeCatalog(undefined, active);
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
-  const likedQuery = useTracksByIds(likedPlaylist?.trackIds);
+  const likedQuery = useTracksByIds(likedPlaylist?.trackIds, active);
   const liked = likedQuery.data?.tracks ?? [];
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const allCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
   const [feedback, setFeedback] = useState<DiscoveryFeedback>(readDiscoveryFeedback);
   const [date, setDate] = useState(() => new Date());
   const [dismissedToday, setDismissedToday] = useState<string[]>([]);
-  const pending = playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading;
+  const pending = active && (playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading);
 
   useEffect(() => {
     const refresh = () => setFeedback(readDiscoveryFeedback());

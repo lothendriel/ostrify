@@ -20,7 +20,7 @@ export const FOLLOWED_ARTISTS_ID = "ostrify-artists";
 const FOLLOW_SET_KIND = 30000;
 
 /** Fetch the pubkeys of artists the current user follows in Ostrify. */
-export function useFollowedArtists() {
+export function useFollowedArtists(enabled = true) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
@@ -50,7 +50,7 @@ export function useFollowedArtists() {
       }
       return current;
     },
-    enabled: !!user && !!readRelayKey,
+    enabled: enabled && !!user && !!readRelayKey,
   });
 }
 

@@ -369,7 +369,7 @@ export function GlobalSearch() {
             onClick={() => openSuggestion(suggestion)}
             className={cn('flex w-full min-w-0 items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary', activeIndex === index && 'bg-accent')}
           >
-            <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">{suggestion.image ? <img src={suggestion.image} alt="" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" />}</div>
+            <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">{suggestion.image ? <img src={suggestion.image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" />}</div>
             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{suggestion.title}</span><span className="block truncate text-xs text-muted-foreground">{suggestion.subtitle}</span></span>
             <span className="shrink-0 text-[11px] text-muted-foreground">{suggestion.kind}</span>
             </button>

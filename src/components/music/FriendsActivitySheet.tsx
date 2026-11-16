@@ -27,7 +27,7 @@ function FriendActivity({ pubkey, status, close }: { pubkey: string; status?: st
   const avatar = sanitizeUrl(data?.metadata?.picture);
   const listening = parseListeningStatus(status);
   return <article className="flex items-center gap-3 rounded-xl border border-border/70 bg-card p-2.5">
-    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">{avatar ? <img src={avatar} alt="" className="size-full object-cover" /> : name.slice(0, 1)}</div>
+    <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-secondary text-sm font-semibold">{avatar ? <img src={avatar} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : name.slice(0, 1)}</div>
     <div className="min-w-0 flex-1">
       <Link to={`/${nip19.npubEncode(pubkey)}`} onClick={close} className="block truncate text-sm font-semibold hover:underline">{name}</Link>
       <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">

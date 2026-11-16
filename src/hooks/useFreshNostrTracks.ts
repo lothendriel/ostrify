@@ -10,7 +10,7 @@ import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 const PER_KIND_LIMIT = 100;
 
 /** Query each configured read/write relay directly for the newest addressable music tracks. */
-export function useFreshNostrTracks() {
+export function useFreshNostrTracks(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -22,7 +22,7 @@ export function useFreshNostrTracks() {
 
   return useQuery({
     queryKey: ["fresh-nostr-tracks", relayKey, user?.pubkey ?? "public"],
-    enabled: true,
+    enabled,
     staleTime: 30_000,
     retry: false,
     queryFn: async ({ signal }) => {

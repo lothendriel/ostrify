@@ -15,16 +15,16 @@ import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 
-export function MadeForYouSection({ candidates, isLoading }: { candidates: Track[]; isLoading: boolean }) {
+export function MadeForYouSection({ candidates, isLoading, active = true }: { candidates: Track[]; isLoading: boolean; active?: boolean }) {
   const player = usePlayer();
   const [mixVariation, setMixVariation] = useState(0);
-  const playlists = usePlaylists();
-  const followedArtists = useFollowedArtists();
+  const playlists = usePlaylists(active);
+  const followedArtists = useFollowedArtists(active);
   const followedAuthorPubkeys = useMemo(() => (followedArtists.data ?? []).filter(reference => /^[0-9a-f]{64}$/i.test(reference)).slice(0, 25), [followedArtists.data]);
-  const followedTracks = useTracks({ limit: 20, authors: followedAuthorPubkeys, enabled: followedAuthorPubkeys.length > 0 });
-  const wavlake = useWavlakeCatalog();
+  const followedTracks = useTracks({ limit: 20, authors: followedAuthorPubkeys, enabled: active && followedAuthorPubkeys.length > 0 });
+  const wavlake = useWavlakeCatalog(undefined, active);
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
-  const likedTracks = useTracksByIds(likedPlaylist?.trackIds);
+  const likedTracks = useTracksByIds(likedPlaylist?.trackIds, active);
   const liked = likedTracks.data?.tracks ?? [];
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const mixCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
@@ -79,7 +79,7 @@ export function MadeForYouSection({ candidates, isLoading }: { candidates: Track
     return [{ track, progress: player.progress, duration: player.duration || track.duration }];
   }, [player.current, player.progress, player.duration]);
   const tasteCount = liked.length + player.history.filter(track => track.kind === "music").length + (followedArtists.data?.length ?? 0);
-  const isPersonalDataLoading = playlists.isLoading || likedTracks.isLoading || followedArtists.isLoading;
+  const isPersonalDataLoading = active && (playlists.isLoading || likedTracks.isLoading || followedArtists.isLoading);
   const catalogFailure = wavlake.isError && !wavlakeTracks.length;
 
   return (

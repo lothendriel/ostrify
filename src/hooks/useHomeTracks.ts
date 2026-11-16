@@ -18,7 +18,7 @@ interface HomeTracksResult {
 }
 
 /** Gather Home music independently from every read relay and retain partial results. */
-export function useHomeTracks() {
+export function useHomeTracks(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -27,7 +27,7 @@ export function useHomeTracks() {
 
   return useQuery({
     queryKey: ["home-tracks", relayKey, user?.pubkey ?? "public"],
-    enabled: true,
+    enabled,
     staleTime: 60_000,
     retry: false,
     queryFn: async ({ signal }): Promise<HomeTracksResult> => {

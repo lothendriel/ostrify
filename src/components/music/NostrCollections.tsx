@@ -22,7 +22,7 @@ function PublisherCard({ pubkey, podcast }: { pubkey: string; podcast: boolean }
   const image = sanitizeUrl(metadata?.picture);
   return <Link to={`/artist/${nip19.npubEncode(pubkey)}`} className="group rounded-lg bg-secondary/50 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary">
     <div className="aspect-square w-full rounded-full overflow-hidden bg-muted flex items-center justify-center mb-3">
-      {image ? <img src={image} alt="" loading="lazy" className="size-full object-cover" /> : <Music2 className="size-10 text-muted-foreground" />}
+      {image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Music2 className="size-10 text-muted-foreground" />}
     </div>
     <p className="font-semibold truncate">{name}</p><p className="text-sm text-muted-foreground">{podcast ? 'Show publisher' : 'Artist · Publisher'}</p>
   </Link>;
@@ -89,7 +89,7 @@ function AlbumCard({ track, count }: { track: Track; count: number }) {
 function WavlakeReleaseCard({ release }: { release: WavlakeRelease }) {
   return <Link to={`/wavlake/${release.type}/${release.id}`} className="group rounded-lg bg-secondary/50 p-3 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary">
     <div className={`aspect-square w-full overflow-hidden bg-muted flex items-center justify-center mb-3 ${release.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}>
-      {release.image ? <img src={release.image} alt="" loading="lazy" className="size-full object-cover" /> : <Music2 className="size-10 text-muted-foreground" />}
+      {release.image ? <img src={release.image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Music2 className="size-10 text-muted-foreground" />}
     </div>
     <p className="font-semibold truncate">{release.title}</p>
     <p className="text-sm text-muted-foreground truncate">{release.type === 'artist' ? 'Wavlake artist' : release.artist || 'Wavlake album'}</p>

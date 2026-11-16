@@ -17,6 +17,7 @@ export const MUSIC_NEWS_TAGS = [
 ];
 
 const PAGE_SIZE = 60;
+const HOME_PAGE_SIZE = 20;
 
 export function isMusicNewsEvent(event: NostrEvent): boolean {
   if (event.kind !== 1 && event.kind !== 30023) return false;
@@ -30,22 +31,23 @@ export function isMusicNewsEvent(event: NostrEvent): boolean {
   return focusedTopic || (broadMusicTag && editorialCue);
 }
 
-export function useMusicNews() {
+export function useMusicNews(enabled = true, home = false) {
   const { nostr } = useNostr();
   const query = useInfiniteQuery({
-    queryKey: ["music-news", MUSIC_NEWS_TAGS],
+    queryKey: ["music-news", MUSIC_NEWS_TAGS, home ? "home" : "full"],
     initialPageParam: undefined as number | undefined,
     staleTime: 5 * 60 * 1000,
+    enabled,
     queryFn: async ({ pageParam, signal }): Promise<NostrEvent[]> => {
       const events = await nostr.query(
-        [{ kinds: [1, 30023], "#t": MUSIC_NEWS_TAGS, limit: PAGE_SIZE, ...(pageParam !== undefined ? { until: pageParam } : {}) }],
+        [{ kinds: [1, 30023], "#t": MUSIC_NEWS_TAGS, limit: home ? HOME_PAGE_SIZE : PAGE_SIZE, ...(pageParam !== undefined ? { until: pageParam } : {}) }],
         { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) },
       );
       return [...new Map(events.map((event) => [event.id, event])).values()]
         .sort((a, b) => b.created_at - a.created_at);
     },
     getNextPageParam: (lastPage) => {
-      if (lastPage.length < PAGE_SIZE) return undefined;
+      if (lastPage.length < (home ? HOME_PAGE_SIZE : PAGE_SIZE)) return undefined;
       const oldest = Math.min(...lastPage.map((event) => event.created_at));
       return oldest - 1;
     },

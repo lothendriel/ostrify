@@ -81,7 +81,7 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
 }
 
 /** Fetch all of the current user's playlists (kind 30003 bookmark sets). */
-export function usePlaylists() {
+export function usePlaylists(enabled = true) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
@@ -91,6 +91,7 @@ export function usePlaylists() {
 
   return useQuery<Playlist[]>({
     queryKey,
+    enabled: enabled && !!user && !!readRelayKey,
     select: (playlists: Playlist[]) => {
       if (!user) return playlists;
       const tombstones = readPlaylistDeletionTombstones(user.pubkey);
@@ -182,7 +183,6 @@ export function usePlaylists() {
       });
       return finalPlaylists;
     },
-    enabled: !!user && !!readRelayKey,
   });
 }
 
