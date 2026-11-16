@@ -119,7 +119,7 @@ For event kinds, tags, and Ostrify-specific conventions, see **[NIP.md](NIP.md)*
 
 ## Links
 
-- **Open the app:** [ostrify.shakespeare.wtf](https://ostrify.shakespeare.wtf)
+- **Open the app:** [ostrify.studio314.us](https://ostrify.studio314.us/)
 - **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 - **Nostr event formats:** [NIP.md](NIP.md)
 - **Edit with Shakespeare:** [Open this project in Shakespeare](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2Flothendriel%2Fostrify.git)
