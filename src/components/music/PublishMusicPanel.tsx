@@ -110,6 +110,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       await publish.mutateAsync({ kind: 36787, content: "", tags });
       await queryClient.invalidateQueries({ queryKey: ["artist-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["tracks"] });
+      await queryClient.invalidateQueries({ queryKey: ["fresh-nostr-tracks"] });
       setTrackTitle(""); setTrackUrl(""); setTrackFile(undefined); setTrackImage(undefined); setTrackGenre("");
       setMessage({ text: "Track published to your configured write relays.", error: false });
     } catch (error) {
@@ -178,6 +179,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       }
       await queryClient.invalidateQueries({ queryKey: ["artist-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["tracks"] });
+      await queryClient.invalidateQueries({ queryKey: ["fresh-nostr-tracks"] });
       if (failures.length) {
         setMessage({ text: `${successful} of ${albumTracks.length} tracks published. Failed tracks remain in the form for retry: ${failures.join("; ")}`, error: true });
         setAlbumTracks(current => current.filter(track => failedIds.has(track.id)));

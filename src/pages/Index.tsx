@@ -3,6 +3,7 @@ import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { useTracks } from "@/hooks/useTracks";
+import { useFreshNostrTracks } from "@/hooks/useFreshNostrTracks";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -33,6 +34,7 @@ const Index = () => {
   });
 
   const { data: tracks = [], isLoading: tracksLoading } = useTracks({ limit: 300 });
+  const { data: newestNostrTracks = [], isLoading: freshLoading } = useFreshNostrTracks();
   const { data: podcasts = [], isLoading: podcastsLoading } = usePodcastEpisodes(40);
   const player = usePlayer();
   const wavlake = useWavlakeCatalog();
@@ -45,10 +47,14 @@ const Index = () => {
   const [shelfVariation, setShelfVariation] = useState(0);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
-  const fresh = useMemo(() => nostrTracks
-    .filter(track => track.kind === "music" && !!track.event)
-    .sort((left, right) => right.createdAt - left.createdAt)
-    .slice(0, 15), [nostrTracks]);
+  const fresh = useMemo(() => {
+    const byUrl = new Map<string, (typeof newestNostrTracks)[number]>();
+    for (const track of [...newestNostrTracks, ...nostrTracks.filter(candidate => candidate.kind === "music" && !!candidate.event)]) {
+      const existing = byUrl.get(track.url);
+      if (!existing || track.createdAt > existing.createdAt) byUrl.set(track.url, track);
+    }
+    return [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, 15);
+  }, [newestNostrTracks, nostrTracks]);
   const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.id))], [player.history, likedTracks, fresh]);
   const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.url))], [player.history, likedTracks, fresh]);
   const shuffledPodcasts = useMemo(() => {
@@ -115,7 +121,7 @@ const Index = () => {
       <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading} excludeTrackIds={discoveryExcludedIds} excludeTrackUrls={discoveryExcludedUrls} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />
 
       <MusicNewsSection />
-      <FreshTracksCarousel tracks={fresh} isLoading={tracksLoading || wavlake.isLoading} />
+      <FreshTracksCarousel tracks={fresh} isLoading={freshLoading || tracksLoading || wavlake.isLoading} />
 
       <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense seeAllHref="/podcasts/episodes" />
 
