@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
@@ -17,6 +17,7 @@ import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection"
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { CATEGORIES, tracksInCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
+import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
 
 function shuffled<T>(items: readonly T[]): T[] {
   const result = [...items];
@@ -48,6 +49,7 @@ const Index = () => {
   const likedTracks = likedTracksQuery.data?.tracks ?? [];
   const [pageSeed] = useState(() => crypto.randomUUID());
   const [shelfVariation, setShelfVariation] = useState(0);
+  const [recentShelfHistory] = useState(readHomeShelfHistory);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
   const fresh = useMemo(() => {
@@ -73,20 +75,36 @@ const Index = () => {
   }, [podcasts]);
   const categoryShelves = useMemo(() => CATEGORIES.map(category => {
       const categoryTracks = tracksInCategory(allMusic, category.id);
-      const selected = buildVariedHomeShelf({
-        candidates: categoryTracks,
+      const recentlyShown = new Set(recentShelfHistory[category.id] ?? []);
+      const alternateTracks = categoryTracks.filter(track => !recentlyShown.has(track.id));
+      const select = (candidates: typeof categoryTracks) => buildVariedHomeShelf({
+        candidates,
         // Category carousels may repeat tracks across shelves and include liked or heard music;
         // repeating relevant matches is better than hiding a genre shelf entirely.
         history: [],
         liked: [],
         followedArtists: followedArtists.data ?? [],
-        limit: categoryTracks.length,
+        limit: 15,
         variation: shelfVariation,
         seed: pageSeed,
         familiarSlots: 1,
       });
+      const preferred = select(alternateTracks);
+      const selected = preferred.length >= Math.min(6, categoryTracks.length) || alternateTracks.length === 0
+        ? preferred
+        : [...preferred, ...select(categoryTracks.filter(track => recentlyShown.has(track.id) && !preferred.some(item => item.id === track.id)))].slice(0, 15);
       return { category, tracks: selected };
-  }), [allMusic, followedArtists.data, shelfVariation, pageSeed]);
+  }), [allMusic, followedArtists.data, shelfVariation, pageSeed, recentShelfHistory]);
+
+  useEffect(() => {
+    if (!homeTracksQuery.data && !wavlake.data) return;
+    const nextHistory = { ...recentShelfHistory };
+    for (const { category, tracks: categoryTracks } of categoryShelves) {
+      if (!categoryTracks.length) continue;
+      nextHistory[category.id] = [...new Set([...categoryTracks.map(track => track.id), ...(recentShelfHistory[category.id] ?? [])])].slice(0, 45);
+    }
+    writeHomeShelfHistory(nextHistory);
+  }, [categoryShelves, homeTracksQuery.data, wavlake.data, recentShelfHistory]);
 
   const { greeting, greetingImage } = (() => {
     const hour = new Date().getHours();
