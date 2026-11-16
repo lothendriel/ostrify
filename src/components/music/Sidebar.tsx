@@ -22,7 +22,7 @@ import { useSavedAlbums } from '@/hooks/useSavedAlbums';
 import { useWavlakeRelease } from '@/hooks/useWavlake';
 import { groupIntoAlbums, useArtistTracks } from '@/hooks/useArtistTracks';
 import type { SavedAlbum } from '@/lib/savedAlbums';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
@@ -41,6 +41,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const podcastFavorites = usePodcastFavorites();
   const savedAlbums = useSavedAlbums();
   const [createOpen, setCreateOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const savedBookIds = new Set([
     ...audiobookLibrary.favoriteBooks.map(book => book.id),
     ...audiobookLibrary.collections.flatMap(collection => collection.audiobookIds),
@@ -58,32 +59,36 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <span className="font-bold text-xl tracking-tight">Ostrify</span>
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" className="group mx-2 flex h-11 justify-between rounded-lg bg-card px-4 text-sm font-semibold text-foreground hover:bg-accent/50" aria-label="Open navigation menu">
+      <Collapsible open={menuOpen} onOpenChange={setMenuOpen} className="mx-2 shrink-0 rounded-lg bg-card">
+        <CollapsibleTrigger asChild>
+          <Button type="button" variant="ghost" className="group flex h-11 w-full justify-between px-4 text-sm font-semibold text-foreground hover:bg-accent/50" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}>
             <span>Menu</span>
-            <ChevronDown className="size-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            <ChevronDown className={cn("size-4 text-muted-foreground transition-transform duration-200", menuOpen && "rotate-180")} />
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" side="bottom" className="mx-2 w-60 p-2">
-          {navItems.map(({ to, label, icon: Icon, end }) => (
-            <DropdownMenuItem key={to} asChild className="cursor-pointer p-0 focus:bg-accent">
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down">
+          <div className="space-y-0.5 px-2 pb-2">
+            {navItems.map(({ to, label, icon: Icon, end }) => (
               <NavLink
+                key={to}
                 to={to}
                 end={end}
-                onClick={onNavigate}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onNavigate?.();
+                }}
                 className={({ isActive }) => cn(
-                  "flex w-full items-center gap-4 rounded-sm px-3 py-2.5 font-semibold text-sm transition-colors",
-                  isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                  "flex w-full items-center gap-4 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive ? "bg-accent/15 text-foreground" : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
                 )}
               >
                 <Icon className="size-5" />
                 {label}
               </NavLink>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            ))}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       <div className="bg-card rounded-lg mx-2 flex-1 min-h-0 flex flex-col">
         <div className="flex items-center justify-between px-4 py-3">
