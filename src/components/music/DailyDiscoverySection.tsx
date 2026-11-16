@@ -10,6 +10,7 @@ import type { Track } from "@/lib/music";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackCard } from "./TrackCard";
+import { HorizontalCarousel } from "@/components/music/HorizontalCarousel";
 
 function todayKey(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
@@ -64,11 +65,11 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
     followedArtists: followedArtists.data ?? [],
     feedback,
     date,
-    limit: 12 + dismissedToday.length,
+    limit: 10 + dismissedToday.length,
     variation,
     excludeTrackIds,
     excludeTrackUrls,
-  }).filter(item => !dismissedToday.includes(item.track.id)).slice(0, 12), [allCandidates, liked, player.history, followedArtists.data, feedback, todayKey(date), dismissedToday, variation, excludeTrackIds.join('|'), excludeTrackUrls.join('|')]);
+  }).filter(item => !dismissedToday.includes(item.track.id)).slice(0, 10), [allCandidates, liked, player.history, followedArtists.data, feedback, todayKey(date), dismissedToday, variation, excludeTrackIds.join('|'), excludeTrackUrls.join('|')]);
   const blockedTracks = useMemo(() => {
     const candidatesByArtist = new Map<string, { track: Track; keys: string[] }>();
     for (const track of allCandidates) {
@@ -95,13 +96,13 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
       </header>
 
       {pending || (isLoading && !allCandidates.length) ? (
-        <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]" aria-label="Loading daily discoveries">
-          {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
-        </div>
+        <HorizontalCarousel label="Loading daily discoveries">
+          {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 snap-start space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
+        </HorizontalCarousel>
       ) : discoveries.length ? (
-        <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]">
+        <HorizontalCarousel label="Daily discoveries">
           {discoveries.map(({ track, reason }) => (
-            <article key={track.id} className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border/50 bg-card/60 p-1.5">
+            <article key={track.id} className="min-w-0 snap-start max-w-full overflow-hidden rounded-lg border border-border/50 bg-card/60 p-1.5">
               <TrackCard track={track} showLikeAction showPlaylistAction compact />
               <p className="px-2 pb-1 text-[11px] leading-tight text-emerald-200/80">{reason}</p>
               <div className="grid grid-cols-1 gap-0.5 px-1 pb-1">
@@ -117,7 +118,7 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
               </div>
             </article>
           ))}
-        </div>
+        </HorizontalCarousel>
       ) : (
         <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
           <Sparkles className="mx-auto size-8 text-muted-foreground" />

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { TrackCard } from "./TrackCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HorizontalCarousel } from "@/components/music/HorizontalCarousel";
 
 interface ShelfProps {
   title: string;
@@ -30,17 +31,21 @@ export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compa
           </Link>
         )}
       </div>
-      <div className={`grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 ${compactCards ? 'sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]' : `sm:grid-cols-[repeat(3,minmax(0,1fr))] ${dense ? 'lg:grid-cols-[repeat(4,minmax(0,1fr))] 2xl:grid-cols-[repeat(6,minmax(0,1fr))]' : 'lg:grid-cols-[repeat(3,minmax(0,1fr))] 2xl:grid-cols-[repeat(5,minmax(0,1fr))]'}`}`}>
+      <HorizontalCarousel label={`${title} tracks`}>
         {isLoading
-          ? Array.from({ length: compactCards ? 6 : 5 }).map((_, i) => (
-              <div key={i} className="p-3 space-y-3">
-                <Skeleton className="w-full aspect-square rounded-md" />
+          ? Array.from({ length: 8 }, (_, index) => (
+              <div key={index} className="min-w-0 snap-start space-y-3 p-2 sm:p-3">
+                <Skeleton className="aspect-square w-full rounded-md" />
                 <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
             ))
-          : tracks.map((track) => <TrackCard key={track.id} track={track} compact={compactCards} />)}
-      </div>
+          : tracks.slice(0, seeAllHref?.startsWith("/category/") ? 15 : undefined).map(track => (
+              <div key={track.id} className="min-w-0 snap-start">
+                <TrackCard track={track} compact={compactCards || dense} />
+              </div>
+            ))}
+      </HorizontalCarousel>
     </section>
   );
 }

@@ -47,9 +47,10 @@ const Index = () => {
   const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
   const fresh = useMemo(() => nostrTracks
     .filter(track => track.kind === "music" && !!track.event)
-    .sort((left, right) => right.createdAt - left.createdAt), [nostrTracks]);
-  const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...nostrTracks.slice(0, 10)].map(track => track.id))], [player.history, likedTracks, nostrTracks]);
-  const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...nostrTracks.slice(0, 10)].map(track => track.url))], [player.history, likedTracks, nostrTracks]);
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 15), [nostrTracks]);
+  const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.id))], [player.history, likedTracks, fresh]);
+  const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.url))], [player.history, likedTracks, fresh]);
   const shuffledPodcasts = useMemo(() => {
     const nostrPodcasts = podcasts.filter(track => track.source !== "fountain");
     const fountainPodcasts = podcasts.filter(track => track.source === "fountain");
@@ -71,7 +72,7 @@ const Index = () => {
         history: player.history,
         liked: likedTracks,
         followedArtists: followedArtists.data ?? [],
-        limit: 10,
+        limit: 15,
         variation: shelfVariation,
         familiarSlots: 1,
         excludeIds: [...usedIds],
