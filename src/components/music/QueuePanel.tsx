@@ -27,7 +27,7 @@ export function QueuePanel({ open, onClose }: { open: boolean; onClose: () => vo
   const draggingIndexRef = useRef<number | null>(null);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [queueFilter, setQueueFilter] = useState<'all' | 'music' | 'spoken'>('all');
-  const regularPlaylists = (playlists ?? []).filter(playlist => !playlist.isLiked);
+  const regularPlaylists = (playlists ?? []).filter(playlist => !playlist.isLiked && !playlist.isTunestrFavorites);
   const queueTrackIds = player.queue.map(track => track.id);
   const uniqueQueueTrackIds = [...new Set(queueTrackIds)];
   const supportedTrackIds = uniqueQueueTrackIds.filter(isSupportedPlaylistTrackId);

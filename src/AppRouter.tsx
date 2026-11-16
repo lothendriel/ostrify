@@ -14,6 +14,7 @@ import CategoryPage from "./pages/CategoryPage";
 import PlaylistPage from "./pages/PlaylistPage";
 import PublicMusicPlaylistPage from "./pages/PublicMusicPlaylistPage";
 import LikedSongs from "./pages/LikedSongs";
+import TunestrLibraryPage from "./pages/TunestrLibraryPage";
 import SettingsPage from "./pages/SettingsPage";
 import PodcastsPage, { CombinedPodcastEpisodesPage, FountainBrowsePage, PodcastBrowsePage } from "./pages/PodcastsPage";
 import FountainShowPage from "./pages/FountainShowPage";
@@ -54,6 +55,7 @@ export function AppRouter() {
                   <Route path="/playlist/:id" element={<PlaylistPage />} />
                   <Route path="/ostrify-playlist/:pubkey" element={<PublicMusicPlaylistPage />} />
                   <Route path="/liked" element={<LikedSongs />} />
+                  <Route path="/tunestr-library" element={<TunestrLibraryPage />} />
                   <Route path="/podcasts" element={<PodcastsPage />} />
                   <Route path="/podcasts/episodes" element={<CombinedPodcastEpisodesPage />} />
                   <Route path="/podcasts/fountain/shows" element={<FountainBrowsePage type="shows" />} />

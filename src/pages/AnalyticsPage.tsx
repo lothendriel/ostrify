@@ -91,7 +91,7 @@ export default function AnalyticsPage() {
   const libraryCounts = useMemo(() => {
     const all = playlists.data ?? [];
     const liked = all.find(playlist => playlist.isLiked)?.trackIds.length ?? 0;
-    return { liked, playlists: all.filter(playlist => !playlist.isLiked).length };
+    return { liked, playlists: all.filter(playlist => !playlist.isLiked && !playlist.isTunestrFavorites).length, tunestr: all.find(playlist => playlist.isTunestrFavorites)?.trackIds.length ?? 0 };
   }, [playlists.data]);
   const savedShows = podcastFavorites.data.filter(item => !item.episode).length;
   const savedEpisodes = podcastFavorites.data.filter(item => item.episode).length;

@@ -184,7 +184,7 @@ const PlaylistPage = () => {
             </Select>
           </div>
           {(filter.trim() || sort !== "original") && <p className="text-xs text-muted-foreground">View only · saved playlist order is unchanged.</p>}
-          {sort === "original" && !filter.trim() && playlist && !playlist.isLiked && <p className="text-xs text-muted-foreground">Drag rows or use the up/down controls to save a new playlist order.</p>}
+          {sort === "original" && !filter.trim() && playlist && !playlist.isLiked && !playlist.isTunestrFavorites && <p className="text-xs text-muted-foreground">Drag rows or use the up/down controls to save a new playlist order.</p>}
         </div>}
         {!!data?.unavailable && <p role="status" className="mb-4 text-sm text-muted-foreground">{data.unavailable} saved track(s) could not be loaded right now. They remain in your playlist. <button type="button" className="text-primary underline disabled:opacity-50" disabled={isFetching} onClick={() => void refetch()}>{isFetching ? 'Retrying…' : 'Try again'}</button></p>}
         {filter.trim() && visibleTracks.length === 0 && !isLoading
@@ -196,7 +196,7 @@ const PlaylistPage = () => {
               tracks={visibleTracks}
               isLoading={isLoading}
               onRemove={handleRemove}
-              onReorder={sort === "original" && !filter.trim() && playlist && !playlist.isLiked ? handleReorder : undefined}
+              onReorder={sort === "original" && !filter.trim() && playlist && !playlist.isLiked && !playlist.isTunestrFavorites ? handleReorder : undefined}
               emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "This playlist is empty. Add songs from anywhere using the + menu."}
             />}
       </div>

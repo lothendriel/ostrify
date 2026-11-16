@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3 } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3, Video } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
@@ -14,6 +14,9 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LIKED_SONGS_ID, usePlaylists, type Playlist } from "@/hooks/usePlaylists";
+import { TUNESTR_FAVORITES_IDENTIFIER } from '@/lib/musicPlaylists';
+import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
+import { parseN94Stream, parseTunestrStreamEvent } from '@/hooks/useTunestrStreams';
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 import { useSavedAlbums } from '@/hooks/useSavedAlbums';
 import { useWavlakeRelease } from '@/hooks/useWavlake';
@@ -45,7 +48,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const savedAudiobooks = audiobookLibrary.savedBooks.filter(book => savedBookIds.has(book.id));
   const liked = playlists?.find((p) => p.isLiked);
   const likedPlaylist = liked ?? { id: LIKED_SONGS_ID, title: "Liked Songs", trackIds: [] };
-  const regular = (playlists ?? []).filter((p) => !p.isLiked);
+  const tunestrFavorites = playlists?.find(playlist => playlist.isTunestrFavorites) ?? { id: TUNESTR_FAVORITES_IDENTIFIER, title: 'TuneStr Recordings', trackIds: [] };
+  const regular = (playlists ?? []).filter((p) => !p.isLiked && !p.isTunestrFavorites);
 
   return (
     <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
@@ -98,6 +102,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
               </NavLink>
               <PlaylistLibraryItem playlist={likedPlaylist} liked onNavigate={onNavigate} />
+              <TunestrLibraryItem playlist={tunestrFavorites} onNavigate={onNavigate} />
               <SavedAlbumsLibraryItem albums={savedAlbums.albums} onNavigate={onNavigate} />
               <AudiobookLibraryItem books={savedAudiobooks} favoriteCount={audiobookLibrary.favoriteBooks.length} collectionCount={audiobookLibrary.collections.length} onNavigate={onNavigate} />
               <PodcastLibraryItem favorites={podcastFavorites.data} onNavigate={onNavigate} />
@@ -157,6 +162,46 @@ function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist
     <NavLink to={liked ? "/liked" : `/playlist/${playlist.id}`} onClick={onNavigate} className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}>
       <div className="truncate text-sm font-medium">{playlist.title}</div>
       <div className="text-xs text-muted-foreground">{playlist.trackIds.length} songs</div>
+    </NavLink>
+  </div>;
+}
+
+function TunestrLibraryItem({ playlist, onNavigate }: { playlist: Pick<Playlist, 'trackIds'>; onNavigate?: () => void }) {
+  const location = useLocation();
+  const player = usePlayer();
+  const { toast } = useToast();
+  const { openStream } = useTunestrPlayer();
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const tracksQuery = useTracksByIds(playlist.trackIds, location.pathname === '/tunestr-library' || shouldLoad);
+  const tracks = tracksQuery.data?.tracks ?? [];
+  const streams = tracks.flatMap(track => {
+    if (!track.event) return [];
+    const stream = track.event.kind === 1053 ? parseN94Stream(track.event) : parseTunestrStreamEvent(track.event);
+    return stream ? [stream] : [];
+  });
+  const isPlayingHere = !!streams.length && player.current?.id === streams[0]?.track.id && player.isPlaying;
+
+  useEffect(() => {
+    if (!shouldLoad || tracksQuery.isLoading) return;
+    setShouldLoad(false);
+    const stream = streams[0];
+    if (stream) openStream(stream);
+    else toast({ title: 'No saved TuneStr recordings', description: 'The recordings may be unavailable from your current relays.' });
+  }, [openStream, shouldLoad, streams, toast, tracksQuery.isLoading]);
+
+  const handlePlay = () => {
+    if (streams.length) openStream(streams[0]!);
+    else if (playlist.trackIds.length) setShouldLoad(true);
+    else toast({ title: 'No saved TuneStr recordings', description: 'Save a TuneStr recording first.' });
+  };
+
+  return <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+    <Button type="button" variant="ghost" size="icon" className="group relative size-11 shrink-0 rounded-md bg-gradient-to-br from-rose-500 to-violet-700 text-white hover:text-white" onClick={handlePlay} disabled={shouldLoad && tracksQuery.isLoading} aria-label={isPlayingHere ? 'Pause TuneStr Recordings' : 'Play TuneStr Recordings'} title="Play TuneStr Recordings">
+      {isPlayingHere ? <Pause className="size-5 fill-current" /> : <><Video className="size-5 group-hover:hidden" /><Play className="absolute hidden size-5 fill-current group-hover:block" /></>}
+    </Button>
+    <NavLink to="/tunestr-library" onClick={onNavigate} className={({ isActive }) => cn('min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')}>
+      <div className="truncate text-sm font-medium">TuneStr Recordings</div>
+      <div className="text-xs text-muted-foreground">{playlist.trackIds.length} saved</div>
     </NavLink>
   </div>;
 }

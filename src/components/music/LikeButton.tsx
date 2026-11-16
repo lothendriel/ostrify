@@ -2,18 +2,22 @@ import { Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useIsLiked, usePlaylistActions } from "@/hooks/usePlaylists";
+import { LIKED_SONGS_ID, useIsLiked, usePlaylistActions } from "@/hooks/usePlaylists";
+import { TUNESTR_FAVORITES_IDENTIFIER } from "@/lib/musicPlaylists";
 import { useToast } from "@/hooks/useToast";
 
 interface LikeButtonProps {
   trackId: string;
   className?: string;
   size?: number;
+  collection?: 'songs' | 'tunestr';
 }
 
-export function LikeButton({ trackId, className, size = 18 }: LikeButtonProps) {
+export function LikeButton({ trackId, className, size = 18, collection }: LikeButtonProps) {
   const { user } = useCurrentUser();
-  const liked = useIsLiked(trackId);
+  const playlistId = collection === 'tunestr' || trackId.startsWith('30311:') ? TUNESTR_FAVORITES_IDENTIFIER : LIKED_SONGS_ID;
+  const collectionTitle = playlistId === TUNESTR_FAVORITES_IDENTIFIER ? 'TuneStr Recordings' : 'Liked Songs';
+  const liked = useIsLiked(trackId, playlistId);
   const { toggleLike } = usePlaylistActions();
   const { toast } = useToast();
 
@@ -23,7 +27,7 @@ export function LikeButton({ trackId, className, size = 18 }: LikeButtonProps) {
       toast({ title: "Log in to like tracks", variant: "destructive" });
       return;
     }
-    toggleLike.mutate({ trackId, liked: !liked }, { onError: () => toast({ title: 'Could not save your like', description: 'Please check your relay connections and try again.', variant: 'destructive' }) });
+    toggleLike.mutate({ trackId, liked: !liked, playlistId, title: collectionTitle }, { onSuccess: () => toast({ title: liked ? `Removed from ${collectionTitle}` : `Added to ${collectionTitle}` }), onError: () => toast({ title: 'Could not save your like', description: 'Please check your relay connections and try again.', variant: 'destructive' }) });
   };
 
   return (
@@ -33,7 +37,7 @@ export function LikeButton({ trackId, className, size = 18 }: LikeButtonProps) {
       size="icon"
       onClick={handleClick}
       disabled={toggleLike.isPending}
-      aria-label={liked ? "Remove from Liked Songs" : "Add to Liked Songs"}
+      aria-label={liked ? `Remove from ${collectionTitle}` : `Add to ${collectionTitle}`}
       aria-pressed={liked}
       className={cn(
         "rounded-full hover:scale-110 transition-transform",

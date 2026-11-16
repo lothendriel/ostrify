@@ -27,7 +27,7 @@ export function AddToPlaylistMenu({ trackId, trigger, onCreateNew }: AddToPlayli
 
   if (!user) return null;
 
-  const regular = (playlists ?? []).filter((p) => !p.isLiked);
+  const regular = (playlists ?? []).filter((p) => !p.isLiked && !p.isTunestrFavorites);
 
   return (
     <DropdownMenu>

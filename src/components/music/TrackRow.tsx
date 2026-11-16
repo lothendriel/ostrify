@@ -97,7 +97,7 @@ export function TrackRow({ track, index, selectable = false, selected = false, o
           <button type="button" onClick={event => { event.stopPropagation(); onMoveDown?.(); }} disabled={!onMoveDown} className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${track.title} down`}><ChevronDown className="size-4" /></button>
         </div>}
         <div className="flex items-center">
-          {track.source !== 'librivox' && track.source !== 'tunestr' && <LikeButton trackId={track.id} />}
+          {track.source !== 'librivox' && <LikeButton trackId={track.id} collection={track.source === 'tunestr' ? 'tunestr' : undefined} />}
           <div className="flex items-center sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
             {track.source !== 'librivox' && track.source !== 'tunestr' && <AddToPlaylistMenu trackId={track.id} onCreateNew={onCreatePlaylist} />}
             {track.source !== 'tunestr' && <QueueActionsMenu track={track} />}

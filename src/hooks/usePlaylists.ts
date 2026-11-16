@@ -6,7 +6,7 @@ import { useAppContext } from "./useAppContext";
 import { useNostrPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTrackUrl } from "./usePodcasts";
-import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
+import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, TUNESTR_FAVORITES_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { useToast } from './useToast';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, rememberPlaylistVisibility, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
@@ -52,6 +52,7 @@ export interface Playlist {
   trackIds: string[];
   event: NostrEvent;
   isLiked: boolean;
+  isTunestrFavorites: boolean;
   /** Whether this playlist appears in Ostrify's public playlist discovery. */
   isListed: boolean;
 }
@@ -66,7 +67,7 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
     image: event.tags.find(([n]) => n === "image")?.[1],
     trackIds: event.tags.flatMap(([name, value]) => {
       if (name === "e" && value) return [value];
-      if (name === "a" && value && /^(31337|36787|32123|30440):[0-9a-f]{64}:.+$/i.test(value)) return [value];
+      if (name === "a" && value && /^(31337|36787|32123|30440|30311):[0-9a-f]{64}:.+$/i.test(value)) return [value];
       const wavlake = name === "i" && value ? wavlakeTrackId(value) : undefined;
       const fountain = name === "i" && value ? fountainTrackId(value) : undefined;
       const podcastIndex = name === "i" && value ? podcastIndexTrackId(value) : undefined;
@@ -74,7 +75,8 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
     }),
     event,
     isLiked: d === LIKED_SONGS_ID,
-    isListed: d !== LIKED_SONGS_ID && !event.tags.some(([name, value]) => name === PLAYLIST_VISIBILITY_TAG && value === 'private'),
+    isTunestrFavorites: d === TUNESTR_FAVORITES_IDENTIFIER,
+    isListed: d !== LIKED_SONGS_ID && d !== TUNESTR_FAVORITES_IDENTIFIER && !event.tags.some(([name, value]) => name === PLAYLIST_VISIBILITY_TAG && value === 'private'),
   };
 }
 
@@ -170,10 +172,12 @@ export function usePlaylists() {
         }
       }
       const finalPlaylists = [...visiblePlaylists.values()];
-      // Liked songs first, then newest.
+      // Keep the built-in collections at the top, then show newest playlists.
       finalPlaylists.sort((a, b) => {
         if (a.isLiked) return -1;
         if (b.isLiked) return 1;
+        if (a.isTunestrFavorites) return -1;
+        if (b.isTunestrFavorites) return 1;
         return b.event.created_at - a.event.created_at;
       });
       return finalPlaylists;
@@ -193,7 +197,7 @@ export function usePlaylist(id: string | undefined) {
 
 export function isSupportedPlaylistTrackId(id: string): boolean {
   return /^[0-9a-f]{64}$/i.test(id) ||
-    /^(31337|36787|32123|30440):[0-9a-f]{64}:.+$/i.test(id) ||
+    /^(31337|36787|32123|30440|30311):[0-9a-f]{64}:.+$/i.test(id) ||
     !!wavlakeTrackUrl(id) || !!fountainTrackUrl(id) || !!podcastIndexTrackUrl(id);
 }
 
@@ -202,7 +206,7 @@ function buildPlaylistEvent(
 ): { kind: number; content: string; tags: string[][] } {
   const existing = playlist.event;
   const tags: string[][] = existing ? existing.tags.filter(([name, value]) =>
-    !['d', 'title', 'description', 'image', PLAYLIST_VISIBILITY_TAG].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && (!!wavlakeTrackId(value) || !!fountainTrackId(value) || !!podcastIndexTrackId(value))) && !(name === 'a' && !!value && /^(31337|36787|32123|30440):[0-9a-f]{64}:.+$/i.test(value))
+    !['d', 'title', 'description', 'image', PLAYLIST_VISIBILITY_TAG].includes(name) && !(name === 'e' && !!value) && !(name === 'i' && !!value && (!!wavlakeTrackId(value) || !!fountainTrackId(value) || !!podcastIndexTrackId(value))) && !(name === 'a' && !!value && /^(31337|36787|32123|30440|30311):[0-9a-f]{64}:.+$/i.test(value))
   ).map((tag) => [...tag]) : [];
   tags.unshift(["d", playlist.id], ["title", playlist.title]);
   if (!tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
@@ -211,7 +215,7 @@ function buildPlaylistEvent(
   if (playlist.image) tags.push(["image", playlist.image]);
   for (const id of playlist.trackIds) {
     const url = wavlakeTrackUrl(id) ?? fountainTrackUrl(id) ?? podcastIndexTrackUrl(id);
-    const address = /^(31337|36787|32123|30440):([0-9a-f]{64}):(.+)$/i.exec(id);
+    const address = /^(31337|36787|32123|30440|30311):([0-9a-f]{64}):(.+)$/i.exec(id);
     const previous = existing?.tags.find(([name, value]) => url
       ? name === 'i' && value === url
       : address
@@ -416,8 +420,10 @@ export function usePlaylistActions() {
   });
 
   const toggleLike = useMutation({
-    mutationFn: async (input: { trackId: string; liked: boolean }) => {
-      const existing = await fetchExisting(LIKED_SONGS_ID);
+    mutationFn: async (input: { trackId: string; liked: boolean; playlistId?: string; title?: string }) => {
+      const playlistId = input.playlistId ?? LIKED_SONGS_ID;
+      const title = input.title ?? (playlistId === TUNESTR_FAVORITES_IDENTIFIER ? 'TuneStr Recordings' : 'Liked Songs');
+      const existing = await fetchExisting(playlistId);
       const trackIds = existing?.trackIds ?? [];
       const has = trackIds.includes(input.trackId);
       let next = trackIds;
@@ -428,13 +434,13 @@ export function usePlaylistActions() {
         (() => {
           const event = buildPlaylistEvent({
             event: existing?.event,
-            id: LIKED_SONGS_ID,
-            title: "Liked Songs",
-            description: existing?.description ?? "Your favorite tracks on Nostr",
+            id: playlistId,
+            title,
+            description: existing?.description ?? (playlistId === TUNESTR_FAVORITES_IDENTIFIER ? 'Your saved TuneStr recordings' : 'Your favorite tracks on Nostr'),
             trackIds: next,
             isListed: false,
           });
-          event.tags = event.tags.filter(([name, value]) => name !== 't' || value !== MUSIC_PLAYLIST_TOPIC);
+          if (playlistId === LIKED_SONGS_ID) event.tags = event.tags.filter(([name, value]) => name !== 't' || value !== MUSIC_PLAYLIST_TOPIC);
           return event;
         })(),
         existing?.event.created_at ?? 0,
@@ -456,8 +462,8 @@ export function usePlaylistActions() {
 }
 
 /** Convenience hook: is a given track in the user's Liked Songs? */
-export function useIsLiked(trackId: string): boolean {
+export function useIsLiked(trackId: string, playlistId = LIKED_SONGS_ID): boolean {
   const { data: playlists } = usePlaylists();
-  const liked = playlists?.find((p) => p.isLiked);
-  return !!liked?.trackIds.includes(trackId);
+  const playlist = playlists?.find((item) => item.id === playlistId);
+  return !!playlist?.trackIds.includes(trackId);
 }

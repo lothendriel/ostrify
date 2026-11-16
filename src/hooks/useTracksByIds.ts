@@ -1,6 +1,7 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, type Track } from "@/lib/music";
+import { parseN94Stream, parseTunestrStreamEvent } from "@/hooks/useTunestrStreams";
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
 import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
 
@@ -15,7 +16,9 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true) {
       if (!ids?.length) return { tracks: [] as Track[], unavailable: 0 };
       const addressRefs = ids.flatMap((id) => {
         const match = id.match(/^(\d+):([0-9a-f]{64}):(.+)$/i);
-        return match ? [{ id, kind: Number(match[1]), pubkey: match[2].toLowerCase(), identifier: match[3] }] : [];
+        return match && [30311, 31337, 36787, 32123, 30440].includes(Number(match[1]))
+          ? [{ id, kind: Number(match[1]), pubkey: match[2].toLowerCase(), identifier: match[3] }]
+          : [];
       });
       const addressIds = new Set(addressRefs.map(reference => reference.id));
       const eventIds = ids.filter((id) => /^[0-9a-f]{64}$/i.test(id) && !addressIds.has(id));
@@ -59,10 +62,15 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true) {
         if (track) byId.set(track.id.toLowerCase(), track);
       }
       for (const event of [...await eventsPromise, ...await addressEventsPromise]) {
-        const track = eventToTrack(event);
+        const track = event.kind === 1053
+          ? parseN94Stream(event)?.track
+          : event.kind === 30311
+            ? parseTunestrStreamEvent(event)?.track
+            : eventToTrack(event);
         if (!track) continue;
         byId.set(event.id.toLowerCase(), track);
-        if ([31337, 36787, 32123, 30440].includes(event.kind)) {
+        if (event.kind === 1053) byId.set(`tunestr:n94:${event.id}`.toLowerCase(), track);
+        if ([30311, 31337, 36787, 32123, 30440].includes(event.kind)) {
           const identifier = event.tags.find(([name]) => name === 'd')?.[1];
           if (identifier) byId.set(`${event.kind}:${event.pubkey.toLowerCase()}:${identifier}`, track);
           if (identifier) byId.set(`${event.pubkey.toLowerCase()}:${identifier}`, track);

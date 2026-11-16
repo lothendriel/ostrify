@@ -56,7 +56,7 @@ export default function MyProfile() {
   const picture = sanitizeUrl(metadata?.picture);
   const banner = sanitizeUrl(metadata?.banner);
   const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase();
-  const regular = (playlists.data ?? []).filter(list => !list.isLiked);
+  const regular = (playlists.data ?? []).filter(list => !list.isLiked && !list.isTunestrFavorites);
   const tracks = savedTracks.data?.tracks ?? [];
   return <div className="min-h-full w-full pb-10">
     <header className="relative isolate flex min-h-[320px] flex-col justify-start gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-16 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">

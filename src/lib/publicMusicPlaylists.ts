@@ -1,6 +1,6 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import { MUSIC_TRACK_KINDS } from '@/lib/music';
-import { isOstrifyMusicPlaylist, LIKED_TRACKS_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
+import { isOstrifyMusicPlaylist, LIKED_TRACKS_IDENTIFIER, TUNESTR_FAVORITES_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { wavlakeTrackId } from '@/hooks/useWavlake';
 import { fountainTrackId, podcastIndexTrackId } from '@/hooks/usePodcasts';
 import { sanitizeUrl } from '@/lib/sanitize';
@@ -108,7 +108,7 @@ export function parsePublicMusicPlaylist(event: NostrEvent): PublicMusicPlaylist
   if (event.tags.some(([name, value]) => name === PLAYLIST_VISIBILITY_TAG && value === 'private')) return undefined;
   const tags = event.tags;
   const id = tags.find(([name]) => name === 'd')?.[1];
-  if (!id || id.length > 256 || id === LIKED_TRACKS_IDENTIFIER) return undefined;
+  if (!id || id.length > 256 || id === LIKED_TRACKS_IDENTIFIER || id === TUNESTR_FAVORITES_IDENTIFIER) return undefined;
   const title = tags.find(([name]) => name === 'title')?.[1]?.trim().slice(0, 160);
   const description = (tags.find(([name]) => name === 'description')?.[1]?.trim() || event.content.trim()).slice(0, 1200) || undefined;
   const image = sanitizeUrl(tags.find(([name]) => name === 'image')?.[1]);

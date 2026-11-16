@@ -57,7 +57,7 @@ function tagValue(event: { tags: string[][] }, name: string): string | undefined
   return event.tags.find(([key]) => key === name)?.[1];
 }
 
-function parseN94Stream(event: NostrEvent): TunestrStream | null {
+export function parseN94Stream(event: NostrEvent): TunestrStream | null {
   if (event.kind !== 1053) return null;
   const hashtags = event.tags.flatMap(([name, value]) => name === 't' && value ? [value.toLowerCase()] : []);
   const isTuneStr = STREAM_PUBKEYS.includes(event.pubkey) || event.tags.some(([name, value]) => name === 'p' && STREAM_PUBKEYS.includes(value ?? ''));
@@ -82,7 +82,7 @@ function parseN94Stream(event: NostrEvent): TunestrStream | null {
   const image = sanitizeUrl(tagValue(event, 'image'));
   const summary = tagValue(event, 'summary');
   const track: Track = {
-    id: `tunestr:n94:${event.id}`,
+    id: event.id,
     event,
     source: 'tunestr',
     url: `nostr:${identifier}`,
@@ -112,7 +112,7 @@ function parseN94Stream(event: NostrEvent): TunestrStream | null {
   };
 }
 
-function parseStream(event: NostrEvent): TunestrStream | null {
+export function parseTunestrStreamEvent(event: NostrEvent): TunestrStream | null {
   if (event.kind !== 30311) return null;
   const client = event.tags.find(([name]) => name === 'client')?.[1]?.toLowerCase();
   const taggedMusic = event.tags.some(([name, value]) => name === 't' && MUSIC_TAGS.includes(value));
@@ -139,7 +139,7 @@ function parseStream(event: NostrEvent): TunestrStream | null {
   const duration = durationTag ? Number(durationTag) : undefined;
   const status = isLive ? 'live' : 'ended';
   const track: Track = {
-    id: `tunestr:${event.pubkey}:${d}`,
+    id: `30311:${event.pubkey}:${d}`,
     event: event as Track['event'],
     source: 'tunestr',
     url,
@@ -203,7 +203,7 @@ export function useTunestrStreams(enabled = true) {
 
       const byAddress = new Map<string, TunestrStream>();
       for (const event of responses.flatMap(response => response.events)) {
-        const stream = event.kind === 1053 ? parseN94Stream(event) : parseStream(event);
+        const stream = event.kind === 1053 ? parseN94Stream(event) : parseTunestrStreamEvent(event);
         if (!stream) continue;
         const address = stream.format === 'n94' ? stream.id : `${stream.track.pubkey}:${tagValue(event, 'd')}`;
         const previous = byAddress.get(address);

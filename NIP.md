@@ -12,7 +12,9 @@ not define any new event kinds — it aggregates and reuses existing NIPs.
 | `54`    | NIP-F4 podcast episode                   | Podcast episodes                                 |
 | `1063`  | NIP-94 file metadata                     | Music tracks (`m` = `audio/*` or audio URL)     |
 | `10154` | NIP-F4 podcast metadata                  | Podcast show info                                |
-| `30003` | NIP-51 bookmark set                      | User playlists, Liked Songs, and Saved Albums   |
+| `30003` | NIP-51 bookmark set                      | User playlists, Liked Songs, TuneStr Recordings, and Saved Albums |
+| `30311` | NIP-53 Live Activities                   | TuneStr live streams and recordings             |
+| `1053`  | TuneStr N94 stream variant               | TuneStr N94 recording metadata                 |
 | `30440` | Wavlake NOM track                        | Artist-published music tracks (`stream_url`)    |
 | `31337` | zapstr.live / lightning.fm audio track   | Artist-published music tracks (`media`/`url`)   |
 | `32123` | Legacy Wavlake track                     | Music tracks (JSON metadata in `content`)       |
@@ -52,7 +54,7 @@ Podcast episodes (kind `54`) use the NIP-F4 `audio` tag: `["audio", <url>, <mime
 ### Playlists & Liked Songs — NIP-51 bookmark sets (kind `30003`)
 
 Playlists are addressable bookmark sets authored by the logged-in user. Tracks are
-referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73 `i` URL tag, `https://wavlake.com/track/<uuid>`. Both types preserve insertion order; other clients may not understand these extensions.
+referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73 `i` URL tag, `https://wavlake.com/track/<uuid>`. TuneStr NIP-53 recordings use an `a` tag containing the `30311:<pubkey>:<d>` coordinate, while NIP-94 recording events use an `e` tag. Both types preserve insertion order; other clients may not understand these extensions.
 
 ```json
 {
@@ -70,6 +72,10 @@ referenced by their event id using `e` tags. Wavlake catalog tracks use a NIP-73
 
 - The **Liked Songs** playlist is a reserved bookmark set with `d` tag
   `nostr-tunes-liked`. Liking/unliking a track adds/removes its `e` tag.
+- The private-by-display **TuneStr Recordings** collection uses the reserved `d` tag
+  `ostrify-tunestr-recordings`. NIP-53 streams are referenced using their addressable
+  `a` coordinate (`30311:<pubkey>:<d>`); NIP-94 recordings use their event id in an
+  `e` tag. The collection is public NIP-51 data; it does not grant access control.
 - Regular playlists use a random `d` tag (`playlist-xxxxxxxx`) and may carry
   optional `title`, `description`, and `image` tags. New and updated Ostrify
   music lists carry `t=ostrify-music-playlist`; older Ostrify identifiers remain

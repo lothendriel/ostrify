@@ -14,6 +14,7 @@ import { useTunestrStreams, type TunestrStream } from '@/hooks/useTunestrStreams
 import { useAppContext } from '@/hooks/useAppContext';
 import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
 import { Input } from '@/components/ui/input';
+import { LikeButton } from '@/components/music/LikeButton';
 
 function cloudflareThumbnail(url: string): string | undefined {
   try {
@@ -35,10 +36,12 @@ function TunestrStreamCard({ stream, onSelect }: { stream: TunestrStream; onSele
   const [imageFailed, setImageFailed] = useState(false);
   const imageUrl = stream.image ? cloudflareThumbnail(stream.image) ?? stream.image : undefined;
   const thumbnail = imageUrl || cloudflareThumbnail(stream.thumbnailSourceUrl ?? stream.url);
-  return <button type="button" className="group overflow-hidden rounded-xl border border-border/70 bg-secondary/30 text-left transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(stream)}>
-    <div className="relative aspect-video bg-black/80">{thumbnail && !imageFailed ? <img src={thumbnail} alt="" loading="lazy" onError={() => setImageFailed(true)} className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center text-white/70"><Video className="size-10" /></div>}<span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold text-white">{stream.isLive ? 'LIVE' : 'Recording'}{stream.format === 'n94' ? ' · N94' : ''}</span></div>
-    <div className="p-4"><h3 className="truncate font-semibold">{stream.title}</h3>{stream.summary && <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{stream.summary}</p>}<span className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary"><Video className="size-4" /> Watch in Ostrify</span></div>
-  </button>;
+  return <article className="overflow-hidden rounded-xl border border-border/70 bg-secondary/30 transition hover:bg-secondary">
+    <button type="button" className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(stream)} aria-label={`${stream.isLive ? 'Watch live stream' : 'Watch recording'}: ${stream.title}`}>
+      <div className="relative aspect-video bg-black/80">{thumbnail && !imageFailed ? <img src={thumbnail} alt="" loading="lazy" onError={() => setImageFailed(true)} className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center text-white/70"><Video className="size-10" /></div>}<span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold text-white">{stream.isLive ? 'LIVE' : 'Recording'}{stream.format === 'n94' ? ' · N94' : ''}</span></div>
+    </button>
+    <div className="flex items-start justify-between gap-2 p-4"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => onSelect(stream)}><h3 className="truncate font-semibold">{stream.title}</h3>{stream.summary && <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{stream.summary}</p>}<span className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-primary"><Video className="size-4" /> Watch in Ostrify</span></button>{!stream.isLive && <LikeButton trackId={stream.track.id} collection="tunestr" />}</div>
+  </article>;
 }
 
 export default function MusicDiscovery() {
