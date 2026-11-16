@@ -13,7 +13,9 @@ import { useNostr } from "@nostrify/react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { PublishMusicPanel } from "@/components/music/PublishMusicPanel";
 import { useQuery } from "@tanstack/react-query";
+import { TrackVisibilityManager } from "@/components/music/TrackVisibilityManager";
 import { eventToTrack, type Track } from "@/lib/music";
+import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
@@ -72,7 +74,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey, { persistForPublicArtistPage: true });
   const publisherTrackQuery = useArtistTracks(pubkey);
   const artistTracks = useQuery({
-    queryKey: ["artist-identified-tracks", pubkey],
+    queryKey: ["artist-identified-tracks", pubkey, user?.pubkey ?? "public"],
     queryFn: async ({ signal }) => {
       const events = await nostr.query([
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#p": [pubkey], limit: 200 },
@@ -80,7 +82,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist_pubkey": [pubkey], limit: 200 },
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist_npub": [nip19.npubEncode(pubkey)], limit: 200 },
       ], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
-      const tracks = events.map(eventToTrack).filter((track): track is Track => !!track && track.artistPubkey === pubkey);
+      const tracks = events.map(eventToTrack).filter((track): track is Track => !!track && track.artistPubkey === pubkey && isTrackVisibleInOstrify(track, user?.pubkey, pubkey));
       return [...new Map(tracks.map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
     },
   });
@@ -91,7 +93,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const artistPublisherTracks = publisherTracks.filter(isThisArtist);
   const otherPublisherTracks = publisherTracks.filter((track) => track.kind === 'music' && !isThisArtist(track));
   const artistPublishedTracks = (artistTracks.data ?? []).filter((track) => track.pubkey !== pubkey && (!track.artistPubkey || track.artistPubkey === pubkey));
-  const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.url, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
+  const tracks = [...new Map([...artistPublisherTracks, ...artistPublishedTracks].map((track) => [track.url, track])).values()].filter(track => track.kind !== "music" || isTrackVisibleInOstrify(track, user?.pubkey, pubkey)).sort((a, b) => b.createdAt - a.createdAt);
   const isLoading = publisherTrackQuery.isLoading || artistTracks.isLoading;
   const isError = publisherTrackQuery.isError && artistTracks.isError && !publisherTrackQuery.data && !artistTracks.data;
   const publishedMusicTracks = publisherTracks.filter(track => track.kind === 'music');
@@ -100,7 +102,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const playableTracks = [...new Map([...tracks, ...publishedMusicTracks].map(track => [track.url, track])).values()];
   const radioTracks = playableTracks.filter(track => track.kind === 'music');
   const featuredTracks = playableTracks;
-  const { albums, singles } = useMemo(() => groupIntoAlbums(publishedMusicTracks), [publishedMusicTracks]);
+  const visiblePublishedMusicTracks = publishedMusicTracks.filter(track => isTrackVisibleInOstrify(track, user?.pubkey, pubkey));
+  const { albums, singles } = useMemo(() => groupIntoAlbums(visiblePublishedMusicTracks), [visiblePublishedMusicTracks]);
   const player = usePlayer();
   const radio = useRadio();
 
@@ -144,7 +147,8 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         </div>
         {user?.pubkey === pubkey && <div className="absolute bottom-4 right-4 z-20 sm:bottom-6 sm:right-6"><Button type="button" aria-label={publishOpen ? "Close publishing" : "Publish"} title={publishOpen ? "Close publishing" : "Publish"} aria-expanded={publishOpen} aria-controls="publish-music-panel" onClick={() => setPublishOpen(open => !open)} className="size-10 rounded-full p-0 shadow-lg sm:h-10 sm:w-auto sm:px-4"><Upload className="size-4" /><span className="hidden sm:inline">{publishOpen ? "Close publishing" : "Publish"}</span></Button></div>}
       </header>
-      {user?.pubkey === pubkey && <div id="publish-music-panel" hidden={!publishOpen}><PublishMusicPanel artist={name} artistPubkey={pubkey} /></div>}
+       {user?.pubkey === pubkey && <div id="publish-music-panel" hidden={!publishOpen}><PublishMusicPanel artist={name} artistPubkey={pubkey} /></div>}
+       {user?.pubkey === pubkey && <TrackVisibilityManager tracks={publishedMusicTracks} />}
       <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
       <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5">
         <Button

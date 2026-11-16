@@ -2,7 +2,10 @@ import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import type { NostrFilter } from "@nostrify/nostrify";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
-import { FEATURED_MUSIC_PUBKEYS } from "@/lib/sources";
+import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
+import { useAppContext } from "@/hooks/useAppContext";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 
 interface UseTracksOptions {
   limit?: number;
@@ -24,11 +27,14 @@ interface UseTracksOptions {
  */
 export function useTracks(options: UseTracksOptions = {}) {
   const { nostr } = useNostr();
+  const { config } = useAppContext();
+  const { user } = useCurrentUser();
+  const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
   const { limit = 200, topic, author, authors, enabled = true } = options;
   const authorKey = authors?.slice().sort().join('|') ?? '';
 
   return useQuery({
-    queryKey: ["tracks", limit, topic ?? "", author ?? "", authorKey],
+    queryKey: ["tracks", limit, topic ?? "", author ?? "", authorKey, readRelays.join("|"), user?.pubkey ?? "public"],
     staleTime: author || authors?.length ? 60_000 : 0,
     enabled,
     queryFn: async (c) => {
@@ -39,26 +45,21 @@ export function useTracks(options: UseTracksOptions = {}) {
       if (author) base.authors = [author];
       else if (authors?.length) base.authors = authors;
 
-      const filters: NostrFilter[] = [
-        // Dedicated music-track kinds (Wavlake, zapstr, lightning.fm, etc.)
-        { kinds: [...MUSIC_TRACK_KINDS], limit, ...base },
-        // NIP-94 audio file metadata
-        { kinds: [1063], limit, ...base },
-        // Plain notes carrying audio attachments
-        { kinds: [1], limit, ...base },
-      ];
-
-      // Always pull featured catalogs only for the general discovery feed.
-      if (!author && !authors?.length && FEATURED_MUSIC_PUBKEYS.length > 0) {
-        filters.push({
-          kinds: [...MUSIC_TRACK_KINDS],
-          authors: FEATURED_MUSIC_PUBKEYS,
-          limit: 300,
-          ...(topic ? { "#t": [topic] } : {}),
-        });
-      }
-
-      const events = await nostr.query(filters, { signal });
+      const filtersForRelay = (relay: string): NostrFilter[] => {
+        if (relay === DROPS_MUSIC_RELAY) return [{ kinds: [36787], limit, ...base }];
+        const filters: NostrFilter[] = [
+          { kinds: [...MUSIC_TRACK_KINDS], limit, ...base },
+          { kinds: [1063], limit, ...base },
+          { kinds: [1], limit, ...base },
+        ];
+        if (!author && !authors?.length && FEATURED_MUSIC_PUBKEYS.length > 0) {
+          filters.push({ kinds: [...MUSIC_TRACK_KINDS], authors: FEATURED_MUSIC_PUBKEYS, limit: 300, ...(topic ? { "#t": [topic] } : {}) });
+        }
+        return filters;
+      };
+      const results = await Promise.allSettled(readRelays.map(relay => nostr.relay(relay).query(filtersForRelay(relay), { signal })));
+      const events = results.flatMap(result => result.status === "fulfilled" ? result.value : []);
+      if (!results.some(result => result.status === "fulfilled")) throw new Error("Could not load tracks from your read relays or DROPS.");
 
       const tracks: Track[] = [];
       const seen = new Set<string>();
@@ -72,7 +73,7 @@ export function useTracks(options: UseTracksOptions = {}) {
       }
 
       tracks.sort((a, b) => b.createdAt - a.createdAt);
-      return tracks;
+      return tracks.filter(track => track.kind === "music" ? isTrackVisibleInOstrify(track, user?.pubkey) : true);
     },
   });
 }

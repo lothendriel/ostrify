@@ -3,6 +3,9 @@ import { useNostr } from "@nostrify/react";
 import type { NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
+import { DROPS_MUSIC_RELAY } from "@/lib/sources";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 
 const PER_KIND_LIMIT = 100;
 
@@ -10,20 +13,24 @@ const PER_KIND_LIMIT = 100;
 export function useFreshNostrTracks() {
   const { nostr } = useNostr();
   const { config } = useAppContext();
-  const relays = [...new Set(config.relayMetadata.relays
-    .filter(relay => relay.read || relay.write)
-    .map(relay => relay.url))].sort();
+  const { user } = useCurrentUser();
+  const relays = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url),
+    DROPS_MUSIC_RELAY,
+  ])].sort();
   const relayKey = relays.join("|");
 
   return useQuery({
-    queryKey: ["fresh-nostr-tracks", relayKey],
-    enabled: relays.length > 0,
+    queryKey: ["fresh-nostr-tracks", relayKey, user?.pubkey ?? "public"],
+    enabled: true,
     staleTime: 30_000,
     retry: false,
     queryFn: async ({ signal }) => {
-      const filters: NostrFilter[] = MUSIC_TRACK_KINDS.map(kind => ({ kinds: [kind], limit: PER_KIND_LIMIT }));
+      const filtersForRelay = (relay: string): NostrFilter[] => relay === DROPS_MUSIC_RELAY
+        ? [{ kinds: [36787], limit: PER_KIND_LIMIT }]
+        : MUSIC_TRACK_KINDS.map(kind => ({ kinds: [kind], limit: PER_KIND_LIMIT }));
       const results = await Promise.allSettled(relays.map(async relay => {
-        const events = await nostr.relay(relay).query(filters, {
+        const events = await nostr.relay(relay).query(filtersForRelay(relay), {
           signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
         });
         return events.map(eventToTrack).filter((track): track is Track => !!track && track.kind === "music");
@@ -38,7 +45,7 @@ export function useFreshNostrTracks() {
           if (!existing || track.createdAt > existing.createdAt) byUrl.set(track.url, track);
         }
       }
-      return [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt);
+      return [...byUrl.values()].filter(track => isTrackVisibleInOstrify(track, user?.pubkey)).sort((left, right) => right.createdAt - left.createdAt);
     },
   });
 }

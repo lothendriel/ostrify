@@ -21,6 +21,8 @@ import { useSavedAlbums } from '@/hooks/useSavedAlbums';
 import { savedAlbumPath } from '@/lib/savedAlbums';
 import { usePlayer } from '@/hooks/usePlayer';
 import { PublishMusicPanel } from '@/components/music/PublishMusicPanel';
+import { TrackVisibilityManager } from '@/components/music/TrackVisibilityManager';
+import { useArtistTracks } from '@/hooks/useArtistTracks';
 
 function FollowedPersonTile({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
@@ -48,6 +50,7 @@ export default function MyProfile() {
   const privacy = useProfilePrivacy();
   const podcastFavorites = usePodcastFavorites();
   const savedAlbums = useSavedAlbums();
+  const ownMusic = useArtistTracks(user?.pubkey);
   const player = usePlayer();
   const liked = playlists.data?.find(list => list.id === LIKED_SONGS_ID);
   const savedTracks = useTracksByIds(privacy.isHidden('liked') ? undefined : liked?.trackIds);
@@ -68,8 +71,9 @@ export default function MyProfile() {
       </div>
       <Button type="button" aria-label={publishOpen ? 'Close publishing' : 'Publish'} title={publishOpen ? 'Close publishing' : 'Publish'} aria-expanded={publishOpen} aria-controls="publish-music-panel" onClick={() => setPublishOpen(open => !open)} className="absolute bottom-4 right-4 z-20 size-10 rounded-full p-0 shadow-lg sm:bottom-6 sm:right-6 sm:h-10 sm:w-auto sm:px-4"><Upload className="size-4" /><span className="hidden sm:inline">{publishOpen ? 'Close publishing' : 'Publish'}</span></Button>
     </header>
-    <div id="publish-music-panel" hidden={!publishOpen}><PublishMusicPanel artist={name} artistPubkey={user.pubkey} /></div>
-    <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
+     <div id="publish-music-panel" hidden={!publishOpen}><PublishMusicPanel artist={name} artistPubkey={user.pubkey} /></div>
+     <TrackVisibilityManager tracks={ownMusic.data ?? []} />
+     <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
       <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5"><button type="button" aria-label="Play liked songs" disabled={!tracks.length} className="grid size-14 place-items-center rounded-full bg-primary text-primary-foreground transition hover:scale-105 disabled:opacity-40" onClick={() => player.playQueue(tracks)}><Play className="size-6 fill-current" /></button><button type="button" aria-label="Shuffle liked songs" disabled={!tracks.length} className="grid size-11 place-items-center rounded-full text-muted-foreground hover:text-foreground disabled:opacity-40" onClick={() => { player.toggleShuffle(); player.playQueue(tracks); }}><Shuffle className="size-5" /></button></div>
       {privacy.isError && <p role="alert" className="py-4 text-sm text-destructive">Couldn’t load your profile privacy settings. Profile sections are hidden for now. <button className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
       {privacy.isLoading || privacy.isError ? <div className="space-y-3 pb-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-48 w-full" /></div> : <>

@@ -4,13 +4,17 @@ import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, LoaderCircle, Plus, Uplo
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useNostrPublish } from "@/hooks/useNostrPublish";
+import { usePublishMusicEvent, type MusicVisibility } from "@/hooks/usePublishMusicEvent";
+import { useRepublishMusicToDrops } from "@/hooks/useRepublishMusicToDrops";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useUploadFile } from "@/hooks/useUploadFile";
+import { TrackVisibilityManager } from "@/components/music/TrackVisibilityManager";
 import { sanitizeUrl } from "@/lib/sanitize";
 import { AUDIO_EXT_RE, type Track } from "@/lib/music";
 import { groupIntoAlbums, useArtistTracks } from "@/hooks/useArtistTracks";
 
-type ReleaseTrack = { id: string; file?: File; title: string; url: string; trackNumber?: number; existing?: Track };
+type ReleaseTrack = { id: string; file?: File; title: string; url: string; trackNumber?: number; existing?: Track; visibility?: MusicVisibility };
 type AlbumTarget = { id: string; title: string; image?: string };
 
 function albumTargetId(id: string, title: string | undefined): string {
@@ -32,28 +36,37 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
   const [trackFile, setTrackFile] = useState<File | undefined>();
   const [trackImage, setTrackImage] = useState<File | undefined>();
   const [trackGenre, setTrackGenre] = useState("");
+  const [trackVisibility, setTrackVisibility] = useState<MusicVisibility>("public");
   const [albumTitle, setAlbumTitle] = useState("");
   const [albumId, setAlbumId] = useState(() => newId());
   const [selectedAlbumId, setSelectedAlbumId] = useState("");
   const [albumCover, setAlbumCover] = useState<File | undefined>();
   const [albumGenre, setAlbumGenre] = useState("");
+  const [albumVisibility, setAlbumVisibility] = useState<MusicVisibility>("public");
+  const [albumTrackVisibility, setAlbumTrackVisibility] = useState<Record<string, MusicVisibility>>({});
   const [albumTracks, setAlbumTracks] = useState<ReleaseTrack[]>([]);
   const [selectedExistingIds, setSelectedExistingIds] = useState<string[]>([]);
   const [existingSearch, setExistingSearch] = useState("");
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
-  const publish = useNostrPublish();
+  const publish = usePublishMusicEvent();
+  const republishDrops = useRepublishMusicToDrops();
+  const user = useCurrentUser().user;
   const upload = useUploadFile();
   const queryClient = useQueryClient();
   const existingQuery = useArtistTracks(artistPubkey);
   const existingTracks = (existingQuery.data ?? []).filter(track => track.kind === "music" && track.event?.kind === 36787 && !!track.addressableId && track.pubkey === artistPubkey);
-  const albums = groupIntoAlbums(existingTracks).albums;
+  const albums = groupIntoAlbums(existingTracks.filter(track => track.visibility !== "hidden")).albums;
   const selectedAlbum = albums.find(album => albumTargetId(album.id, album.title) === selectedAlbumId);
   const selectedAlbumMemberIds = new Set(selectedAlbum?.tracks.map(track => track.id) ?? []);
-  const availableExistingTracks = existingTracks
+  const visibleExistingTracks = existingTracks.filter(track => track.visibility !== "hidden");
+  const hiddenExistingTracks = existingTracks.filter(track => track.visibility === "hidden");
+  const [showHiddenTracks, setShowHiddenTracks] = useState(false);
+  const selectableExistingTracks = showHiddenTracks ? existingTracks : visibleExistingTracks;
+  const availableExistingTracks = selectableExistingTracks
     .filter(track => !!track.addressableId && !selectedAlbumMemberIds.has(track.id))
     .filter(track => `${track.title} ${track.artist ?? ""} ${track.album ?? ""}`.toLocaleLowerCase().includes(existingSearch.trim().toLocaleLowerCase()));
   const targets: AlbumTarget[] = albums.map(album => ({ id: albumTargetId(album.id, album.title), title: album.title ?? "Untitled album", image: album.image }));
-  const busy = publish.isPending || upload.isPending;
+  const busy = publish.isPending || upload.isPending || republishDrops.publish.isPending;
 
   const chooseTrack = (file: File | undefined) => {
     if (file && !file.type.startsWith("audio/")) {
@@ -107,12 +120,14 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       if (trackGenre.trim()) tags.push(["t", trackGenre.trim().toLowerCase()]);
       const mime = trackFile?.type;
       if (mime?.startsWith("audio/") && !tags.some(([name]) => name === "m")) tags.push(["m", mime]);
-      await publish.mutateAsync({ kind: 36787, content: "", tags });
+      const result = await publish.mutateAsync({ kind: 36787, content: "", tags, visibility: trackVisibility });
       await queryClient.invalidateQueries({ queryKey: ["artist-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["tracks"] });
+      await queryClient.invalidateQueries({ queryKey: ["home-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["fresh-nostr-tracks"] });
-      setTrackTitle(""); setTrackUrl(""); setTrackFile(undefined); setTrackImage(undefined); setTrackGenre("");
-      setMessage({ text: "Track published to your configured write relays.", error: false });
+      await queryClient.invalidateQueries({ queryKey: ["category-tracks"] });
+      setTrackTitle(""); setTrackUrl(""); setTrackFile(undefined); setTrackImage(undefined); setTrackGenre(""); setTrackVisibility("public");
+      setMessage({ text: trackVisibility === "hidden" ? "Track published to your configured write relays and hidden in Ostrify." : result.dropsError ? `Track published to your configured write relays, but DROPS could not confirm the shared copy: ${result.dropsError}` : "Track published to your configured write relays and shared to DROPS.", error: false });
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : "Could not publish this track.", error: true });
     }
@@ -137,6 +152,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
     try {
       const targetAlbumTitle = selectedAlbum?.title ?? albumTitle.trim();
       const targetAlbumId = selectedAlbumId.startsWith("legacy-") ? albumId : selectedAlbum ? selectedAlbumId : albumId;
+      const targetVisibility = selectedAlbum ? selectedAlbum.tracks.every(track => track.visibility === "hidden") ? "hidden" : "public" : albumVisibility;
       let coverUrl: string | undefined = selectedAlbum?.image;
       if (albumCover) {
         const coverTags = await upload.mutateAsync(albumCover);
@@ -156,6 +172,8 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
           }
           if (!url) throw new Error("Upload did not return a usable audio URL.");
           if (!track.existing && !track.file && !AUDIO_EXT_RE.test(url)) throw new Error("Track URL must end with a recognized audio file extension.");
+          const visibility = albumTrackVisibility[track.id] ?? track.existing?.visibility ?? targetVisibility;
+          if (track.existing && track.existing.visibility !== visibility && !track.existing.event) throw new Error("The existing track event is unavailable for a visibility update.");
           const tags: string[][] = track.existing?.event
             ? track.existing.event.tags
               .filter(([name]) => name !== "title" && name !== "album" && name !== "album_id" && name !== "track_number" && name !== "image" && name !== "client")
@@ -170,7 +188,8 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
           tags.push(["title", track.title.trim()], ["album", targetAlbumTitle], ["album_id", targetAlbumId], ["track_number", String(track.trackNumber ?? 1)]);
           if (albumGenre.trim() && !track.existing) tags.push(["t", albumGenre.trim().toLowerCase()]);
           if (track.file?.type.startsWith("audio/") && !tags.some(([name]) => name === "m")) tags.push(["m", track.file.type]);
-          await publish.mutateAsync({ kind: 36787, content: track.existing?.event?.content ?? "", tags });
+          const result = await publish.mutateAsync({ kind: 36787, content: track.existing?.event?.content ?? "", tags, visibility, removeFromDrops: !!track.existing && visibility === "hidden" && track.existing.visibility !== "hidden" });
+          if (result.dropsError) throw new Error(`Published to your write relays, but DROPS may still show this track: ${result.dropsError}`);
           successful += 1;
         } catch (error) {
           failedIds.add(track.id);
@@ -179,15 +198,17 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       }
       await queryClient.invalidateQueries({ queryKey: ["artist-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["tracks"] });
+      await queryClient.invalidateQueries({ queryKey: ["home-tracks"] });
       await queryClient.invalidateQueries({ queryKey: ["fresh-nostr-tracks"] });
+      await queryClient.invalidateQueries({ queryKey: ["category-tracks"] });
       if (failures.length) {
         setMessage({ text: `${successful} of ${albumTracks.length} tracks published. Failed tracks remain in the form for retry: ${failures.join("; ")}`, error: true });
         setAlbumTracks(current => current.filter(track => failedIds.has(track.id)));
         setSelectedExistingIds(current => current.filter(id => albumTracks.some(track => track.existing?.id === id && failedIds.has(track.id))));
       } else {
         if (!selectedAlbum) { setAlbumTitle(""); setAlbumId(newId()); }
-        setSelectedAlbumId(""); setSelectedExistingIds([]); setExistingSearch(""); setAlbumCover(undefined); setAlbumGenre(""); setAlbumTracks([]);
-        setMessage({ text: `Album published: all ${successful} track${successful === 1 ? "" : "s"} sent to your configured write relays.`, error: false });
+        setSelectedAlbumId(""); setSelectedExistingIds([]); setExistingSearch(""); setAlbumCover(undefined); setAlbumGenre(""); setAlbumTracks([]); setAlbumTrackVisibility({}); setAlbumVisibility("public");
+        setMessage({ text: `Album published: ${successful} track${successful === 1 ? "" : "s"} processed with the selected Ostrify visibility${targetVisibility === "public" ? " and shared to DROPS" : ""}.`, error: false });
       }
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : "Could not publish the album.", error: true });
@@ -206,7 +227,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
 
   return <section aria-label="Publish music" className="border-b border-white/10 bg-black/20 px-4 py-5 sm:px-6 lg:px-7">
     <div className="mx-auto w-full max-w-5xl space-y-4">
-      <div><h2 className="text-xl font-bold">Publish music</h2><p className="mt-1 text-sm text-muted-foreground">Publish signed kind 36787 track events to your configured Nostr write relays.</p><aside className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm leading-relaxed text-muted-foreground"><p className="font-semibold text-foreground">For original artists</p><p className="mt-1">If you made the music, you can publish it through Ostrify. Only upload or link audio and artwork that you have the rights to share. Ostrify does not review uploads and is not responsible for copyright infringement or unauthorized material; you are responsible for ensuring your uploads comply with copyright law.</p></aside></div>
+             <div><h2 className="text-xl font-bold">Publish music</h2><p className="mt-1 text-sm text-muted-foreground">Publish signed kind 36787 track events to your configured Nostr write relays.</p><p className="mt-2 text-xs text-muted-foreground">Public tracks are also shared to DROPS ({DROPS_MUSIC_RELAY}) for Ostrify discovery. Hidden in Ostrify means hidden from Ostrify discovery, not private: your relays and audio host may still serve the public event and audio URL.</p><aside className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm leading-relaxed text-muted-foreground"><p className="font-semibold text-foreground">For original artists</p><p className="mt-1">If you made the music, you can publish it through Ostrify. Only upload or link audio and artwork that you have the rights to share. Ostrify does not review uploads and is not responsible for copyright infringement or unauthorized material; you are responsible for ensuring your uploads comply with copyright law.</p></aside></div>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid w-full max-w-sm grid-cols-2"><TabsTrigger value="track">Track</TabsTrigger><TabsTrigger value="album">Album</TabsTrigger></TabsList>
         <TabsContent value="track" className="pt-4">
@@ -216,22 +237,24 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Audio file (Blossom upload)<Input type="file" accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => chooseTrack(event.target.files?.[0])} /></label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Or existing HTTPS audio URL<Input type="url" value={trackUrl} onChange={event => { setTrackUrl(event.target.value); if (event.target.value) setTrackFile(undefined); }} placeholder="https://…/track.mp3" /></label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Track image (optional)<Input type="file" accept="image/*" onChange={event => { const file = event.target.files?.[0]; if (file && !file.type.startsWith("image/")) { setMessage({ text: "Please choose an image file.", error: true }); return; } setMessage(undefined); setTrackImage(file); }} /></label>
-            <div className="flex flex-wrap items-center gap-3 sm:col-span-2"><Button type="submit" disabled={busy || !trackTitle.trim()}><Upload className="size-4" />{busy ? "Publishing…" : "Publish track"}</Button>{trackFile && <span className="text-sm text-muted-foreground">{trackFile.name}</span>}</div>
+             <fieldset className="space-y-2 sm:col-span-2"><legend className="text-sm font-medium">Ostrify visibility</legend><label className="flex items-start gap-2 text-sm"><input type="radio" name="track-visibility" value="public" checked={trackVisibility === "public"} onChange={() => setTrackVisibility("public")} className="mt-1 accent-primary" /><span><span className="font-medium">Show on Ostrify</span><span className="block text-xs text-muted-foreground">Visible in Ostrify discovery and sent to the shared music relay ({DROPS_MUSIC_RELAY}) as well as your configured write relays.</span></span></label><label className="flex items-start gap-2 text-sm"><input type="radio" name="track-visibility" value="hidden" checked={trackVisibility === "hidden"} onChange={() => setTrackVisibility("hidden")} className="mt-1 accent-primary" /><span><span className="font-medium">Hidden in Ostrify</span><span className="block text-xs text-muted-foreground">Ostrify hides this track from other users and does not send it to DROPS. It remains public on your configured write relays and media URL.</span></span></label></fieldset>
+             <div className="flex flex-wrap items-center gap-3 sm:col-span-2"><Button type="submit" disabled={busy || !trackTitle.trim()}><Upload className="size-4" />{busy ? "Publishing…" : "Publish track"}</Button>{trackFile && <span className="text-sm text-muted-foreground">{trackFile.name}</span>}</div>
           </form>
         </TabsContent>
         <TabsContent value="album" className="space-y-4 pt-4">
           <form onSubmit={event => void submitAlbum(event)} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-2 text-sm font-medium">Add to album<select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={selectedAlbumId} onChange={event => { const value = event.target.value; setSelectedAlbumId(value); setMessage(undefined); const target = albums.find(album => albumTargetId(album.id, album.title) === value); const previousNewTracks = albumTracks.filter(track => !track.existing); const alreadyInTarget = target?.tracks.filter(track => track.addressableId).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: track.trackNumber })) ?? []; const previouslyChosen = existingTracks.filter(track => selectedExistingIds.includes(track.id) && !target?.tracks.some(member => member.id === track.id)).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: undefined as number | undefined })); setAlbumTracks([...alreadyInTarget, ...previouslyChosen, ...previousNewTracks].map((track, index) => ({ ...track, trackNumber: track.trackNumber ?? index + 1 }))); setAlbumId(newId()); setAlbumTitle(""); }}><option value="">Create a new album</option>{targets.map(target => <option key={target.id} value={target.id}>{target.title}</option>)}</select></label>
+              <label className="space-y-2 text-sm font-medium">Add to album<select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={selectedAlbumId} onChange={event => { const value = event.target.value; setSelectedAlbumId(value); setAlbumTrackVisibility({}); setMessage(undefined); const target = albums.find(album => albumTargetId(album.id, album.title) === value); const previousNewTracks = albumTracks.filter(track => !track.existing); const alreadyInTarget = target?.tracks.filter(track => track.addressableId).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: track.trackNumber })) ?? []; const previouslyChosen = existingTracks.filter(track => selectedExistingIds.includes(track.id) && !target?.tracks.some(member => member.id === track.id)).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: undefined as number | undefined })); setAlbumTracks([...alreadyInTarget, ...previouslyChosen, ...previousNewTracks].map((track, index) => ({ ...track, trackNumber: track.trackNumber ?? index + 1 }))); setAlbumId(newId()); setAlbumTitle(""); }}><option value="">Create a new album</option>{targets.map(target => <option key={target.id} value={target.id}>{target.title}</option>)}</select></label>
               <label className="space-y-2 text-sm font-medium">Album title<Input required={!selectedAlbum} disabled={!!selectedAlbum} value={selectedAlbum?.title ?? albumTitle} onChange={event => { setAlbumTitle(event.target.value); if (selectedAlbumId.startsWith("legacy-")) setAlbumId(newId()); }} maxLength={200} placeholder="Album title" /></label>
               <label className="space-y-2 text-sm font-medium">Genre (optional)<Input value={albumGenre} onChange={event => setAlbumGenre(event.target.value)} maxLength={80} placeholder="Ambient, folk, rock…" /></label>
               <label className="space-y-2 text-sm font-medium">Cover image (optional){selectedAlbum?.image && !albumCover && <span className="ml-2 text-xs font-normal text-muted-foreground">Existing cover will be kept</span>}<Input type="file" accept="image/*" onChange={event => { const file = event.target.files?.[0]; if (file && !file.type.startsWith("image/")) { setMessage({ text: "Please choose an image file.", error: true }); return; } setAlbumCover(file); setMessage(undefined); }} /></label>
               <label className="space-y-2 text-sm font-medium">Add audio tracks<Input type="file" multiple accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => { onAlbumFiles(event.target.files); event.target.value = ""; }} /></label>
+              <fieldset className="space-y-2 sm:col-span-2"><legend className="text-sm font-medium">Default visibility for this album</legend><label className="mr-4 inline-flex items-start gap-2 text-sm"><input type="radio" name="album-visibility" checked={albumVisibility === "public"} onChange={() => setAlbumVisibility("public")} className="mt-1 accent-primary" />Show on Ostrify</label><label className="inline-flex items-start gap-2 text-sm"><input type="radio" name="album-visibility" checked={albumVisibility === "hidden"} onChange={() => setAlbumVisibility("hidden")} className="mt-1 accent-primary" />Hidden in Ostrify</label><p className="text-xs text-muted-foreground">Hidden tracks are omitted from Ostrify discovery, but remain public on your configured write relays.</p></fieldset>
             </div>
             <section className="space-y-3 rounded-lg border border-white/10 p-3" aria-label="Add existing tracks">
-              <div><h3 className="font-semibold">Add previously published tracks</h3><p className="text-xs text-muted-foreground">Select your own kind 36787 tracks. Ostrify will update their existing addressable events, preserving their audio and IDs.</p></div>
-              <Input aria-label="Search published tracks" placeholder="Search your tracks" value={existingSearch} onChange={event => setExistingSearch(event.target.value)} />
-              {existingQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading your published tracks…</p> : existingQuery.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load your published tracks from your read relays. Check relay settings and retry.</p> : availableExistingTracks.length ? <div className="max-h-52 space-y-1 overflow-y-auto">{availableExistingTracks.map(track => <label key={track.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-white/[0.06]"><input type="checkbox" checked={selectedExistingIds.includes(track.id) || albumTracks.some(item => item.existing?.id === track.id)} onChange={event => { const checked = event.target.checked; setSelectedExistingIds(current => checked ? [...new Set([...current, track.id])] : current.filter(id => id !== track.id)); if (checked) setAlbumTracks(current => [...current, { id: track.addressableId ?? track.id, title: track.title, url: track.url, existing: track, trackNumber: selectedAlbum ? Math.max(0, ...(selectedAlbum.tracks.map(item => item.trackNumber ?? 0)), ...current.map(item => item.trackNumber ?? 0)) + 1 : current.length + 1 }]); else setAlbumTracks(current => current.filter(item => item.existing?.id !== track.id).map((item, index) => ({ ...item, trackNumber: selectedAlbum && index < (selectedAlbum.tracks.length ?? 0) ? item.trackNumber : index + 1 }))); }} className="size-4 accent-primary" /><span className="min-w-0 flex-1 truncate text-sm">{track.title}</span><span className="truncate text-xs text-muted-foreground">{track.album ? `From ${track.album}` : "Single"}</span></label>)}</div> : <p className="text-sm text-muted-foreground">No more eligible published tracks found.</p>}
+              <div><h3 className="font-semibold">Add previously published tracks</h3><p className="text-xs text-muted-foreground">Tracks load from your read relays and DROPS. Ostrify updates their existing addressable events, preserving audio and IDs.</p></div>
+              <Input aria-label="Search published tracks" placeholder="Search your tracks" value={existingSearch} onChange={event => setExistingSearch(event.target.value)} />{hiddenExistingTracks.length > 0 && <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={showHiddenTracks} onChange={event => setShowHiddenTracks(event.target.checked)} className="accent-primary" />Include tracks hidden in Ostrify ({hiddenExistingTracks.length})</label>}
+              {existingQuery.isLoading ? <p className="text-sm text-muted-foreground">Loading your published tracks…</p> : existingQuery.isError ? <p role="alert" className="text-sm text-destructive">Couldn’t load your published tracks from your read relays or DROPS. Check relay settings and retry.</p> : availableExistingTracks.length ? <div className="max-h-52 space-y-1 overflow-y-auto">{availableExistingTracks.map(track => <label key={track.id} className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-white/[0.06]"><input type="checkbox" checked={selectedExistingIds.includes(track.id) || albumTracks.some(item => item.existing?.id === track.id)} onChange={event => { const checked = event.target.checked; setSelectedExistingIds(current => checked ? [...new Set([...current, track.id])] : current.filter(id => id !== track.id)); if (checked) { setAlbumTracks(current => [...current, { id: track.addressableId ?? track.id, title: track.title, url: track.url, existing: track, trackNumber: selectedAlbum ? Math.max(0, ...(selectedAlbum.tracks.map(item => item.trackNumber ?? 0)), ...current.map(item => item.trackNumber ?? 0)) + 1 : current.length + 1, visibility: albumTrackVisibility[track.id] ?? track.visibility }]); setAlbumTrackVisibility(current => ({ ...current, [track.id]: track.visibility ?? (selectedAlbum?.tracks.every(item => item.visibility === "hidden") ? "hidden" : "public") })); } else setAlbumTracks(current => current.filter(item => item.existing?.id !== track.id).map((item, index) => ({ ...item, trackNumber: selectedAlbum && index < (selectedAlbum.tracks.length ?? 0) ? item.trackNumber : index + 1 }))); }} className="size-4 accent-primary" /><span className="min-w-0 flex-1 truncate text-sm">{track.title}</span><span className="truncate text-xs text-muted-foreground">{track.album ? `From ${track.album}` : "Single"}</span><select aria-label={`Ostrify visibility for ${track.title}`} value={albumTrackVisibility[track.id] ?? track.visibility ?? (selectedAlbum?.tracks.every(item => item.visibility === "hidden") ? "hidden" : "public")} onChange={event => setAlbumTrackVisibility(current => ({ ...current, [track.id]: event.target.value as MusicVisibility }))} className="rounded border border-input bg-background px-2 py-1 text-xs"><option value="public">Visible</option><option value="hidden">Hidden in Ostrify</option></select></label>)}</div> : <p className="text-sm text-muted-foreground">No more eligible published tracks found.</p>}
             </section>
                           {selectedAlbum && <p className="text-xs text-muted-foreground">Existing album tracks are preloaded. Reordering or adding tracks updates their track numbers when you publish.</p>}
               {albumTracks.length > 0 && <ol className="space-y-2" aria-label="Album track order">{albumTracks.map((track, index) => <li key={track.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/10 p-2"><span className="w-7 text-center text-sm tabular-nums text-muted-foreground">{index + 1}</span><Input aria-label={`Track ${index + 1} title`} value={track.title} onChange={event => setAlbumTracks(current => current.map(item => item.id === track.id ? { ...item, title: event.target.value } : item))} /><span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:block">{track.file?.name}</span><Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} up`} disabled={index === 0} onClick={() => moveTrack(index, -1)}><ArrowUp className="size-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Move ${track.title} down`} disabled={index === albumTracks.length - 1} onClick={() => moveTrack(index, 1)}><ArrowDown className="size-4" /></Button><Button type="button" variant="ghost" size="icon" aria-label={`Remove ${track.title}`} onClick={() => setAlbumTracks(current => current.filter(item => item.id !== track.id).map((item, position) => ({ ...item, trackNumber: position + 1 })))}><X className="size-4" /></Button></li>)}</ol>}
@@ -240,6 +263,8 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
           </form>
         </TabsContent>
       </Tabs>
+      <section className="space-y-3 rounded-lg border border-white/10 p-4" aria-label="Share existing public tracks to DROPS"><div><h3 className="font-semibold">Share existing public tracks</h3><p className="mt-1 text-sm text-muted-foreground">Review tracks Ostrify can find on your read relays and publish their current signed events to DROPS. Tracks hidden in Ostrify are excluded.</p></div><Button type="button" variant="outline" disabled={busy || !user} onClick={() => { setMessage(undefined); void republishDrops.tracks.refetch(); }}>Load my public tracks</Button>{republishDrops.tracks.isError && <p role="alert" className="text-sm text-destructive">{republishDrops.tracks.error.message}</p>}{republishDrops.tracks.data && <div className="space-y-2"><p className="text-xs text-muted-foreground">{republishDrops.tracks.data.length} public track(s) found.</p><div className="max-h-52 space-y-1 overflow-y-auto">{republishDrops.tracks.data.map(track => <div key={track.id} className="flex items-center gap-3 rounded-md px-2 py-2 text-sm"><span className="min-w-0 flex-1 truncate">{track.title}</span><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { void republishDrops.publish.mutateAsync({ track }).then(() => setMessage({ text: `“${track.title}” shared to DROPS.`, error: false })).catch(error => setMessage({ text: error instanceof Error ? error.message : "Could not share this track to DROPS.", error: true })); }}>Send to DROPS</Button></div>)}</div></div>}</section>
+      <TrackVisibilityManager tracks={existingTracks} />
       {message && <p role={message.error ? "alert" : "status"} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${message.error ? "border-destructive/50 text-destructive" : "border-emerald-500/30 text-emerald-300"}`}>{message.error ? <AlertCircle className="mt-0.5 size-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" />}{message.text}</p>}
       {upload.isError && <p role="alert" className="text-sm text-destructive">{upload.error.message}</p>}
     </div>

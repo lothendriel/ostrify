@@ -9,4 +9,7 @@ export const WAVLAKE_PUBKEY =
 export const TUNESTR_PUBKEY = 'b9d02cb8fddeb191701ec0648e37ed1f6afba263e0060fc06099a62851d25e04';
 export const TUNESTR_STREAM_HOST_PUBKEY = 'eeb11961b25442b16389fe6c7ebea9adf0ac36dd596816ea7119e521b8821b9e';
 
+/** Shared Nostr music relay for Ostrify's public track discovery. */
+export const DROPS_MUSIC_RELAY = 'wss://drops.basspistol.org/';
+
 export const FEATURED_MUSIC_PUBKEYS: string[] = [WAVLAKE_PUBKEY, TUNESTR_PUBKEY];

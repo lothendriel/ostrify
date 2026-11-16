@@ -1,6 +1,8 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, type Track } from "@/lib/music";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { parseN94Stream, parseTunestrStreamEvent } from "@/hooks/useTunestrStreams";
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
 import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
@@ -8,10 +10,11 @@ import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } f
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
 export function useTracksByIds(ids: string[] | undefined, enabled = true) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
   const key = (ids ?? []).join(",");
 
   return useQuery({
-    queryKey: ["tracks-by-ids", key],
+    queryKey: ["tracks-by-ids", key, user?.pubkey ?? "public"],
     queryFn: async (c) => {
       if (!ids?.length) return { tracks: [] as Track[], unavailable: 0 };
       const addressRefs = ids.flatMap((id) => {
@@ -76,7 +79,7 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true) {
           if (identifier) byId.set(`${event.pubkey.toLowerCase()}:${identifier}`, track);
         }
       }
-      const tracks = ids.map((id) => byId.get(id.toLowerCase()) ?? byId.get(id)).filter((t): t is Track => !!t);
+      const tracks = ids.map((id) => byId.get(id.toLowerCase()) ?? byId.get(id)).filter((t): t is Track => !!t && (t.kind !== "music" || isTrackVisibleInOstrify(t, user?.pubkey)));
       return { tracks, unavailable: ids.length - tracks.length };
     },
     enabled: enabled && !!ids?.length,

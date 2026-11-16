@@ -42,6 +42,8 @@ export interface Track {
   image?: string;
   /** Artist image URL for external catalog entries, when available. */
   artistImage?: string;
+  /** Ostrify-only visibility marker; hidden events remain public on Nostr relays. */
+  visibility?: "public" | "hidden";
   /** Pubkey that published the event. */
   pubkey: string;
   /** Duration in seconds, if known. */
@@ -64,6 +66,10 @@ function allTagValues(event: NostrEvent, name: string): string[] {
   return event.tags.filter(([n]) => n === name).map((t) => t[1]).filter(Boolean);
 }
 
+function trackVisibility(event: NostrEvent): Track["visibility"] {
+  return tagValue(event, "ostrify_visibility") === "hidden" ? "hidden" : "public";
+}
+
 function parseDuration(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const n = Number(value);
@@ -84,6 +90,7 @@ function decodeArtistPubkey(value: string | undefined): string | undefined {
   return undefined;
 }
 
+/** Ostrify visibility is display/discovery metadata, not access control: relay copies remain public. */
 /** Read only explicitly typed artist identities, never infer from the publisher. */
 function artistPubkey(event: NostrEvent, json?: Record<string, unknown>): string | undefined {
   const explicitTags = event.tags.filter(([name]) =>
@@ -359,6 +366,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     trackNumber,
     addressableId: tagValue(event, "d"),
     image: sanitizeUrl(image),
+    visibility: trackVisibility(event),
     pubkey: event.pubkey,
     duration,
     kind: "music",

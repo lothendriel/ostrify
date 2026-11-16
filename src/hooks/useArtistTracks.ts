@@ -3,6 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import type { NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
+import { DROPS_MUSIC_RELAY } from "@/lib/sources";
+import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 const ARTIST_TRACK_KINDS = [...MUSIC_TRACK_KINDS, 1063, 54, 1];
 const ARTIST_TRACK_LIMIT = 500;
@@ -12,28 +15,25 @@ const MUSIC_TOPICS = ['music', 'tunestr', 'song', 'wavlake', 'v4v', 'value4value
 export function useArtistTracks(pubkey: string | undefined) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
-  const readRelays = [...new Set(config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url))].sort();
+  const { user } = useCurrentUser();
+  const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
 
   return useQuery({
-    queryKey: ["artist-tracks", pubkey ?? "", readRelays.join("|")],
+    queryKey: ["artist-tracks", pubkey ?? "", readRelays.join("|"), user?.pubkey ?? "public"],
     enabled: !!pubkey && readRelays.length > 0,
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
       if (!pubkey) return [] as Track[];
       const timeoutSignal = AbortSignal.any([signal, AbortSignal.timeout(12_000)]);
-      const filters: NostrFilter[] = ARTIST_TRACK_KINDS.map(kind => ({
-        kinds: [kind],
-        authors: [pubkey],
-        limit: ARTIST_TRACK_LIMIT,
-      }));
+      const filters: NostrFilter[] = ARTIST_TRACK_KINDS.map(kind => ({ kinds: [kind], authors: [pubkey], limit: ARTIST_TRACK_LIMIT }));
       // `useMusicDiscovery` also finds kind-1 audio notes through music topic tags;
       // query that same discovery path here so publisher pages do not miss them.
       filters.push({ kinds: [1], authors: [pubkey], '#t': MUSIC_TOPICS, limit: ARTIST_TRACK_LIMIT });
       const relayResults = await Promise.allSettled(readRelays.map(url =>
-        nostr.relay(url).query(filters, { signal: timeoutSignal }),
+        nostr.relay(url).query(url === DROPS_MUSIC_RELAY ? [{ kinds: [36787], authors: [pubkey], limit: ARTIST_TRACK_LIMIT }] : filters, { signal: timeoutSignal }),
       ));
       if (relayResults.every(result => result.status === "rejected")) {
-        throw new Error("Could not load audio published by this account from your read relays.");
+        throw new Error("Could not load audio published by this account from your read relays or DROPS.");
       }
 
       const byIdentity = new Map<string, Track>();
@@ -50,7 +50,7 @@ export function useArtistTracks(pubkey: string | undefined) {
           if (!current || track.createdAt > current.createdAt) byIdentity.set(identity, track);
         }
       }
-      return [...byIdentity.values()].sort((a, b) => b.createdAt - a.createdAt);
+      return [...byIdentity.values()].filter(track => track.kind !== "music" || isTrackVisibleInOstrify(track, user?.pubkey, pubkey)).sort((a, b) => b.createdAt - a.createdAt);
     },
   });
 }
