@@ -51,6 +51,8 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
   const [selectedExistingIds, setSelectedExistingIds] = useState<string[]>([]);
   const [existingSearch, setExistingSearch] = useState("");
   const [showHiddenTracks, setShowHiddenTracks] = useState(false);
+  const [dropsSentIds, setDropsSentIds] = useState<string[]>([]);
+  const [dropsRemovedIds, setDropsRemovedIds] = useState<string[]>([]);
   const [message, setMessage] = useState<{ text: string; error: boolean }>();
   const publish = usePublishMusicEvent();
   const republishDrops = useRepublishMusicToDrops();
@@ -253,10 +255,26 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
         </TabsContent>
       </Tabs>
       <section className="space-y-3 rounded-lg border border-white/10 p-4" aria-label="Share existing public tracks to DROPS">
-        <div><h3 className="font-semibold">Share existing public tracks</h3><p className="mt-1 text-sm text-muted-foreground">Review tracks Ostrify can find on your read relays and publish their current signed events to DROPS. Tracks hidden in Ostrify are excluded.</p></div>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => { setMessage(undefined); void republishDrops.tracks.refetch(); }}>Load my public tracks</Button>
+        <div><h3 className="font-semibold">Share existing public tracks</h3><p className="mt-1 text-sm text-muted-foreground">Review public tracks on your configured read relays that are not yet found on DROPS. Tracks hidden in Ostrify are excluded.</p></div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" disabled={busy || republishDrops.tracks.isFetching} onClick={() => { setMessage(undefined); setDropsSentIds([]); setDropsRemovedIds([]); void republishDrops.tracks.refetch(); }}>
+            {republishDrops.tracks.isFetching ? <><LoaderCircle className="size-4 animate-spin" /> Loading tracks…</> : "Load my public tracks"}
+          </Button>
+          {republishDrops.tracks.isFetching && <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Checking your read relays and DROPS…</span>}
+        </div>
         {republishDrops.tracks.isError && <p role="alert" className="text-sm text-destructive">{republishDrops.tracks.error.message}</p>}
-        {republishDrops.tracks.data && <div className="space-y-2"><p className="text-xs text-muted-foreground">{republishDrops.tracks.data.length} public track(s) found.</p><div className="max-h-52 space-y-1 overflow-y-auto">{republishDrops.tracks.data.map(track => <div key={track.id} className="flex items-center gap-3 rounded-md px-2 py-2 text-sm"><span className="min-w-0 flex-1 truncate">{track.title}</span><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => { void republishDrops.publish.mutateAsync({ track }).then(() => setMessage({ text: `“${track.title}” shared to DROPS.`, error: false })).catch(error => setMessage({ text: error instanceof Error ? error.message : "Could not share this track to DROPS.", error: true })); }}>Send to DROPS</Button></div>)}</div></div>}
+        {republishDrops.tracks.data && <div className="space-y-2"><p className="text-xs text-muted-foreground">{republishDrops.tracks.data.filter(track => !dropsRemovedIds.includes(track.id)).length} public track(s) not found on DROPS.</p><div className="max-h-52 space-y-1 overflow-y-auto">{republishDrops.tracks.data.filter(track => !dropsRemovedIds.includes(track.id)).map(track => {
+          const sent = dropsSentIds.includes(track.id);
+          return <div key={track.id} className="flex items-center gap-3 rounded-md px-2 py-2 text-sm">
+            <span className="min-w-0 flex-1 truncate">{track.title}</span>
+            {sent ? <span role="status" className="flex shrink-0 items-center gap-1 text-emerald-300"><CheckCircle2 className="size-4" />Sent to DROPS</span> : <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => {
+              void republishDrops.publish.mutateAsync({ track }).then(() => {
+                setDropsSentIds(current => [...new Set([...current, track.id])]);
+                window.setTimeout(() => setDropsRemovedIds(current => [...new Set([...current, track.id])]), 1500);
+              }).catch(error => setMessage({ text: error instanceof Error ? error.message : "Could not share this track to DROPS.", error: true }));
+            }}>Send to DROPS</Button>}
+          </div>;
+        })}</div></div>}
       </section>
       <div className="rounded-lg border border-white/10 p-4"><h3 className="font-semibold">Manage your uploads</h3><p className="mt-1 text-sm text-muted-foreground">Review uploaded tracks and albums, paginate through your tracks, and manage their Ostrify visibility.</p><Link to="/my-uploads" className="mt-3 inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open My Uploads</Link></div>
       {message && <p role={message.error ? "alert" : "status"} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${message.error ? "border-destructive/50 text-destructive" : "border-emerald-500/30 text-emerald-300"}`}>{message.error ? <AlertCircle className="mt-0.5 size-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" />}{message.text}</p>}

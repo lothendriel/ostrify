@@ -3,6 +3,7 @@ import { useNostr } from "@nostrify/react";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
+import type { NostrEvent } from "@nostrify/nostrify";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 
 export function useRepublishMusicToDrops() {
@@ -10,25 +11,62 @@ export function useRepublishMusicToDrops() {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
-  const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
+  const readRelays = [...new Set(config.relayMetadata.relays.filter(relay => relay.read && relay.url !== DROPS_MUSIC_RELAY).map(relay => relay.url))].sort();
 
   const tracks = useQuery({
-    queryKey: ["republish-music-to-drops", user?.pubkey ?? "", readRelays.join("|")],
+    queryKey: ["republish-music-to-drops", user?.pubkey ?? "", readRelays.join("|"), DROPS_MUSIC_RELAY],
     enabled: false,
     queryFn: async ({ signal }) => {
       if (!user) throw new Error("Log in to load your music.");
-      const filters = MUSIC_TRACK_KINDS.map(kind => ({ kinds: [kind], authors: [user.pubkey], limit: 500 }));
-      const results = await Promise.allSettled(readRelays.map(relay => nostr.relay(relay).query(filters, {
-        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
-      })));
-      if (results.every(result => result.status === "rejected")) throw new Error("Could not load your tracks from your read relays or DROPS.");
-      const events = results.flatMap(result => result.status === "fulfilled" ? result.value : []);
+      if (readRelays.length === 0) throw new Error("Enable at least one read relay to find your public tracks.");
+      const pageSize = 200;
+      const relaySignal = () => AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+      const queryAllTrackEvents = async (relay: string) => {
+        const relayConnection = nostr.relay(relay);
+        const events: NostrEvent[] = [];
+        for (const kind of MUSIC_TRACK_KINDS) {
+          let until: number | undefined;
+          while (true) {
+            const page = await relayConnection.query([{
+              kinds: [kind],
+              authors: [user.pubkey],
+              limit: pageSize,
+              ...(until === undefined ? {} : { until }),
+            }], { signal: relaySignal() });
+            events.push(...page);
+            if (page.length < pageSize) break;
+            const oldestTimestamp = Math.min(...page.map(event => event.created_at));
+            if (!Number.isFinite(oldestTimestamp) || oldestTimestamp <= 0 || until !== undefined && oldestTimestamp >= until) break;
+            until = oldestTimestamp - 1;
+          }
+        }
+        return events;
+      };
+      const [readResults, dropsResult] = await Promise.all([
+        Promise.allSettled(readRelays.map(relay => queryAllTrackEvents(relay))),
+        queryAllTrackEvents(DROPS_MUSIC_RELAY).then(
+          events => ({ events }),
+          () => ({ error: true as const }),
+        ),
+      ]);
+      if ("error" in dropsResult) throw new Error("Could not check DROPS for existing tracks. Try again when the relay is available.");
+      if (readResults.every(result => result.status === "rejected")) throw new Error("Could not load your tracks from your configured read relays.");
+
+      const dropsAddresses = new Set<string>();
+      for (const event of dropsResult.events) {
+        if (event.pubkey !== user.pubkey) continue;
+        const track = eventToTrack(event);
+        if (track?.addressableId) dropsAddresses.add(`${event.kind}:${event.pubkey}:${track.addressableId}`);
+      }
+
+      const events = readResults.flatMap(result => result.status === "fulfilled" ? result.value : []);
       const byAddress = new Map<string, Track>();
       for (const event of events) {
         if (event.pubkey !== user.pubkey) continue;
         const track = eventToTrack(event);
         if (!track?.addressableId) continue;
         const key = `${event.kind}:${event.pubkey}:${track.addressableId}`;
+        if (dropsAddresses.has(key)) continue;
         const current = byAddress.get(key);
         if (!current || track.createdAt > current.createdAt) byAddress.set(key, track);
       }
