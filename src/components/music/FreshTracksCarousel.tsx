@@ -56,6 +56,10 @@ export function FreshTracksCarousel({ tracks, isLoading = false }: FreshTracksCa
 
   return (
     <section aria-labelledby="fresh-on-nostr-heading" className="w-full min-w-0 space-y-3">
+      <div>
+        <h2 id="fresh-on-nostr-heading" className="text-2xl font-bold tracking-tight">Fresh on Nostr</h2>
+        <p className="text-sm text-muted-foreground">The newest tracks hitting the relays, across your tastes and beyond</p>
+      </div>
       <div className="relative">
         <div
           ref={scrollRef}
