@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Music2, Radio, RefreshCw, Video } from 'lucide-react';
+import { Music2, Radio, RefreshCw, Search, Video } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WavlakeDiscovery } from '@/pages/WavlakePage';
 import { NostrCollections } from '@/components/music/NostrCollections';
@@ -13,6 +13,7 @@ import { useMusicDiscovery } from '@/hooks/useMusicDiscovery';
 import { useTunestrStreams, type TunestrStream } from '@/hooks/useTunestrStreams';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
+import { Input } from '@/components/ui/input';
 
 function cloudflareThumbnail(url: string): string | undefined {
   try {
@@ -50,6 +51,7 @@ export default function MusicDiscovery() {
   const feed = useMusicDiscovery(activeTab === 'nostr');
   const tunestr = useTunestrStreams(activeTab === 'tunestr');
   const [hideClips, setHideClips] = useState(true);
+  const [nostrSearch, setNostrSearch] = useState('');
   const { config } = useAppContext();
   const relayCount = config.relayMetadata.relays.filter(r => r.read).length;
   const tracks = useMemo(() => {
@@ -60,10 +62,19 @@ export default function MusicDiscovery() {
       ids.add(track.id); urls.add(track.url); return true;
     });
   }, [feed.data]);
-  const filteredTracks = hideClips ? tracks.filter(track => track.duration === undefined || track.duration >= 30) : tracks;
-  const trackPageCount = Math.max(1, Math.ceil(filteredTracks.length / 20));
+  const matchingTracks = useMemo(() => {
+    const terms = nostrSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    const candidates = hideClips ? tracks.filter(track => track.duration === undefined || track.duration >= 30) : tracks;
+    if (!terms.length) return candidates;
+    return candidates.filter(track => {
+      const searchable = `${track.title} ${track.artist ?? ''} ${track.album ?? ''} ${track.topics.join(' ')}`.toLocaleLowerCase();
+      return terms.every(term => searchable.includes(term));
+    });
+  }, [hideClips, nostrSearch, tracks]);
+  const trackPageCount = Math.max(1, Math.ceil(matchingTracks.length / 20));
   const [trackPage, setTrackPage] = useState(1);
   const currentTrackPage = Math.min(trackPage, trackPageCount);
+  const filteredTracks = matchingTracks;
   const latest = feed.data?.pages.at(-1);
   const failed = latest?.failed ?? [];
   const tunedStreams = useMemo(() => {
@@ -80,7 +91,7 @@ export default function MusicDiscovery() {
   const supportedRelayCount = config.relayMetadata.relays.filter(relay => relay.read).length;
   const loadMusicTracks = async (requiredTrackCount: number) => {
     if (feed.isFetchingNextPage) return false;
-    let loadedTracks = filteredTracks.length;
+    let loadedTracks = matchingTracks.length;
     let hasMore = feed.hasNextPage;
     while (loadedTracks < requiredTrackCount && hasMore) {
       const result = await feed.fetchNextPage();
@@ -93,7 +104,12 @@ export default function MusicDiscovery() {
         urls.add(track.url);
         return true;
       });
-      loadedTracks = hideClips ? unique.filter(track => track.duration === undefined || track.duration >= 30).length : unique.length;
+      const candidates = hideClips ? unique.filter(track => track.duration === undefined || track.duration >= 30) : unique;
+      const terms = nostrSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+      loadedTracks = candidates.filter(track => {
+        const searchable = `${track.title} ${track.artist ?? ''} ${track.album ?? ''} ${track.topics.join(' ')}`.toLocaleLowerCase();
+        return terms.every(term => searchable.includes(term));
+      }).length;
       hasMore = Boolean(result.hasNextPage);
     }
     return loadedTracks >= requiredTrackCount;
@@ -114,16 +130,17 @@ export default function MusicDiscovery() {
       <TabsContent value="nostr" className="mt-0">
         <div className="space-y-6">
           <div className="flex flex-wrap gap-3"><Link to="/settings" className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-semibold hover:bg-secondary/80"><Radio className="size-4" /> {relayCount} read {relayCount === 1 ? 'relay' : 'relays'} · Settings</Link></div>
+          <div className="space-y-2"><div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input className="h-12 rounded-full bg-secondary pl-11" aria-label="Search Nostr music" placeholder="Search tracks, artists, albums, and tags" value={nostrSearch} onChange={event => { setNostrSearch(event.target.value); setTrackPage(1); }} /></div><p className="text-sm text-muted-foreground">Searches loaded relay tracks by title, artist, album, and tags. Use Next to search older batches.</p></div>
           {feed.isLoading && <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artist discoveries">{Array.from({ length: 4 }, (_, i) => <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse motion-reduce:animate-none" />)}</div>}
-          {!feed.isLoading && !tunestr.isLoading && <NostrCollections tracks={filteredTracks} showAllPublishersOption />}
-          <PublicMusicPlaylists enabled={activeTab === 'nostr'} />
-          <div className="flex flex-wrap gap-2 items-baseline justify-between"><h2 className="text-2xl font-bold">Discover tracks</h2><p className="text-sm text-muted-foreground">{filteredTracks.length} tracks available · discovered from your read relays</p></div>
+          {!nostrSearch.trim() && !feed.isLoading && !tunestr.isLoading && <NostrCollections tracks={tracks} showAllPublishersOption />}
+          {!nostrSearch.trim() && <PublicMusicPlaylists enabled={activeTab === 'nostr'} />}
+          <div className="flex flex-wrap gap-2 items-baseline justify-between"><h2 className="text-2xl font-bold">Discover tracks</h2><p className="text-sm text-muted-foreground">{matchingTracks.length}{nostrSearch.trim() ? ` of ${tracks.length}` : ''} tracks available · discovered from your read relays</p></div>
           <label className="inline-flex items-center gap-2 text-sm text-muted-foreground"><input type="checkbox" checked={hideClips} onChange={event => { setHideClips(event.target.checked); setTrackPage(1); }} className="accent-green-500 size-4" /> Hide clips shorter than 30 seconds (when duration is known)</label>
           {!relayCount && <div className="rounded-lg border border-dashed p-6 text-muted-foreground">No read relays enabled. <Link className="text-primary underline" to="/settings">Choose read relays in Settings.</Link></div>}
           {feed.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Some relays could not be queried. <Button variant="link" onClick={() => feed.refetch()}><RefreshCw className="size-4" /> Retry</Button></div>}
 
           {failed.length > 0 && <div className="rounded-lg border border-border bg-secondary/30 p-4 text-sm text-muted-foreground">{failed.length} {failed.length === 1 ? 'relay did' : 'relays did'} not respond in the latest batch. Results from responding relays are shown. <Link to="/settings" className="text-primary underline">Check relay settings</Link>.</div>}
-          {relayCount > 0 && <TrackList tracks={filteredTracks} isLoading={feed.isLoading} emptyMessage="No playable tracks were found in this batch. Try loading older music or checking your read relays." hasMore={feed.hasNextPage} isLoadingMore={feed.isFetchingNextPage} onLoadMore={loadMusicTracks} page={currentTrackPage} onPageChange={nextPage => setTrackPage(Math.max(1, Math.min(trackPageCount + (feed.hasNextPage ? 1 : 0), nextPage)))} />}
+          {relayCount > 0 && <TrackList tracks={filteredTracks} isLoading={feed.isLoading} emptyMessage={nostrSearch.trim() ? 'No loaded tracks match that search. Try another title, artist, album, or tag.' : 'No playable tracks were found in this batch. Try loading older music or checking your read relays.'} hasMore={feed.hasNextPage} isLoadingMore={feed.isFetchingNextPage} onLoadMore={loadMusicTracks} page={currentTrackPage} onPageChange={nextPage => setTrackPage(Math.max(1, Math.min(trackPageCount + (feed.hasNextPage ? 1 : 0), nextPage)))} />}
           {(filteredTracks.length > 0 || feed.hasNextPage) && <p className="text-xs text-muted-foreground">Results depend on relay availability and the formats each relay stores. Older batches appear after currently loaded tracks.</p>}
         </div>
       </TabsContent>
