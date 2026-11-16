@@ -10,6 +10,7 @@ import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
 import { Shelf } from "@/components/music/Shelf";
+import { FreshTracksCarousel } from "@/components/music/FreshTracksCarousel";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
@@ -44,17 +45,11 @@ const Index = () => {
   const [shelfVariation, setShelfVariation] = useState(0);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const nostrTracks = useMemo(() => allMusic.filter(track => track.source !== 'wavlake'), [allMusic]);
-  const fresh = useMemo(() => buildVariedHomeShelf({
-    candidates: nostrTracks,
-    history: player.history,
-    liked: likedTracks,
-    followedArtists: followedArtists.data ?? [],
-    limit: 10,
-    variation: shelfVariation,
-    familiarSlots: 1,
-  }), [nostrTracks, player.history, likedTracks, followedArtists.data, shelfVariation]);
-  const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.id))], [player.history, likedTracks, fresh]);
-  const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...fresh].map(track => track.url))], [player.history, likedTracks, fresh]);
+  const fresh = useMemo(() => nostrTracks
+    .filter(track => track.kind === "music" && !!track.event)
+    .sort((left, right) => right.createdAt - left.createdAt), [nostrTracks]);
+  const discoveryExcludedIds = useMemo(() => [...new Set([...player.history, ...likedTracks, ...nostrTracks.slice(0, 10)].map(track => track.id))], [player.history, likedTracks, nostrTracks]);
+  const discoveryExcludedUrls = useMemo(() => [...new Set([...player.history, ...likedTracks, ...nostrTracks.slice(0, 10)].map(track => track.url))], [player.history, likedTracks, nostrTracks]);
   const shuffledPodcasts = useMemo(() => {
     const nostrPodcasts = podcasts.filter(track => track.source !== "fountain");
     const fountainPodcasts = podcasts.filter(track => track.source === "fountain");
@@ -119,7 +114,7 @@ const Index = () => {
       <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading} excludeTrackIds={discoveryExcludedIds} excludeTrackUrls={discoveryExcludedUrls} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />
 
       <MusicNewsSection />
-      <Shelf title="Fresh on Nostr" subtitle="The newest tracks hitting the relays, across your tastes and beyond" tracks={fresh} isLoading={tracksLoading || wavlake.isLoading} dense />
+      <FreshTracksCarousel tracks={fresh} isLoading={tracksLoading || wavlake.isLoading} />
 
       <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={shuffledPodcasts} isLoading={podcastsLoading} dense seeAllHref="/podcasts/episodes" />
 
