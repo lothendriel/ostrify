@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Clock, ListPlus } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { usePlayer } from "@/hooks/usePlayer";
+import type { ReactNode } from "react";
 
 export const TRACKS_PER_PAGE = 20;
 
@@ -23,9 +24,11 @@ interface TrackListProps {
   onLoadMore?: (requiredTrackCount: number) => Promise<boolean>;
   page?: number;
   onPageChange?: (page: number) => void;
+  pageSize?: number;
+  renderTrailingAction?: (track: Track) => ReactNode;
 }
 
-export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, onReorder, bulkSelect = true, selectionLabel = 'tracks', hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange }: TrackListProps) {
+export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, onReorder, bulkSelect = true, selectionLabel = 'tracks', hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange, pageSize = TRACKS_PER_PAGE, renderTrailingAction }: TrackListProps) {
   const player = usePlayer();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -33,7 +36,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
   const [paginationState, setPaginationState] = useState({ tracksKey, page: 1 });
   const localPage = paginationState.tracksKey === tracksKey ? paginationState.page : 1;
   const page = controlledPage ?? localPage;
-  const pageCount = Math.max(1, Math.ceil(tracks.length / TRACKS_PER_PAGE));
+  const pageCount = Math.max(1, Math.ceil(tracks.length / pageSize));
   const pageLimit = pageCount + (hasMore && onLoadMore ? 1 : 0);
   const displayedPage = Math.min(page, pageLimit);
   const setPage = (update: (current: number) => number) => {
@@ -41,8 +44,8 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
     if (onPageChange) onPageChange(nextPage);
     else setPaginationState({ tracksKey, page: nextPage });
   };
-  const pageStart = (displayedPage - 1) * TRACKS_PER_PAGE;
-  const visibleTracks = tracks.slice(pageStart, pageStart + TRACKS_PER_PAGE);
+  const pageStart = (displayedPage - 1) * pageSize;
+  const visibleTracks = tracks.slice(pageStart, pageStart + pageSize);
   const selectedTracks = tracks.filter(track => selectedIds.includes(track.id));
   const allSelected = tracks.length > 0 && selectedTracks.length === tracks.length;
   const setTrackSelected = (trackId: string, selected: boolean) => setSelectedIds(ids => selected ? [...new Set([...ids, trackId])] : ids.filter(id => id !== trackId));
@@ -55,7 +58,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
       return;
     }
     if (onLoadMore) {
-      const loaded = await onLoadMore((displayedPage + 1) * TRACKS_PER_PAGE);
+      const loaded = await onLoadMore((displayedPage + 1) * pageSize);
       if (loaded) setPage(current => current + 1);
     }
   };
@@ -84,7 +87,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
     );
   }
 
-  const pagination = (position: 'top' | 'bottom') => tracks.length > TRACKS_PER_PAGE || page < pageCount || hasMore && !!onLoadMore ? <nav aria-label={`Track pagination (${position})`} className={`${position === 'top' ? 'mb-4' : 'mt-4'} flex flex-wrap items-center justify-between gap-3 border-y py-3`}>
+  const pagination = (position: 'top' | 'bottom') => tracks.length > pageSize || page < pageCount || hasMore && !!onLoadMore ? <nav aria-label={`Track pagination (${position})`} className={`${position === 'top' ? 'mb-4' : 'mt-4'} flex flex-wrap items-center justify-between gap-3 border-y py-3`}>
     <Button type="button" variant="outline" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={displayedPage <= 1 || isLoadingMore}><ChevronLeft className="size-4" /> Previous</Button>
     <p aria-live="polite" className="text-sm text-muted-foreground">Page {displayedPage}{!hasMore && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} tracks {canLoadMore ? 'loaded' : 'total'}</span></p>
     <Button type="button" variant="outline" onClick={() => void next()} disabled={isLoadingMore || !nextPageAvailable}>{isLoadingMore ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
@@ -133,8 +136,9 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
             onSelectedChange={selected => setTrackSelected(track.id, selected)}
             onCreatePlaylist={onCreatePlaylist}
             onRemove={onRemove ? () => onRemove(track) : undefined}
-            draggable={!!onReorder}
-            onMoveUp={onReorder && index > 0 ? () => reorder(index, index - 1) : undefined}
+             draggable={!!onReorder}
+             trailingAction={renderTrailingAction?.(track)}
+             onMoveUp={onReorder && index > 0 ? () => reorder(index, index - 1) : undefined}
             onMoveDown={onReorder && index < tracks.length - 1 ? () => reorder(index, index + 1) : undefined}
             onDragStart={onReorder ? event => { setDraggedIndex(index); event.dataTransfer.effectAllowed = "move"; } : undefined}
             onDragOver={onReorder ? event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } : undefined}

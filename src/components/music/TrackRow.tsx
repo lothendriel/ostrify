@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronUp, GripVertical, Play, Pause } from "lucide-react";
+import type { ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatDuration, type Track } from "@/lib/music";
@@ -25,9 +26,10 @@ interface TrackRowProps {
   onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragEnd?: () => void;
   draggable?: boolean;
+  trailingAction?: ReactNode;
 }
 
-export function TrackRow({ track, index, selectable = false, selected = false, onSelectedChange, onCreatePlaylist, onRemove, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd, draggable = false }: TrackRowProps) {
+export function TrackRow({ track, index, selectable = false, selected = false, onSelectedChange, onCreatePlaylist, onRemove, onMoveUp, onMoveDown, onDragStart, onDragOver, onDrop, onDragEnd, draggable = false, trailingAction }: TrackRowProps) {
   const player = usePlayer();
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
@@ -106,6 +108,7 @@ export function TrackRow({ track, index, selectable = false, selected = false, o
         <span className="text-sm text-muted-foreground tabular-nums w-12 text-right">
           {formatDuration(track.duration)}
         </span>
+        {trailingAction && <span onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()} className="shrink-0">{trailingAction}</span>}
         {onRemove && (
           <button
             type="button"

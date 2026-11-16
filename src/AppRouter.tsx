@@ -27,6 +27,7 @@ import { PublicMusicPlaylists } from "./components/music/PublicMusicPlaylists";
 import FollowedArtists from "./pages/FollowedArtists";
 import FriendsPage from "./pages/FriendsPage";
 import MyProfile from "./pages/MyProfile";
+import { MyUploadsManager } from "./components/music/MyUploadsManager";
 import AudiobooksPage from "./pages/AudiobooksPage";
 import AudiobookLibraryPage from "./pages/AudiobookLibraryPage";
 import { NIP19Page } from "./pages/NIP19Page";
@@ -82,6 +83,7 @@ export function AppRouter() {
                   <Route path="/friends" element={<FriendsPage />} />
                   <Route path="/analytics" element={<AnalyticsPage />} />
                   <Route path="/my-profile" element={<MyProfile />} />
+                  <Route path="/my-uploads" element={<MyUploadsManager />} />
                   <Route path="/artist/:nip19/album" element={<ArtistAlbumPage />} />
                   <Route path="/artist/:nip19" element={<ArtistPage />} />
                   <Route path="/friends/:nip19" element={<FriendsPage />} />
