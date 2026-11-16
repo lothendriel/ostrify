@@ -6,6 +6,8 @@
   <p>
     <a href="https://ostrify.shakespeare.wtf">Open Ostrify</a>
     ·
+    <a href="CHANGELOG.md">Changelog</a>
+    ·
     <a href="NIP.md">Nostr event formats</a>
   </p>
   <p>
@@ -17,9 +19,48 @@
 
 ---
 
-Ostrify is an audio discovery and listening app built around [Nostr](https://nostr.com/), an open, decentralized protocol. It brings audio from Nostr relays together with independent music catalogs and open audiobook collections in a responsive web player.
+Ostrify is an audio discovery and listening app built around [Nostr](https://nostr.com/), an open, decentralized protocol. It brings audio published to Nostr relays together with independent music catalogs and open audiobook collections in a responsive web player.
 
-There is no Ostrify account server. Sign in with a Nostr-compatible signer to publish and sync supported parts of your library. Your Nostr identity is your account; content and catalog availability depends on the relays, publishers, and services you use.
+There is no Ostrify account server. Sign in with a Nostr-compatible signer to publish and sync supported parts of your library. Your Nostr identity is your account; available content depends on your relays, publishers, and external services.
+
+## Features
+
+### Discover music and audio
+
+- **Home:** browse genre shelves, fresh Nostr tracks, personalized recommendations, daily discoveries, music news, and podcasts. Sections and their data load as you approach them while scrolling.
+- **Music:** find tracks on your enabled Nostr relays and the shared DROPS music relay, browse the Wavlake catalog, discover TuneStr live streams and recordings, and explore artists, publishers, albums, and public Ostrify playlists.
+- **Genres:** browse Rock, Electronic, Hip-Hop, Jazz & Blues, Classical, Folk & Acoustic, Pop, Ambient & Chill, and Bitcoin & Nostr; open a category’s full catalog with **See all**.
+- **Podcasts:** browse Nostr episodes and shows, Fountain-linked shows and RSS episodes, or search the Podcast Index directory. Save shows and episodes to your library.
+- **Audiobooks:** search and browse LibriVox and the Project Gutenberg Open Audiobook Collection, play available recordings in sequence, and save favorites or organize collections.
+- **Search:** search loaded music, podcasts, Wavlake tracks and artists, audiobooks, and Ostrify profiles that opted into the public directory.
+- **Music news:** read recent music updates, reviews, releases, and articles shared on your relays.
+
+### Listen and manage playback
+
+- **Persistent player:** audio continues as you navigate. Use play/pause, previous/next, seek, volume, shuffle, repeat, and queue controls.
+- **Queue and history:** manage upcoming tracks, revisit recent listening, and resume playback from this browser.
+- **Track actions:** like tracks, add supported audio to playlists, or use queue actions while browsing.
+- **TuneStr video:** play supported live streams and recordings in a docked or full-screen player.
+- **Daily Discovery:** give local recommendations feedback with **More like this**, **Not for me**, and artist-blocking controls.
+- **Analytics:** review local listening time, sessions, top tracks, and a seven-day overview, alongside a sampled view of audio events returned by your read relays.
+
+### Build a library and publish music
+
+- **Liked Songs and playlists:** create, organize, and reorder playlists; publish supported lists as Nostr events; and browse public Ostrify playlists.
+- **Saved albums:** bookmark Wavlake and Nostr publisher albums in a Nostr-synced library, with per-album visibility controls for Ostrify profiles.
+- **Follow artists and people:** keep a separate artist list, follow Ostrify accounts, and find people who opted into the directory.
+- **Saved podcasts:** keep shows and episodes together in a Nostr-synced library.
+- **Audiobook library:** organize favorites and collections on this device, and optionally sync them privately across devices.
+- **Public music profile:** choose which supported library sections Ostrify displays on your profile.
+- **Publish music:** upload a track or a multi-track album through a configured Blossom server, or publish an HTTPS audio URL. Add artwork and genre metadata, reuse and reorder previously published tracks, and choose whether each track is shown in Ostrify.
+- **My Uploads:** review your published tracks, paginate through them, and change Ostrify visibility individually or for albums. A visibility change is not a deletion or a way to make a public Nostr event private.
+- **DROPS sharing:** public music uploads are also sent to the shared DROPS relay for Ostrify discovery. The publishing interface reports outcomes and can help share eligible existing public tracks.
+
+### Friends and activity
+
+- **Friends on Ostrify:** follow accounts, browse public profile sections they choose to display, and discover opt-in directory listings.
+- **Private invites:** send NIP-17 encrypted friend invites to a Nostr public key; the recipient chooses whether to follow you back.
+- **Listening status:** optionally share the current track as a public NIP-38 status. Sharing is off by default.
 
 ## A look around
 
@@ -31,13 +72,13 @@ Explore Nostr-published audio, browse independent catalog music, and move from t
 
 ### Podcasts
 
-Browse Nostr podcasts, Fountain-linked shows and episodes, or search the Podcast Index directory for shows across the podcast ecosystem.
+Browse Nostr podcasts, Fountain.fm shows and episodes, or Podcast Index directory results.
 
 ![Ostrify podcast discovery with Nostr, Fountain.fm, and podcast directory tabs](public/screenshots/podcasts.png)
 
 ### Music news and listening insights
 
-Catch up on music news shared across Nostr, and review private listening stats alongside an explicitly sampled view of relay activity.
+Catch up on music news shared across Nostr, and review private listening stats alongside a sampled view of relay activity.
 
 | Music news | Listening insights |
 | --- | --- |
@@ -45,7 +86,7 @@ Catch up on music news shared across Nostr, and review private listening stats a
 
 ### Friends and discovery
 
-Find people who opted into the Ostrify directory, follow friends, and explore more audio from the Search page.
+Find people who opted into the Ostrify directory, follow friends, and explore more audio from Search.
 
 | Friends on Ostrify | Search and browse |
 | --- | --- |
@@ -53,71 +94,52 @@ Find people who opted into the Ostrify directory, follow friends, and explore mo
 
 ### Settings and relays
 
-Choose which relays Ostrify reads from and publishes to, independently of your NIP-65 relay list. Manage profile visibility and other app preferences in one place.
+Choose which relays Ostrify reads from and publishes to, independently of your NIP-65 relay list. Manage Blossom servers, directory and profile visibility, listening status, and appearance preferences.
 
 ![Ostrify relay settings on mobile](public/screenshots/settings-mobile.png)
 
-## What you can do
-
-### Discover audio
-
-- **Home:** browse genre shelves, fresh Nostr tracks, a daily discovery mix, personalized recommendations, and music news from your relays. Open a genre’s full catalog with **See all**.
-- **Music:** discover tracks from Nostr relays, explore the Wavlake catalog, and find TuneStr live streams and recordings. Browse artists and publishers, albums, and public Ostrify playlists.
-- **Genres:** explore categories such as Rock, Electronic, Hip-Hop, Jazz & Blues, Classical, Folk & Acoustic, Pop, Ambient & Chill, and Bitcoin & Nostr.
-- **Podcasts:** switch between Nostr podcasts, Fountain.fm, and Podcast Index discovery. Browse shows and episodes, search the directory, and save shows or episodes to your library.
-- **Audiobooks:** browse and search LibriVox and the Project Gutenberg Open Audiobook Collection. Play a book’s available recordings in sequence and keep favorites and collections organized.
-- **Search:** search across music, podcast shows and episodes, Wavlake tracks and artists, audiobooks, and opted-in Ostrify profiles.
-- **Music news:** read recent music updates, reviews, releases, and articles shared across your enabled Nostr relays.
-
-### Listen your way
-
-- **Persistent player:** keep audio playing as you move around the app, with play/pause, skip, seek, volume, shuffle, repeat, and queue controls.
-- **Queue and history:** manage what plays next, revisit recent listening, and resume playback from the same browser.
-- **Track actions:** like tracks, add them to playlists, and use queue actions while browsing.
-- **TuneStr video:** open Nostr live streams and recordings in Ostrify’s video player, with docked and full-screen viewing controls where supported.
-- **Daily discovery:** give local feedback on recommendations with “More like this,” “Not for me,” and artist blocking controls.
-
-### Make a library
-
-- **Liked Songs and playlists:** create and organize music playlists, reorder tracks, and publish lists as Nostr events.
-- **Saved albums:** bookmark Wavlake and Nostr publisher albums in a Nostr-synced library, with per-album public/private display controls.
-- **Follow artists:** keep track of Nostr and Wavlake artists in your own follow list.
-- **Save podcasts:** keep shows and episodes together in your Nostr-synced podcast library.
-- **Audiobook favorites and collections:** organize books on this device, and optionally sync the library privately across devices.
-- **Public music profiles:** show selected library sections on your Ostrify profile, with controls for likes, artists, friends, playlists, saved podcasts, and saved albums.
-- **Public playlist discovery:** browse playlists shared by Ostrify listeners.
-
-### Find people and share activity
-
-- **Friends on Ostrify:** follow people, find accounts that opted into the Ostrify directory, and browse the public library sections they choose to share.
-- **Private invites:** send NIP-17 encrypted friend invites to a Nostr public key. Recipients choose whether to follow you back.
-- **Listening status:** optionally share what you’re listening to as a public NIP-38 status. Sharing is off by default.
-
-### Personal listening insights
-
-The Analytics page shows local listening time, play sessions, top tracks, and a seven-day overview, alongside a sampled snapshot of audio events visible on your read relays. Personal play history stays in the browser; relay counts are samples, not global network totals.
-
-## Your identity, your data
+## Your identity and data
 
 Ostrify uses your selected Nostr signer for signing and encryption; the app does not access your private key directly.
 
-- **Public on Nostr:** music playlists and likes, followed artists and people, directory listings, and profile visibility preferences are published as relay events. Profile controls change what Ostrify displays; they do not make published events private or erase relay copies.
-- **Private audiobook sync:** audiobook favorites and collections are encrypted to your own public key with NIP-44 before being published as NIP-78 application data. Sync requires the same Nostr account on each device, a signer with NIP-44 support, and configured read and write relays. Existing browser-only saves are merged during first sync.
-- **Optional public status:** when enabled, listening activity is published publicly. Ostrify sends a clearing status when possible, but relays or other clients may retain older copies.
-- **Local to this browser:** playback queue, history, volume, position, listening analytics, and other playback preferences do not automatically sync. Audiobook library data is also cached locally.
-- **Relay controls:** Ostrify’s read/write relay choices apply to this app only; they do not replace or overwrite your NIP-65 relay list.
+- **Public on Nostr:** playlists and likes, followed artists and people, directory listings, and profile visibility preferences are published as relay events. Profile controls affect what Ostrify displays; they do not make published events private or erase relay copies.
+- **Music visibility is not privacy:** tracks marked **Hidden in Ostrify** are omitted from Ostrify discovery and are not sent to DROPS. The track event and its media URL remain public on configured write relays, and relays or other clients may retain older public copies.
+- **Private audiobook sync:** favorites and collections are encrypted to your own public key with NIP-44 before publication as NIP-78 application data. Sync requires the same Nostr account on each device, a signer with NIP-44 support, and configured read and write relays. Existing browser-only saves are merged during initial sync.
+- **Optional public status:** when enabled, listening activity is published publicly. Ostrify attempts to clear the current status when sharing is disabled, but relays and other clients may retain older copies.
+- **Local to this browser:** playback queue, history, volume, position, listening analytics, and playback preferences do not automatically sync. Audiobook data is also cached locally.
+- **Relay controls:** Ostrify’s read and write relay choices apply only to this app; they do not replace or overwrite your NIP-65 relay list.
 
-Use relays you trust to retain application data. Features can vary with relay availability, publisher event formats, signer capabilities, and external catalog services.
+Use relays you trust to retain application data. Features vary with relay availability, publisher event formats, signer capabilities, and external catalog services.
 
 ## Sources and availability
 
-Ostrify combines Nostr events with the Wavlake music catalog, Fountain, Podcast Index, LibriVox, Project Gutenberg, and Internet Archive. Each source has its own availability and terms. Podcast Index features require API credentials and a reachable server-side proxy; Fountain and other services can also be affected by upstream availability. Nostr music and podcast discovery depends on the relays you enable and the event formats publishers use.
+Ostrify combines Nostr events with the Wavlake catalog, the shared DROPS relay, Fountain, Podcast Index, LibriVox, Project Gutenberg, and Internet Archive. Each source has its own availability and terms. Podcast Index discovery requires API credentials and a reachable server-side proxy. Fountain and other services can be affected by upstream availability. Nostr discovery depends on the relays you enable and the event formats publishers use. Relay samples and search results are not guaranteed to be complete or global.
 
 For event kinds, tags, and Ostrify-specific conventions, see **[NIP.md](NIP.md)**.
+
+## Project setup
+
+This project uses React, TypeScript, Vite, Tailwind CSS, and Nostrify. With Node.js and npm installed:
+
+```sh
+npm install
+npm run dev
+```
+
+Useful checks and build commands:
+
+```sh
+npm test                 # TypeScript, ESLint, Vitest, and production build
+npm run build            # Standard production build
+npm run build:cloudflare # Cloudflare deployment build
+```
+
+Some integrations need external configuration. In particular, Podcast Index API access is provided through the included server-side worker and requires Podcast Index API credentials in the deployment environment. Blossom uploads require an available upload server. Ostrify’s basic music discovery, playback, and Nostr library features use the browser and configured Nostr relays.
 
 ## Links
 
 - **Open the app:** [ostrify.shakespeare.wtf](https://ostrify.shakespeare.wtf)
+- **Changelog:** [CHANGELOG.md](CHANGELOG.md)
 - **Nostr event formats:** [NIP.md](NIP.md)
 - **Edit with Shakespeare:** [Open this project in Shakespeare](https://shakespeare.diy/clone?url=https%3A%2F%2Fgithub.com%2Flothendriel%2Fostrify.git)
 
