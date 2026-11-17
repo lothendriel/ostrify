@@ -51,34 +51,40 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
   const VolumeIcon = player.muted || player.volume === 0 ? VolumeX : player.volume < 0.5 ? Volume1 : Volume2;
 
   return (
-    <footer className="h-20 shrink-0 border-t border-border bg-card px-3 sm:px-4 flex items-center gap-3">
-      {/* Track info */}
-      <div className="flex items-center gap-3 min-w-0 w-[30%] max-w-xs">
-        {current ? (
-          <>
-            <TrackArtwork track={current} className="w-14 h-14" />
-            <div className="min-w-0 hidden sm:block">
-              <div className="truncate font-medium text-sm">{current.title}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
+    <footer className="flex h-28 shrink-0 flex-col justify-center gap-1 border-t border-border bg-card px-3 py-2 sm:h-20 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
+      {/* Track identity and compact mobile actions */}
+      <div className="flex w-full min-w-0 items-center gap-2 sm:w-[30%] sm:max-w-xs sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none sm:gap-3">
+          {current ? (
+            <>
+              <TrackArtwork track={current} className="size-10 shrink-0 sm:size-14" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium sm:text-sm">{current.title}</div>
+                <div className="truncate text-[11px] text-muted-foreground sm:text-xs">
+                  {current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
+                </div>
               </div>
-            </div>
-            {current.kind === 'music' && current.source !== 'tunestr' && <div className="hidden sm:flex items-center">
-              <LikeButton trackId={current.id} size={16} />
-            </div>}
-            {current.source !== 'librivox' && current.source !== 'fountain' && current.kind === 'podcast' && <div className="hidden sm:flex items-center">
-              <LikeButton trackId={current.id} size={16} />
-              <AddToPlaylistMenu trackId={current.id} />
-            </div>}
-          </>
-        ) : (
-          <div className="text-sm text-muted-foreground hidden sm:block">Nothing playing</div>
-        )}
+              {current.kind === 'music' && current.source !== 'tunestr' && <div className="hidden sm:flex items-center">
+                <LikeButton trackId={current.id} size={16} />
+              </div>}
+              {current.source !== 'librivox' && current.source !== 'fountain' && current.kind === 'podcast' && <div className="hidden sm:flex items-center">
+                <LikeButton trackId={current.id} size={16} />
+                <AddToPlaylistMenu trackId={current.id} />
+              </div>}
+            </>
+          ) : (
+            <div className="text-xs text-muted-foreground sm:text-sm">Nothing playing</div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1 sm:hidden">
+          <ShareTrackButton track={current} />
+          <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
+        </div>
       </div>
 
       {/* Controls */}
-      <div className="flex-1 min-w-0 flex flex-col items-center gap-1">
-        <div className="flex items-center gap-2">
+      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-row items-center gap-2 sm:flex-col sm:items-center sm:gap-1">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="icon"
@@ -95,7 +101,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             onClick={player.previous}
             disabled={!current}
             aria-label="Previous"
-            className="rounded-full size-8 text-muted-foreground hover:text-foreground"
+            className="rounded-full size-10 text-muted-foreground hover:text-foreground sm:size-8"
           >
             <SkipBack className="size-5 fill-current" />
           </Button>
@@ -103,7 +109,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             onClick={player.togglePlay}
             disabled={!current}
             aria-label={player.isPlaying ? "Pause" : "Play"}
-            className="rounded-full size-10 bg-foreground text-background hover:bg-foreground hover:scale-105 transition-transform disabled:opacity-40"
+            className="rounded-full size-10 bg-foreground text-background hover:bg-foreground hover:scale-105 transition-transform disabled:opacity-40 sm:size-10"
           >
             {player.isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current ml-0.5" />}
           </Button>
@@ -113,7 +119,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             onClick={player.next}
             disabled={!current}
             aria-label="Next"
-            className="rounded-full size-8 text-muted-foreground hover:text-foreground"
+            className="rounded-full size-10 text-muted-foreground hover:text-foreground sm:size-8"
           >
             <SkipForward className="size-5 fill-current" />
           </Button>
@@ -150,7 +156,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
       </div>
 
       {/* Queue and volume */}
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
+      <div className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
         <ShareTrackButton track={current} />
         <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         <div className="hidden md:flex items-center gap-2">

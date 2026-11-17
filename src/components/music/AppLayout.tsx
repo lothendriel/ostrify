@@ -80,8 +80,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
           {activePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
         </aside>}
-        {isMobile && activePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-20 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
-        {isMobile && <div className={`fixed inset-x-0 bottom-20 z-40 transition-[transform,opacity] duration-300 ease-in-out ${activePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!activePanel} inert={!activePanel}>
+        {isMobile && activePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-28 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
+        {isMobile && <div className={`fixed inset-x-0 bottom-28 z-40 transition-[transform,opacity] duration-300 ease-in-out ${activePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!activePanel} inert={!activePanel}>
           <div className="mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl pb-[env(safe-area-inset-bottom)]">
             {activePanel === 'friends' && <FriendsActivityPanel open onClose={() => setActivePanel(null)} />}
             {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
