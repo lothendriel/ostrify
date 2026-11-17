@@ -154,6 +154,13 @@ function isAudio(url: string | undefined, mime: string | undefined): boolean {
  * Parse a kind:1063 (NIP-94 File Metadata) event into a Track, if it is audio.
  */
 export function parseFileMetadataTrack(event: NostrEvent): Track | null {
+  // Divine publishes reusable audio as kind 1063 events linked to their kind 34236
+  // videos. Keep those sounds out of music discovery without filtering ordinary audio.
+  const referencesShortVideo = event.tags.some(([name, value]) =>
+    name === "a" && /^34236:[0-9a-f]{64}:.+$/i.test(value ?? ""),
+  );
+  if (referencesShortVideo) return null;
+
   const url = sanitizeUrl(tagValue(event, "url"));
   const mime = tagValue(event, "m");
   if (!url || !isAudio(url, mime)) return null;
