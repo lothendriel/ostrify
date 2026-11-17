@@ -10,36 +10,7 @@ type Action = 'request' | 'accept' | 'decline' | 'remove';
 interface Message { id: string; from: string; to: string; token: string; action: Action; created_at: number }
 interface Rumor { id: string; pubkey: string; created_at: number; kind: number; tags: string[][]; content: string }
 type UnwrapResult = { status: 'processed'; message: Message | null } | { status: 'retry' };
-interface FriendSyncDiagnostics {
-  decryptOperations: number;
-  decryptSuccesses: number;
-  decryptFailures: number;
-  decryptDurationMs: number;
-  retryWraps: number;
-  cachedWrapsSkipped: number;
-  wrapsProcessed: number;
-  unrecognizedWraps: number;
-  recognizedMessages: number;
-}
 const MAX_PROCESSED_WRAP_IDS = 1500;
-
-function friendDiagnosticsEnabled(): boolean {
-  return typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('friendsDiagnostics') === '1';
-}
-
-function createFriendSyncDiagnostics(): FriendSyncDiagnostics {
-  return {
-    decryptOperations: 0,
-    decryptSuccesses: 0,
-    decryptFailures: 0,
-    decryptDurationMs: 0,
-    retryWraps: 0,
-    cachedWrapsSkipped: 0,
-    wrapsProcessed: 0,
-    unrecognizedWraps: 0,
-    recognizedMessages: 0,
-  };
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -109,7 +80,6 @@ function parseJson(value: string): unknown {
 async function unwrapMessage(
   user: NonNullable<ReturnType<typeof useCurrentUser>['user']>,
   wrap: NostrEvent,
-  diagnostics?: FriendSyncDiagnostics,
 ): Promise<UnwrapResult> {
   if (!user.signer.nip44
     || !isSignedEvent(wrap)
@@ -123,18 +93,12 @@ async function unwrapMessage(
     || recipientTags[0][1] !== user.pubkey) return { status: 'processed', message: null };
 
   let sealValue: unknown;
-  const decryptStart = diagnostics ? performance.now() : 0;
-  if (diagnostics) diagnostics.decryptOperations += 1;
   try {
     sealValue = await user.signer.nip44.decrypt(wrap.pubkey, wrap.content).then(parseJson);
-    if (diagnostics) diagnostics.decryptSuccesses += 1;
   } catch {
     // A signer failure may be temporary or require user interaction. Don't cache it;
     // the next inbox refresh should be able to retry this wrap.
-    if (diagnostics) diagnostics.decryptFailures += 1;
     return { status: 'retry' };
-  } finally {
-    if (diagnostics) diagnostics.decryptDurationMs += performance.now() - decryptStart;
   }
   if (!isSignedEvent(sealValue)
     || sealValue.kind !== 13
@@ -142,16 +106,10 @@ async function unwrapMessage(
     || !verifyEvent(sealValue)) return { status: 'processed', message: null };
 
   let rumorValue: unknown;
-  const rumorDecryptStart = diagnostics ? performance.now() : 0;
-  if (diagnostics) diagnostics.decryptOperations += 1;
   try {
     rumorValue = await user.signer.nip44.decrypt(sealValue.pubkey, sealValue.content).then(parseJson);
-    if (diagnostics) diagnostics.decryptSuccesses += 1;
   } catch {
-    if (diagnostics) diagnostics.decryptFailures += 1;
     return { status: 'retry' };
-  } finally {
-    if (diagnostics) diagnostics.decryptDurationMs += performance.now() - rumorDecryptStart;
   }
   if (!isRumor(rumorValue)
     || rumorValue.pubkey !== sealValue.pubkey
@@ -229,51 +187,9 @@ export function useFriends() {
     queryFn: async ({ signal }) => {
       if (!user?.signer.nip44) throw new Error('Your signer must support NIP-44 to use private invitations.');
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(12000)]);
-      const diagnosticsEnabled = friendDiagnosticsEnabled();
-      const diagnostics = diagnosticsEnabled ? createFriendSyncDiagnostics() : undefined;
-      const syncStarted = diagnosticsEnabled ? performance.now() : 0;
-      let relayListQueryDurationMs = 0;
-      let inboxQueryDurationMs = 0;
-      let relays: string[];
-      const relayListQueryStarted = diagnosticsEnabled ? performance.now() : 0;
-      try {
-        relays = await inboxRelays(nostr, user.pubkey, timeout);
-        if (diagnosticsEnabled) relayListQueryDurationMs = performance.now() - relayListQueryStarted;
-      } catch (error) {
-        if (diagnosticsEnabled) console.info('[Ostrify friends diagnostics]', {
-          event: 'inbox-sync', outcome: 'error', stage: 'inbox-relay-list',
-          relayListQueries: 1,
-          relayListQueryDurationMs: Math.round(performance.now() - relayListQueryStarted),
-          totalSyncDurationMs: Math.round(performance.now() - syncStarted),
-        });
-        throw error;
-      }
-      if (!relays.length) {
-        if (diagnosticsEnabled) console.info('[Ostrify friends diagnostics]', {
-          event: 'inbox-sync', outcome: 'no-inbox-relays',
-          relayListQueries: 1,
-          relayListQueryDurationMs: Math.round(relayListQueryDurationMs),
-          totalSyncDurationMs: Math.round(performance.now() - syncStarted),
-        });
-        throw new Error('Set up NIP-17 DM relays in your Nostr messaging app before using Ostrify friends.');
-      }
-      const relayCount = relays.length;
-      const inboxQueryStarted = diagnosticsEnabled ? performance.now() : 0;
-      let events: NostrEvent[];
-      try {
-        events = await nostr.group(relays).query([{ kinds: [1059], '#p': [user.pubkey], limit: 500 }], { signal: timeout });
-        if (diagnosticsEnabled) inboxQueryDurationMs = performance.now() - inboxQueryStarted;
-      } catch (error) {
-        if (diagnosticsEnabled) console.info('[Ostrify friends diagnostics]', {
-          event: 'inbox-sync', outcome: 'error', stage: 'gift-wrap-query', relayCount,
-          relayListQueries: 1,
-          giftWrapQueries: 1,
-          relayListQueryDurationMs: Math.round(relayListQueryDurationMs),
-          inboxQueryDurationMs: Math.round(performance.now() - inboxQueryStarted),
-          totalSyncDurationMs: Math.round(performance.now() - syncStarted),
-        });
-        throw error;
-      }
+      const relays = await inboxRelays(nostr, user.pubkey, timeout);
+      if (!relays.length) throw new Error('Set up NIP-17 DM relays in your Nostr messaging app before using Ostrify friends.');
+      const events = await nostr.group(relays).query([{ kinds: [1059], '#p': [user.pubkey], limit: 500 }], { signal: timeout });
       const cached = queryClient.getQueryData<Message[]>(['ostrify-friend-messages', user.pubkey]) ?? [];
       const seen = new Set(cached.map(message => message.id));
       const messages: Message[] = [...cached];
@@ -283,50 +199,17 @@ export function useFriends() {
       // Signer requests can be interactive; do not decrypt hundreds in parallel.
       for (const event of events) {
         if (signal.aborted) break;
-        if (processedWrapIds.has(event.id)) {
-          if (diagnostics) diagnostics.cachedWrapsSkipped += 1;
-          continue;
-        }
-        const result = await unwrapMessage(user, event, diagnostics);
-        if (result.status === 'retry') {
-          if (diagnostics) diagnostics.retryWraps += 1;
-          continue;
-        }
+        if (processedWrapIds.has(event.id)) continue;
+        const result = await unwrapMessage(user, event);
+        if (result.status === 'retry') continue;
         processedWrapIds.add(event.id);
-        if (diagnostics) diagnostics.wrapsProcessed += 1;
         if (result.message && !seen.has(result.message.id)) {
           seen.add(result.message.id);
           messages.push(result.message);
-          if (diagnostics) diagnostics.recognizedMessages += 1;
-        } else if (!result.message && diagnostics) {
-          diagnostics.unrecognizedWraps += 1;
         }
       }
       queryClient.setQueryData(['ostrify-friend-wrap-ids', user.pubkey], [...processedWrapIds].slice(-MAX_PROCESSED_WRAP_IDS));
       queryClient.setQueryData(['ostrify-friend-messages', user.pubkey], messages);
-      if (diagnostics) {
-        console.info('[Ostrify friends diagnostics]', {
-          event: 'inbox-sync',
-          outcome: signal.aborted ? 'aborted' : 'success',
-          relayListQueries: 1,
-          giftWrapQueries: 1,
-          relayCount,
-          wrapsReturned: events.length,
-          relayListQueryDurationMs: Math.round(relayListQueryDurationMs),
-          cachedWrapsSkipped: diagnostics.cachedWrapsSkipped,
-          retryWraps: diagnostics.retryWraps,
-          wrapsProcessed: diagnostics.wrapsProcessed,
-          unrecognizedWraps: diagnostics.unrecognizedWraps,
-          recognizedMessages: diagnostics.recognizedMessages,
-          decryptOperations: diagnostics.decryptOperations,
-          decryptSuccesses: diagnostics.decryptSuccesses,
-          decryptFailures: diagnostics.decryptFailures,
-          decryptDurationMs: Math.round(diagnostics.decryptDurationMs),
-          inboxQueryDurationMs: Math.round(inboxQueryDurationMs),
-          totalSyncDurationMs: Math.round(performance.now() - syncStarted),
-          aborted: signal.aborted,
-        });
-      }
       return derive(messages, user.pubkey);
     },
   });
