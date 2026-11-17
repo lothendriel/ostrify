@@ -11,6 +11,7 @@ import { ArtistLink } from "@/components/music/ArtistLink";
 import { LikeButton } from "@/components/music/LikeButton";
 import { AddToPlaylistMenu } from "@/components/music/AddToPlaylistMenu";
 import { QueueActionsMenu } from "@/components/music/QueueActionsMenu";
+import { ShareTrackButton } from "@/components/music/ShareTrackButton";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
@@ -254,8 +255,9 @@ export default function AudioDetailPage() {
 
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" className="rounded-full" onClick={() => isCurrent ? player.togglePlay() : player.playTrack(track)}><span className="mr-2">{isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</span>{isPlaying ? "Pause" : "Play"}</Button>
-      {track.kind !== "audiobook" && <QueueActionsMenu track={track} />}
       {track.kind === "music" && track.source !== "tunestr" && <LikeButton trackId={track.id} />}
+      <ShareTrackButton track={track} />
+      {track.kind !== "audiobook" && track.source !== "tunestr" && <QueueActionsMenu track={track} />}
       {track.source !== "librivox" && track.source !== "gutenberg" && track.source !== "tunestr" && <AddToPlaylistMenu trackId={track.id} />}
       {externalSource && <a href={externalSource} target="_blank" rel="noreferrer" className="rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-accent">View original source</a>}
     </div>
