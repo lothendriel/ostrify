@@ -159,14 +159,18 @@ function boundedEntries(entries: PersistedQuery[], now: number): PersistedQuery[
 }
 
 /** Restore a small allowlist of public artist and podcast detail-page results. */
-export async function restorePublicPageCache(queryClient: QueryClient): Promise<void> {
+export async function restorePublicPageCache(queryClient: QueryClient, shouldRestore: () => boolean = () => true): Promise<void> {
   const entries = boundedEntries(await readPersistedQueries(), Date.now());
+  // A startup timeout may already have released the app to its live query path.
+  // Never let a late IndexedDB result replace data fetched after that fallback.
+  if (!shouldRestore()) return;
   for (const entry of entries) {
     // Mark restored data stale: it renders immediately, while the page's normal
     // query lifecycle refreshes it from its relay or catalog source.
     queryClient.setQueryData(entry.queryKey, entry.data, { updatedAt: 0 });
   }
-  await writePersistedQueries(entries);
+  // Prune old or invalid records without making router startup wait on a write.
+  void writePersistedQueries(entries);
 }
 
 /** Persist only approved public detail queries; never libraries or user data. */
