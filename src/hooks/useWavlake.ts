@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
 import { nip19 } from 'nostr-tools';
 import { sanitizeUrl } from '@/lib/sanitize';
-import type { Track } from '@/lib/music';
+import { isOriginalSoundTitle, type Track } from '@/lib/music';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -92,7 +92,7 @@ function parseTrack(value: unknown): Track | null {
   const trackId = id(item.id);
   const url = sanitizeUrl(text(item.mediaUrl));
   const title = text(item.title);
-  if (!trackId || !url || !title) return null;
+  if (!trackId || !url || !title || isOriginalSoundTitle(title)) return null;
   let pubkey = '';
   const artistNpub = text(item.artistNpub);
   if (artistNpub) {

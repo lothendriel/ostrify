@@ -5,7 +5,7 @@ import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
-import type { Track } from '@/lib/music';
+import { isOriginalSoundTitle, type Track } from '@/lib/music';
 
 const STREAM_PUBKEYS = [TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY];
 // Match TuneStr's stream page topic filters (tags are case-sensitive at relays).
@@ -64,7 +64,7 @@ export function parseN94Stream(event: NostrEvent): TunestrStream | null {
   if (!hashtags.includes('music') && !isTuneStr) return null;
 
   const title = tagValue(event, 'title')?.trim();
-  if (!title) return null;
+  if (!title || isOriginalSoundTitle(title)) return null;
   const variants = event.tags.flatMap(([name, ...parts]) => {
     if (name !== 'variant') return [];
     const values = parts.flatMap(part => {
@@ -125,7 +125,7 @@ export function parseTunestrStreamEvent(event: NostrEvent): TunestrStream | null
   const recordingUrl = sanitizeUrl(tagValue(event, 'recording'));
   const eventStatus = tagValue(event, 'status') ?? 'unknown';
   const title = tagValue(event, 'title')?.trim();
-  if (!d || !title || !['live', 'ended'].includes(eventStatus)) return null;
+  if (!d || !title || isOriginalSoundTitle(title) || !['live', 'ended'].includes(eventStatus)) return null;
 
   const isLive = eventStatus === 'live' && event.created_at >= Date.now() / 1000 - 60 * 60;
   const sourceUrl = isLive ? streamingUrl || recordingUrl : recordingUrl || streamingUrl;

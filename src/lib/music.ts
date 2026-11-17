@@ -58,6 +58,11 @@ export interface Track {
 
 export const AUDIO_EXT_RE = /\.(mp3|mpga|m4a|aac|wav|ogg|oga|opus|flac|weba|webm)(?:[?#].*)?$/i;
 
+/** Exclude generic social-video audio labels that usually identify voice clips, not music. */
+export function isOriginalSoundTitle(title: string): boolean {
+  return title.trim().toLocaleLowerCase() === "original sound";
+}
+
 function tagValue(event: NostrEvent, name: string): string | undefined {
   return event.tags.find(([n]) => n === name)?.[1];
 }
@@ -160,6 +165,7 @@ export function parseFileMetadataTrack(event: NostrEvent): Track | null {
     tagValue(event, "alt") ||
     (event.content || "").split("\n")[0]?.slice(0, 80) ||
     "Untitled";
+  if (isOriginalSoundTitle(title)) return null;
 
   const image = sanitizeUrl(tagValue(event, "image") || tagValue(event, "thumb"));
   const duration = parseDuration(tagValue(event, "duration"));
@@ -227,6 +233,7 @@ export function parseNoteTrack(event: NostrEvent): Track | null {
   // Title: strip the audio URL from content and take the first line
   const content = event.content.replace(/https?:\/\/\S+/g, "").trim();
   const title = content.split("\n")[0]?.slice(0, 80) || "Untitled track";
+  if (isOriginalSoundTitle(title)) return null;
 
   return {
     id: event.id,
@@ -353,12 +360,15 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     }
   }
 
+  const trackTitle = title || "Untitled";
+  if (isOriginalSoundTitle(trackTitle)) return null;
+
   return {
     id: event.id,
     event,
     url: safeUrl,
     mimeType: mime,
-    title: title || "Untitled",
+    title: trackTitle,
     artist,
     artistPubkey: artistPubkey(event, jsonMetadata),
     album,
