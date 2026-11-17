@@ -35,12 +35,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card md:rounded-lg">
           <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[500px] bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "linear-gradient(to bottom, color-mix(in srgb, var(--card) 30%, transparent) 0%, var(--card) 100%), url('/autumn-forest.png')" }} />
           {/* Top bar */}
-          <header className="relative z-10 h-14 shrink-0 flex items-center justify-between gap-2 px-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
-            <div className="flex shrink-0 items-center gap-2">
+          <header className="relative z-10 flex h-auto shrink-0 flex-col gap-1 border-b border-border/50 bg-card/80 px-3 py-2 backdrop-blur-sm sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-4 sm:py-0">
+            <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1 sm:gap-2">
               {/* Mobile menu */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+                  <Button variant="ghost" size="icon" className="shrink-0 md:hidden" aria-label="Open menu">
                     <Menu className="size-5" />
                   </Button>
                 </SheetTrigger>
@@ -52,20 +52,30 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <Sidebar onNavigate={() => setMobileOpen(false)} />
                 </SheetContent>
               </Sheet>
-            </div>
-            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1 sm:px-4">
-              <Button type="button" variant="ghost" size="icon" aria-label="Back" title="Back" onClick={() => previousTo ? navigate(-1) : navigate("/", { replace: true })} className="flex size-10 shrink-0 rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">
+              <Button type="button" variant="ghost" size="icon" aria-label="Back" title="Back" onClick={() => previousTo ? navigate(-1) : navigate("/", { replace: true })} className="hidden size-10 shrink-0 rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary sm:flex">
                 <ArrowLeft className="size-5" />
               </Button>
-              <Link to="/" aria-label="Home" title="Home" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary">
+              <Link to="/" aria-label="Home" title="Home" className="hidden size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary sm:flex">
                 <Home className="size-5 fill-current" />
               </Link>
-              <GlobalSearch />
+              <div className="flex min-w-0 flex-1 items-center justify-center sm:px-2">
+                <GlobalSearch />
+              </div>
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
+            <div className="hidden shrink-0 items-center gap-1 sm:flex">
               <DeveloperZapButton />
               <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
               <FriendsActivitySheet open={activePanel === 'friends'} onToggle={() => togglePanel('friends')} />
+            </div>
+            <div className="ml-auto hidden shrink-0 sm:block">
+              <LoginArea className="max-w-60" />
+            </div>
+            <div className="flex w-full items-center justify-between border-t border-border/40 pt-1 sm:hidden">
+              <div className="flex items-center gap-2">
+                <DeveloperZapButton />
+                <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
+                <FriendsActivitySheet open={activePanel === 'friends'} onToggle={() => togglePanel('friends')} />
+              </div>
               <LoginArea className="max-w-60" />
             </div>
           </header>
