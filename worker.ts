@@ -11,7 +11,6 @@ interface Env {
   ASSETS: AssetFetcher;
   AUDIO_SHARE_LINKS: KvNamespace;
   AUDIO_SHARE_APP_ORIGINS?: string;
-  AUDIO_SHARE_WORKER_ORIGIN?: string;
   PODCAST_INDEX_API_KEY?: string;
   PODCAST_INDEX_API_SECRET?: string;
 }
@@ -270,48 +269,52 @@ function createShareCode(): string {
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function configuredWorkerOrigin(env: Env, requestUrl: URL): string {
-  const configured = env.AUDIO_SHARE_WORKER_ORIGIN?.trim();
-  if (configured) {
-    try {
-      const parsed = new URL(configured);
-      if (parsed.protocol === "https:" && !parsed.username && !parsed.password && parsed.pathname === "/" && !parsed.search && !parsed.hash) return parsed.origin;
-    } catch {
-      // Invalid optional config falls back to the actual Worker request origin.
-    }
+function canonicalHttpsOrigin(candidate: string): string | undefined {
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return undefined;
+    return parsed.origin;
+  } catch {
+    return undefined;
   }
-  return requestUrl.origin;
 }
 
 function isAllowedAudioShareOrigin(origin: string, env: Env): boolean {
-  const canonicalOrigin = (candidate: string): string | undefined => {
-    try {
-      const parsed = new URL(candidate);
-      if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) return undefined;
-      return parsed.origin;
-    } catch {
-      return undefined;
-    }
-  };
-  const actualOrigin = canonicalOrigin(origin);
+  const actualOrigin = canonicalHttpsOrigin(origin);
   if (!actualOrigin) return false;
-  return (env.AUDIO_SHARE_APP_ORIGINS ?? "").split(",").some(candidate => canonicalOrigin(candidate.trim()) === actualOrigin);
+  return actualOrigin === "https://ostrify.studio314.us" && (env.AUDIO_SHARE_APP_ORIGINS ?? "").split(",").some(candidate => canonicalHttpsOrigin(candidate.trim()) === actualOrigin);
 }
 
-function isSafeAudioSharePath(value: unknown, allowedOrigin: string): value is string {
-  if (typeof value !== "string" || value.length > AUDIO_SHARE_MAX_PATH_LENGTH) return false;
-  let target: URL;
+function isSafeShareableHttpsUrl(value: string): boolean {
+  let parsed: URL;
   try {
-    if (value.startsWith(`${AUDIO_DETAIL_BASE_PATH}?`)) target = new URL(value, allowedOrigin);
-    else target = new URL(value);
+    parsed = new URL(value);
   } catch {
     return false;
   }
-  if (target.origin !== allowedOrigin || target.pathname !== AUDIO_DETAIL_BASE_PATH) return false;
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) return false;
+  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) return false;
+  if (/^\d+(?:\.\d+){0,3}$/.test(hostname) || hostname.includes(":")) return !isPrivateOrReservedAddress(hostname);
+  return hostname.length <= 253 && hostname.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label));
+}
+
+function isSafeAudioSharePath(value: unknown, env: Env): value is string {
+  if (typeof value !== "string" || value.length > AUDIO_SHARE_MAX_PATH_LENGTH) return false;
+  let target: URL;
+  try {
+    target = new URL(value);
+  } catch {
+    return false;
+  }
+  if (!isAllowedAudioShareOrigin(target.origin, env) || target.pathname !== AUDIO_DETAIL_BASE_PATH) return false;
   const track = target.searchParams.get("track");
   const title = target.searchParams.get("title");
   const kind = target.searchParams.get("kind");
   if (!track || track.length > 2048 || !title || title.length > 500 || !["music", "podcast", "audiobook"].includes(kind ?? "")) return false;
+  const stableExternalId = /^(?:wavlake:[0-9a-f-]{36}|fountain:episode:id:\S{20}|podcast-index:episode:id:\d{1,12}|(?:gutenberg|librivox):[a-z0-9][a-z0-9_-]{0,159}(?::.{1,512})?|tunestr:n94:[0-9a-f]{64}|tunestr:[0-9a-f]{64}(?::.+)?|\d+:[0-9a-f]{64}:.+)$/i.test(track);
+  const fallbackDataPresent = target.searchParams.has("url");
+  if (!stableExternalId && !fallbackDataPresent) return false;
   const expectedSource = track.startsWith("wavlake:") ? "wavlake" : track.startsWith("fountain:") ? "fountain" : track.startsWith("podcast-index:") ? "podcast-index" : track.startsWith("librivox:") ? "librivox" : track.startsWith("gutenberg:") ? "gutenberg" : undefined;
   const source = target.searchParams.get("source");
   if (expectedSource && source !== expectedSource) return false;
@@ -324,13 +327,13 @@ function isSafeAudioSharePath(value: unknown, allowedOrigin: string): value is s
   if (mediaUrl) {
     let safeMediaUrl: URL;
     try { safeMediaUrl = new URL(mediaUrl); } catch { return false; }
-    if (safeMediaUrl.protocol !== "https:" || safeMediaUrl.username || safeMediaUrl.password || isPrivateOrReservedAddress(safeMediaUrl.hostname)) return false;
+    if (!isSafeShareableHttpsUrl(safeMediaUrl.toString())) return false;
   }
   const image = target.searchParams.get("image");
   if (image) {
     let safeImageUrl: URL;
     try { safeImageUrl = new URL(image); } catch { return false; }
-    if (safeImageUrl.protocol !== "https:" || safeImageUrl.username || safeImageUrl.password || isPrivateOrReservedAddress(safeImageUrl.hostname)) return false;
+    if (!isSafeShareableHttpsUrl(safeImageUrl.toString())) return false;
   }
   return true;
 }
@@ -384,6 +387,7 @@ export default {
     const allowedShareOrigin = requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env)
       ? new URL(requestOrigin).origin
       : url.origin;
+    const corsOrigin = requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env) ? new URL(requestOrigin).origin : undefined;
 
     if (url.pathname === AUDIO_SHARE_PATH) {
       if (request.method === "OPTIONS") {
@@ -393,31 +397,30 @@ export default {
       if (request.method === "GET" || request.method === "HEAD") return audioShareJson({ available: true }, 200, requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env) ? new URL(requestOrigin).origin : undefined);
       if (request.method !== "POST") return audioShareJson({ error: "Method not allowed" }, 405, requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env) ? new URL(requestOrigin).origin : undefined);
       if (requestOrigin && !isAllowedAudioShareOrigin(requestOrigin, env)) return audioShareJson({ error: "This app origin is not allowed to create short links" }, 403);
-      const corsOrigin = requestOrigin ? new URL(requestOrigin).origin : configuredWorkerOrigin(env, url);
-      if (url.origin !== configuredWorkerOrigin(env, url)) return audioShareJson({ error: "Short-link creation must target the deployed Worker origin" }, 400, requestOrigin ? corsOrigin : undefined);
-      if (!requestOrigin && (url.origin !== corsOrigin || !isAllowedAudioShareOrigin(corsOrigin, env))) return audioShareJson({ error: "Request must come from the configured app origin" }, 403);
-      if (!(request.headers.get("Content-Type") ?? "").toLowerCase().includes("application/json")) return audioShareJson({ error: "Expected application/json" }, 415, requestOrigin ? corsOrigin : undefined);
+      const requestAppOrigin = requestOrigin ? new URL(requestOrigin).origin : url.origin;
+      if (!isAllowedAudioShareOrigin(requestAppOrigin, env)) return audioShareJson({ error: "Request must come from the configured app origin" }, 403);
+      const responseOrigin = corsOrigin ?? requestAppOrigin;
+      if (!(request.headers.get("Content-Type") ?? "").toLowerCase().includes("application/json")) return audioShareJson({ error: "Expected application/json" }, 415, responseOrigin);
       const rawBody = await request.text();
-      if (rawBody.length > AUDIO_SHARE_MAX_PATH_LENGTH + 128) return audioShareJson({ error: "Audio detail link is too large" }, 413, requestOrigin ? corsOrigin : undefined);
+      if (rawBody.length > AUDIO_SHARE_MAX_PATH_LENGTH + 128) return audioShareJson({ error: "Audio detail link is too large" }, 413, responseOrigin);
       let body: unknown;
       try {
         body = JSON.parse(rawBody) as unknown;
       } catch {
-        return audioShareJson({ error: "Invalid JSON" }, 400, requestOrigin ? corsOrigin : undefined);
+        return audioShareJson({ error: "Invalid JSON" }, 400, responseOrigin);
       }
-      if (!body || typeof body !== "object" || Array.isArray(body) || !("path" in body) || !isSafeAudioSharePath(body.path, allowedShareOrigin)) {
-        return audioShareJson({ error: "A valid Ostrify audio detail path is required" }, 400, requestOrigin ? corsOrigin : undefined);
+      if (!body || typeof body !== "object" || Array.isArray(body) || !("path" in body) || !isSafeAudioSharePath(body.path, env)) {
+        return audioShareJson({ error: "A valid allowlisted Ostrify audio detail URL is required" }, 400, responseOrigin);
       }
       let normalizedPath: URL;
       try {
-        normalizedPath = new URL(body.path, allowedShareOrigin);
+        normalizedPath = new URL(body.path as string);
       } catch {
-        return audioShareJson({ error: "Invalid audio detail URL" }, 400, requestOrigin ? corsOrigin : undefined);
+        return audioShareJson({ error: "Invalid audio detail URL" }, 400, responseOrigin);
       }
-      if (normalizedPath.origin !== allowedShareOrigin) return audioShareJson({ error: "Share destination must use the requested origin" }, 400, requestOrigin ? corsOrigin : undefined);
       try {
         if (await audioShareRateLimited(request, env)) {
-          const response = audioShareJson({ error: "Too many share links created. Please try again later." }, 429, requestOrigin ? corsOrigin : undefined);
+          const response = audioShareJson({ error: "Too many share links created. Please try again later." }, 429, responseOrigin);
           response.headers.set("Retry-After", String(AUDIO_SHARE_RATE_WINDOW_SECONDS));
           return response;
         }
@@ -426,11 +429,11 @@ export default {
           const key = `link:${code}`;
           if (await env.AUDIO_SHARE_LINKS.get(key)) continue;
           await env.AUDIO_SHARE_LINKS.put(key, normalizedPath.toString(), { expirationTtl: AUDIO_SHARE_TARGET_TTL_SECONDS });
-          return audioShareJson({ url: new URL(`${AUDIO_SHARE_PREFIX}${code}`, url.origin).toString() }, 201, requestOrigin ? corsOrigin : undefined);
+          return audioShareJson({ url: new URL(`${AUDIO_SHARE_PREFIX}${code}`, url.origin).toString() }, 201, responseOrigin);
         }
-        return audioShareJson({ error: "Could not allocate a share link. Please try again." }, 503, requestOrigin ? corsOrigin : undefined);
+        return audioShareJson({ error: "Could not allocate a share link. Please try again." }, 503, responseOrigin);
       } catch {
-        return audioShareJson({ error: "Short links are temporarily unavailable" }, 503, requestOrigin ? corsOrigin : undefined);
+        return audioShareJson({ error: "Short links are temporarily unavailable" }, 503, responseOrigin);
       }
     }
 
@@ -440,11 +443,8 @@ export default {
       if (!AUDIO_SHARE_CODE_RE.test(code)) return env.ASSETS.fetch(request);
       try {
         const target = await env.AUDIO_SHARE_LINKS.get(`link:${code}`);
-        if (!target) return new Response("Share link not found", { status: 404 });
+        if (!target || !isSafeAudioSharePath(target, env)) return new Response("Share link not found", { status: 404 });
         const targetUrl = new URL(target);
-        if (!isAllowedAudioShareOrigin(targetUrl.origin, env) || !isSafeAudioSharePath(target, targetUrl.origin)) {
-          return new Response("Share link not found", { status: 404 });
-        }
         return new Response(null, {
           status: 302,
           headers: {

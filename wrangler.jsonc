@@ -5,8 +5,7 @@
   "workers_dev": true,
   "compatibility_date": "2026-11-08",
   "vars": {
-    "AUDIO_SHARE_APP_ORIGINS": "https://ostrify.shakespeare.wtf,https://ostrify.studio314.us,https://0171xlfg6yo0wjs9yhveno8onk4d56evm4dkxm6qq323hyigvhostrify.shakespeare.to",
-    "AUDIO_SHARE_WORKER_ORIGIN": "https://ostrify.lothendriel.workers.dev"
+    "AUDIO_SHARE_APP_ORIGINS": "https://ostrify.studio314.us"
   },
   "kv_namespaces": [
     {

@@ -17,7 +17,7 @@ import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
 import { fetchPodcastIndexEpisodes, fountainTrackUrl, useFountainRssEpisodes, useFountainShow, usePodcastIndexEpisodes, usePodcastIndexFeed } from "@/hooks/usePodcasts";
-import { wavlakeTrackUrl } from "@/hooks/useWavlake";
+import { fetchWavlakeTrack, wavlakeTrackUrl } from "@/hooks/useWavlake";
 import { fountainShowGuid, formatDuration, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 
@@ -153,7 +153,7 @@ export default function AudioDetailPage() {
     } satisfies Track;
   }, [trackId, searchParams]);
   const nostrLookupId = useMemo(() => resolveTuneStrId(trackId), [trackId]);
-  const fallbackEventKind = /^[0-9a-f]{64}$/i.test(trackId) ? (searchParams.get("kind") === "podcast" ? 54 : 1) : undefined;
+  const fallbackEventKind = sharedTrack?.eventKind ?? (trackId.startsWith("tunestr:n94:") ? 1053 : undefined);
   const librivoxChapter = useMemo(() => parseAudiobookChapter(trackId, "librivox"), [trackId]);
   const gutenbergChapter = useMemo(() => parseAudiobookChapter(trackId, "gutenberg"), [trackId]);
   const fountainRss = useMemo(() => parseFountainRssId(trackId), [trackId]);
@@ -180,6 +180,13 @@ export default function AudioDetailPage() {
   });
   const player = usePlayer();
 
+  const wavlakeTrackId = !sharedTrack ? /^wavlake:([0-9a-f-]{36})$/i.exec(trackId)?.[1] : undefined;
+  const wavlakeDetailQuery = useQuery({
+    queryKey: ["wavlake", "track-detail", wavlakeTrackId ?? ""],
+    enabled: !!wavlakeTrackId && !sharedTrack,
+    queryFn: ({ signal }) => fetchWavlakeTrack(wavlakeTrackId!, signal),
+    staleTime: 5 * 60 * 1000,
+  });
   const book = librivoxChapter ? librivoxBook.data : gutenbergChapter ? gutenbergBook.data : undefined;
   const chapter = librivoxChapter?.fileName || gutenbergChapter?.fileName ? book?.chapters.find(item => item.id === trackId) : undefined;
   const bookTrack: Track | undefined = book && (librivoxChapter?.isBookLink || gutenbergChapter?.isBookLink) && book.chapters[0] ? {
@@ -201,16 +208,21 @@ export default function AudioDetailPage() {
   const nostrTrack = directLookup.data?.tracks.find(item => item.id.toLowerCase() === nostrLookupId.toLowerCase()) ?? directLookup.data?.tracks[0];
   const resolvedTrack = chapter ?? bookTrack ?? (!librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !sharedTrack && !unsupportedExternalId ? nostrTrack : undefined) ?? fallbackEpisode ?? sharedTrack;
   const tuneStrEventKind = resolvedTrack?.event?.kind ?? (trackId.startsWith("tunestr:n94:") ? 1053 : undefined);
-  const trackWithPodcastShowBase = resolvedTrack && resolvedTrack.kind === "podcast" && !resolvedTrack.showId && podcastShowId ? { ...resolvedTrack, showId: podcastShowId } : resolvedTrack;
+  const trackWithFallbackPublisher = resolvedTrack;
+  const fallbackArtistPubkey = searchParams.get("artistPubkey");
+  const trackWithFallbackArtist = trackWithFallbackPublisher && fallbackArtistPubkey && !trackWithFallbackPublisher.artistPubkey && /^[0-9a-f]{64}$/i.test(fallbackArtistPubkey) ? { ...trackWithFallbackPublisher, artistPubkey: fallbackArtistPubkey.toLowerCase() } : trackWithFallbackPublisher;
+  const trackWithPodcastShowBase = trackWithFallbackArtist && trackWithFallbackArtist.kind === "podcast" && !trackWithFallbackArtist.showId && podcastShowId ? { ...trackWithFallbackArtist, showId: podcastShowId } : trackWithFallbackArtist;
   const trackWithPodcastShow = trackWithPodcastShowBase && (tuneStrEventKind ?? fallbackEventKind) && !trackWithPodcastShowBase.eventKind ? { ...trackWithPodcastShowBase, eventKind: tuneStrEventKind ?? fallbackEventKind } : trackWithPodcastShowBase;
   const detailLoadError = (!!librivoxChapter && !librivoxBook.data && librivoxBook.isError) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isError) ||
     (!!fountainRss && (fountainShow.isError || fountainEpisodes.isError) && !fallbackEpisode) ||
     (!!podcastIndexFallback && (podcastIndexFallback.episodeId ? podcastIndexEpisode.isError : podcastIndexEpisodes.isError) && !fallbackEpisode) ||
+    (!!wavlakeTrackId && wavlakeDetailQuery.isError && !trackWithPodcastShow) ||
     (!sharedTrack && !unsupportedExternalId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && directLookup.isError);
-  const isLoading = trackId.length > 0 && !sharedTrack && !unsupportedExternalId && !resolvedTrack && (
+  const isLoading = trackId.length > 0 && !sharedTrack && !unsupportedExternalId && !trackWithPodcastShow && (
     (!!librivoxChapter && !librivoxBook.data && librivoxBook.isLoading) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isLoading) ||
     (!!fountainRss && !fallbackEpisode && (fountainShow.isLoading || fountainEpisodes.isLoading)) ||
     (!!podcastIndexFallback && !fallbackEpisode && (podcastIndexFallback.episodeId ? podcastIndexEpisode.isLoading : podcastIndexEpisodes.isLoading)) ||
+    (!!wavlakeTrackId && !trackWithPodcastShow && wavlakeDetailQuery.isLoading) ||
     (!librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && directLookup.isLoading)
   );
 
@@ -221,7 +233,9 @@ export default function AudioDetailPage() {
   if (isLoading) return <div className="space-y-5 p-4 sm:p-6"><Skeleton className="h-72 rounded-xl" /><Skeleton className="h-24 rounded-xl" /></div>;
   if (!trackWithPodcastShow) return <div className="space-y-3 p-6"><h1 className="text-2xl font-bold">{detailLoadError ? "Couldn’t load this audio" : "Audio item unavailable"}</h1><p className="max-w-xl text-sm text-muted-foreground">{detailLoadError ? "The source may be temporarily unavailable. Try again, or open the item from its original list." : "This item is no longer available from the selected relays or catalog. It may have been removed, or your current sources may not include it."}</p>{unsupportedExternalId && <p className="text-sm text-muted-foreground">This external podcast link doesn’t contain a supported episode identifier.</p>}{detailLoadError && <Button variant="outline" onClick={() => { void directLookup.refetch(); void librivoxBook.refetch(); void gutenbergBook.refetch(); void fountainShow.refetch(); void fountainEpisodes.refetch(); void podcastIndexShow.refetch(); void podcastIndexEpisodes.refetch(); void podcastIndexEpisode.refetch(); }}>Try again</Button>}<Link to="/music" className="text-sm font-semibold text-primary underline">Explore music</Link></div>;
 
-  const track = trackWithPodcastShow;
+  const track = trackWithPodcastShow?.id === trackId && trackWithPodcastShow.url
+    ? trackWithPodcastShow
+    : wavlakeDetailQuery.data ?? trackWithPodcastShow;
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
   const artwork = sanitizeUrl(track.image);

@@ -10,11 +10,14 @@ import { sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
 import { audioDetailPath } from '@/lib/audioDetail';
 
+const PUBLIC_APP_ORIGIN = 'https://ostrify.studio314.us';
+
 function audioDetailUrl(track: Track): URL | undefined {
   const audioUrl = sanitizeUrl(track.url);
   if (audioUrl && audioUrl.length > 2048) return undefined;
-  const eventKind = track.event?.kind ?? track.eventKind ?? (track.id.startsWith('tunestr:n94:') ? 1053 : undefined);
-  const detailUrl = new URL(audioDetailPath({ ...track, eventKind }), window.location.origin);
+  const eventKind = track.event?.kind ?? track.eventKind ?? (track.id.startsWith('tunestr:n94:') ? 1053 : /^[0-9a-f]{64}$/i.test(track.id) ? track.kind === 'podcast' ? 54 : 1 : undefined);
+  const detailUrl = new URL(audioDetailPath({ ...track, eventKind }), PUBLIC_APP_ORIGIN);
+  const publicLinkOrigin = PUBLIC_APP_ORIGIN;
   if (audioUrl) detailUrl.searchParams.set('url', audioUrl);
   detailUrl.searchParams.set('title', track.title.slice(0, 500));
   detailUrl.searchParams.set('kind', track.kind);
@@ -34,7 +37,20 @@ function audioDetailUrl(track: Track): URL | undefined {
     if (detailUrl.href.length <= 7000) break;
     detailUrl.searchParams.delete(parameter);
   }
-  return detailUrl.href.length <= 7000 ? detailUrl : undefined;
+  if (detailUrl.href.length <= 7000) return detailUrl;
+  for (const parameter of optionalParameters) detailUrl.searchParams.delete(parameter);
+  if (detailUrl.href.length <= 7000) return detailUrl;
+  const stableItemId = track.id.startsWith('wavlake:') || track.id.startsWith('fountain:') || track.id.startsWith('podcast-index:') || track.id.startsWith('gutenberg:') || track.id.startsWith('librivox:') || track.id.startsWith('tunestr:') || /^\d+:[0-9a-f]{64}:.+$/i.test(track.id);
+  if (stableItemId) {
+    const minimalUrl = new URL('/audio', publicLinkOrigin);
+    minimalUrl.searchParams.set('track', track.id.slice(0, 2048));
+    minimalUrl.searchParams.set('title', track.title.slice(0, 500));
+    minimalUrl.searchParams.set('kind', track.kind);
+    if (eventKind) minimalUrl.searchParams.set('eventKind', String(eventKind));
+    if (track.source) minimalUrl.searchParams.set('source', track.source);
+    return minimalUrl.href.length <= 7000 ? minimalUrl : undefined;
+  }
+  return undefined;
 }
 
 function defaultMessage(track: Track, shortUrl?: string): string {
@@ -46,20 +62,16 @@ function defaultMessage(track: Track, shortUrl?: string): string {
 async function createShortAudioLink(track: Track): Promise<string | undefined> {
   const detailUrl = audioDetailUrl(track);
   if (!detailUrl) return undefined;
-  const configuredWorkerUrl = (import.meta.env.VITE_AUDIO_SHARE_WORKER_URL ?? import.meta.env.VITE_PODCAST_INDEX_WORKER_URL ?? 'https://ostrify.lothendriel.workers.dev').replace(/\/$/, '');
+  const configuredWorkerUrl = (import.meta.env.VITE_AUDIO_SHARE_WORKER_URL ?? 'https://ostrify.lothendriel.workers.dev').replace(/\/$/, '');
   let workerUrl: URL;
   try {
     workerUrl = new URL('/api/audio-shares', configuredWorkerUrl);
   } catch {
     return undefined;
   }
-  const appOrigin = window.location.origin;
+  const appOrigin = new URL(detailUrl.origin).origin;
   if (workerUrl.protocol !== 'https:' && workerUrl.hostname !== 'localhost') return undefined;
-  try {
-    if (configuredWorkerUrl && new URL(configuredWorkerUrl).origin === appOrigin) return undefined;
-  } catch {
-    return undefined;
-  }
+  if (workerUrl.origin === appOrigin) return undefined;
   let response: Response;
   try {
     response = await fetch(workerUrl, {
@@ -165,7 +177,7 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
     >
       <Share2 className="size-4" />
     </Button>
-    <Dialog open={open} onOpenChange={value => { if (!isPending) { if (!value) requestIdRef.current = undefined; setOpen(value); } }}>
+    <Dialog open={open} onOpenChange={value => { if (!isPending) { if (!value) { requestIdRef.current = undefined; setIsShortening(false); } setOpen(value); } }}>
       <DialogContent className="min-w-0 overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Share to Nostr</DialogTitle>
@@ -189,7 +201,7 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
           {isShortening && <p role="status" className="text-sm text-muted-foreground">Creating a short share link…</p>}
           {!user && <p role="status" className="text-sm text-muted-foreground">Sign in with Nostr to publish this post.</p>}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => { requestIdRef.current = undefined; setIsShortening(false); setOpen(false); }} disabled={isPending}>Cancel</Button>
             <Button type="submit" disabled={!user || !message.trim() || isPending || isShortening}>
               {isPending ? <><LoaderCircle className="size-4 animate-spin" /> Sharing…</> : <><Share2 className="size-4" /> Share to Nostr</>}
             </Button>

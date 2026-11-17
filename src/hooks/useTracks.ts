@@ -66,7 +66,7 @@ export function useTracks(options: UseTracksOptions = {}) {
       for (const event of events) {
         const track = eventToTrack(event);
         if (!track) continue;
-        if (track.event) track.eventKind = track.event.kind;
+        track.eventKind = event.kind;
         // De-dupe by audio url so the same song isn't listed twice.
         if (seen.has(track.url)) continue;
         seen.add(track.url);
