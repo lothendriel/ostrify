@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useSeoMeta } from '@unhead/react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
 import { HorizontalCarousel } from '@/components/music/HorizontalCarousel';
 import { nip19 } from 'nostr-tools';
@@ -14,7 +14,9 @@ import { useAuthor } from '@/hooks/useAuthor';
 import { useMusicDiscovery } from '@/hooks/useMusicDiscovery';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
-import type { WavlakeRelease } from '@/hooks/useWavlake';
+import { useCategoryTracks } from '@/hooks/useCategoryTracks';
+import { useWavlakeGenreCatalog, type WavlakeRelease } from '@/hooks/useWavlake';
+import { CATEGORIES } from '@/lib/categories';
 
 function PublisherCard({ pubkey, podcast }: { pubkey: string; podcast: boolean }) {
   const { data } = useAuthor(pubkey);
@@ -98,7 +100,7 @@ function WavlakeReleaseCard({ release }: { release: WavlakeRelease }) {
 }
 
 /** Discover publishers and album titles within the supplied results, not a global popularity chart. */
-export function NostrCollections({ tracks, podcast = false, showAllPublishersOption = false, wavlakeArtists = [], wavlakeAlbums = [], shuffleSeed }: { tracks: Track[]; podcast?: boolean; showAllPublishersOption?: boolean; wavlakeArtists?: WavlakeRelease[]; wavlakeAlbums?: WavlakeRelease[]; shuffleSeed?: number }) {
+export function NostrCollections({ tracks, podcast = false, showAllPublishersOption = false, categoryId, wavlakeArtists = [], wavlakeAlbums = [], shuffleSeed }: { tracks: Track[]; podcast?: boolean; showAllPublishersOption?: boolean; categoryId?: string; wavlakeArtists?: WavlakeRelease[]; wavlakeAlbums?: WavlakeRelease[]; shuffleSeed?: number }) {
   const { publishers, albums } = useMemo(() => collectionItems(tracks), [tracks]);
   const orderedPublishers = useMemo(() => shuffleSeed === undefined ? publishers : shuffleCollectionItems(publishers, shuffleSeed), [publishers, shuffleSeed]);
   const orderedAlbums = useMemo(() => shuffleSeed === undefined ? albums : shuffleCollectionItems(albums, shuffleSeed ^ 0x9e3779b9), [albums, shuffleSeed]);
@@ -108,10 +110,97 @@ export function NostrCollections({ tracks, podcast = false, showAllPublishersOpt
   const artistsToShow = orderedWavlakeArtists.slice(0, 8 - nostrPublishersToShow.length);
   const nostrAlbumsToShow = orderedAlbums.slice(0, orderedWavlakeAlbums.length > 0 ? 4 : 8);
   const albumsToShow = orderedWavlakeAlbums.slice(0, 8 - nostrAlbumsToShow.length);
+  const publishersPage = categoryId ? `/category/${encodeURIComponent(categoryId)}/publishers` : '/music/publishers';
+  const albumsPage = categoryId ? `/category/${encodeURIComponent(categoryId)}/albums` : '/music/albums';
   if (!publishers.length && !albums.length && !artistsToShow.length && !albumsToShow.length) return null;
   return <div className="space-y-8">
-    {(publishers.length > 0 || artistsToShow.length > 0) && <section className="space-y-3"><div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-bold">{podcast ? 'Shows & publishers to explore' : 'Artists & publishers to explore'}</h2><p className="text-sm text-muted-foreground">{podcast ? 'Publishers with the most episodes in the results loaded here—not a popularity chart. Open a publisher to see their show profile.' : artistsToShow.length > 0 ? 'Publishers with the most Nostr tracks in the results loaded here—not a popularity chart. Also explore artists in the Wavlake catalog.' : 'Publishers with the most tracks in the results loaded here—not a popularity chart. Open a publisher to browse the music released by that account.'}</p></div>{showAllPublishersOption && <Link to="/music/publishers" className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">See all <ChevronRight className="size-4" /></Link>}</div>{showAllPublishersOption ? <HorizontalCarousel label="Artists and publishers to explore">{nostrPublishersToShow.map(([pubkey]) => <div key={`nostr:${pubkey}`} className="min-w-0 snap-start"><PublisherCard pubkey={pubkey} podcast={podcast} /></div>)}{artistsToShow.map((release) => <div key={`wavlake:${release.id}`} className="min-w-0 snap-start"><WavlakeReleaseCard release={release} /></div>)}</HorizontalCarousel> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">{nostrPublishersToShow.map(([pubkey]) => <PublisherCard key={`nostr:${pubkey}`} pubkey={pubkey} podcast={podcast} />)}{artistsToShow.map(release => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>}</section>}
-    {(albums.length > 0 || albumsToShow.length > 0) && <section className="space-y-3"><div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-bold">Albums to explore</h2><p className="text-sm text-muted-foreground">Grouped from tracks loaded here, including Wavlake catalog albums.</p></div>{showAllPublishersOption && <Link to="/music/albums" className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">See all <ChevronRight className="size-4" /></Link>}</div>{showAllPublishersOption ? <HorizontalCarousel label="Albums to explore">{nostrAlbumsToShow.map(({ track, count }) => <div key={`${track.pubkey}:${track.artist ?? ''}:${track.album}`} className="min-w-0 snap-start"><AlbumCard track={track} count={count} /></div>)}{albumsToShow.map(release => <div key={`wavlake:${release.id}`} className="min-w-0 snap-start"><WavlakeReleaseCard release={release} /></div>)}</HorizontalCarousel> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">{nostrAlbumsToShow.map(({ track, count }) => <AlbumCard key={`${track.pubkey}:${track.artist ?? ''}:${track.album}`} track={track} count={count} />)}{albumsToShow.map(release => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>}</section>}
+    {(publishers.length > 0 || artistsToShow.length > 0) && <section className="space-y-3"><div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-bold">{podcast ? 'Shows & publishers to explore' : 'Artists & publishers to explore'}</h2><p className="text-sm text-muted-foreground">{podcast ? 'Publishers with the most episodes in the results loaded here—not a popularity chart. Open a publisher to see their show profile.' : artistsToShow.length > 0 ? 'Publishers with the most Nostr tracks in the results loaded here—not a popularity chart. Also explore artists in the Wavlake catalog.' : 'Publishers with the most tracks in the results loaded here—not a popularity chart. Open a publisher to browse the music released by that account.'}</p></div>{(showAllPublishersOption || categoryId) && <Link to={publishersPage} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">See all <ChevronRight className="size-4" /></Link>}</div>{(showAllPublishersOption || categoryId) ? <HorizontalCarousel label="Artists and publishers to explore">{nostrPublishersToShow.map(([pubkey]) => <div key={`nostr:${pubkey}`} className="min-w-0 snap-start"><PublisherCard pubkey={pubkey} podcast={podcast} /></div>)}{artistsToShow.map((release) => <div key={`wavlake:${release.id}`} className="min-w-0 snap-start"><WavlakeReleaseCard release={release} /></div>)}</HorizontalCarousel> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">{nostrPublishersToShow.map(([pubkey]) => <PublisherCard key={`nostr:${pubkey}`} pubkey={pubkey} podcast={podcast} />)}{artistsToShow.map(release => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>}</section>}
+    {(albums.length > 0 || albumsToShow.length > 0) && <section className="space-y-3"><div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-bold">Albums to explore</h2><p className="text-sm text-muted-foreground">Grouped from tracks loaded here, including Wavlake catalog albums.</p></div>{(showAllPublishersOption || categoryId) && <Link to={albumsPage} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">See all <ChevronRight className="size-4" /></Link>}</div>{(showAllPublishersOption || categoryId) ? <HorizontalCarousel label="Albums to explore">{nostrAlbumsToShow.map(({ track, count }) => <div key={`${track.pubkey}:${track.artist ?? ''}:${track.album}`} className="min-w-0 snap-start"><AlbumCard track={track} count={count} /></div>)}{albumsToShow.map(release => <div key={`wavlake:${release.id}`} className="min-w-0 snap-start"><WavlakeReleaseCard release={release} /></div>)}</HorizontalCarousel> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">{nostrAlbumsToShow.map(({ track, count }) => <AlbumCard key={`${track.pubkey}:${track.artist ?? ''}:${track.album}`} track={track} count={count} />)}{albumsToShow.map(release => <WavlakeReleaseCard key={`wavlake:${release.id}`} release={release} />)}</div>}</section>}
+  </div>;
+}
+
+export function CategoryCollectionsPage({ type }: { type: 'publishers' | 'albums' }) {
+  const { id: categoryId = '' } = useParams<{ id: string }>();
+  const category = CATEGORIES.find(item => item.id === categoryId);
+  const nostrQuery = useCategoryTracks(categoryId);
+  const wavlakeQueries = useWavlakeGenreCatalog(category?.wavlakeGenres ?? []);
+  const wavlakeTracks = wavlakeQueries.flatMap(query => query.data ?? []);
+  const tracks = useMemo(() => {
+    const seen = new Set<string>();
+    return [...(nostrQuery.data ?? []), ...wavlakeTracks].filter(track => {
+      if (seen.has(track.url)) return false;
+      seen.add(track.url);
+      return true;
+    });
+  }, [nostrQuery.data, wavlakeTracks]);
+  const collections = useMemo(() => collectionItems(tracks), [tracks]);
+  const releases = useMemo(() => {
+    const byId = new Map<string, WavlakeRelease>();
+    for (const track of wavlakeTracks) {
+      const id = type === 'publishers' ? track.artistId : track.albumId;
+      const title = type === 'publishers' ? track.artist : track.album;
+      if (!id || !title?.trim() || byId.has(id)) continue;
+      byId.set(id, {
+        id,
+        type: type === 'publishers' ? 'artist' : 'album',
+        title: title.trim(),
+        artist: type === 'albums' ? track.artist : undefined,
+        image: type === 'publishers' ? track.artistImage : track.image,
+      });
+    }
+    return [...byId.values()];
+  }, [type, wavlakeTracks]);
+  const items = useMemo(() => type === 'publishers'
+    ? [
+      ...collections.publishers.map(([pubkey, count]) => ({ source: 'nostr' as const, pubkey, count })),
+      ...releases.map(release => ({ source: 'wavlake' as const, release })),
+    ]
+    : [
+      ...collections.albums.map(album => ({ source: 'nostr' as const, album })),
+      ...releases.map(release => ({ source: 'wavlake' as const, release })),
+    ], [collections, releases, type]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pageCount = Math.max(1, Math.ceil(items.length / 15));
+  const requestedPage = Number(searchParams.get('page') ?? '1');
+  const page = Number.isInteger(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
+  const isLoading = nostrQuery.isLoading || wavlakeQueries.some(query => query.isLoading);
+  const isError = nostrQuery.isError || wavlakeQueries.some(query => query.isError);
+  const title = type === 'publishers' ? 'Artists & publishers to explore' : 'Albums to explore';
+  useSeoMeta({ title: `${title} — ${category?.label ?? 'Genre'} — Ostrify` });
+
+  useEffect(() => {
+    if (!searchParams.get('page') || String(page) === searchParams.get('page')) return;
+    const next = new URLSearchParams(searchParams);
+    if (page === 1) next.delete('page');
+    else next.set('page', String(page));
+    setSearchParams(next, { replace: true });
+  }, [page, searchParams, setSearchParams]);
+
+  const visibleItems = items.slice((page - 1) * 15, page * 15);
+  const pagination = <nav aria-label={`${type} pagination`} className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+    <Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}><ChevronLeft className="size-4" /> Previous</Button>
+    <p aria-live="polite" className="text-sm text-muted-foreground">Page {page} of {pageCount} <span className="hidden sm:inline">· {items.length} {type}</span></p>
+    <Button type="button" variant="outline" onClick={() => setSearchParams({ page: String(page + 1) })} disabled={page >= pageCount}>Next <ChevronRight className="size-4" /></Button>
+  </nav>;
+
+  return <div className="p-4 sm:p-6 space-y-6">
+    <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">{category?.label ?? 'Genre'}</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">{type === 'publishers' ? 'Artists and publishers found in this genre’s Nostr and Wavlake tracks.' : 'Albums found in this genre’s Nostr and Wavlake tracks.'}</p></header>
+    {isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Some genre results could not be loaded. Results that did load are shown.</div>}
+    {isLoading && !items.length && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3" aria-label={`Loading ${type}`}>{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
+    {!isLoading && !items.length && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No {type} found for this genre in the available results.</div>}
+    {items.length > 0 && <>
+      {pagination}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        {visibleItems.map((item, index) => item.source === 'wavlake'
+          ? <WavlakeReleaseCard key={`wavlake:${item.release.id}`} release={item.release} />
+          : type === 'publishers' && 'pubkey' in item
+            ? <PublisherCard key={`nostr:${item.pubkey}`} pubkey={item.pubkey} podcast={false} />
+            : 'album' in item
+              ? <AlbumCard key={`${item.album.track.pubkey}:${item.album.track.artist ?? ''}:${item.album.track.album}:${index}`} track={item.album.track} count={item.album.count} />
+              : null)}
+      </div>
+      {pagination}
+    </>}
   </div>;
 }
 

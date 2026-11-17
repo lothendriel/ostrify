@@ -28,6 +28,7 @@ const WavlakePage = lazy(() => import("./pages/WavlakePage"));
 const RankedReleasesPage = lazy(() => import("./pages/WavlakePage").then(module => ({ default: module.RankedReleasesPage })));
 const MusicDiscovery = lazy(() => import("./pages/MusicDiscovery"));
 const NostrCollectionsPage = lazy(() => import("./components/music/NostrCollections").then(module => ({ default: module.NostrCollectionsPage })));
+const CategoryCollectionsPage = lazy(() => import("./components/music/NostrCollections").then(module => ({ default: module.CategoryCollectionsPage })));
 const PublicMusicPlaylists = lazy(() => import("./components/music/PublicMusicPlaylists").then(module => ({ default: module.PublicMusicPlaylists })));
 const FollowedArtists = lazy(() => import("./pages/FollowedArtists"));
 const FriendsPage = lazy(() => import("./pages/FriendsPage"));
@@ -59,6 +60,8 @@ export function AppRouter() {
                     <Route path="/music-news" element={<MusicNewsPage />} />
                     <Route path="/search" element={<SearchPage />} />
                     <Route path="/category/:id" element={<CategoryPage />} />
+                    <Route path="/category/:id/publishers" element={<CategoryCollectionsPage type="publishers" />} />
+                    <Route path="/category/:id/albums" element={<CategoryCollectionsPage type="albums" />} />
                     <Route path="/playlist/:id" element={<PlaylistPage />} />
                     <Route path="/ostrify-playlist/:pubkey" element={<PublicMusicPlaylistPage />} />
                     <Route path="/liked" element={<LikedSongs />} />
