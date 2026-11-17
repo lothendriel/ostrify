@@ -9,6 +9,35 @@ const HEX = /^[0-9a-f]{64}$/;
 type Action = 'request' | 'accept' | 'decline' | 'remove';
 interface Message { id: string; from: string; to: string; token: string; action: Action; created_at: number }
 interface Rumor { id: string; pubkey: string; created_at: number; kind: number; tags: string[][]; content: string }
+type UnwrapResult = { status: 'processed'; message: Message | null } | { status: 'retry' };
+const MAX_PROCESSED_WRAP_IDS = 1500;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSafeTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isTags(value: unknown): value is string[][] {
+  return Array.isArray(value) && value.every(tag => Array.isArray(tag) && tag.length > 0 && tag.every(item => typeof item === 'string'));
+}
+
+function isEventFields(value: unknown): value is Record<string, unknown> & { id: string; pubkey: string; created_at: number; kind: number; tags: string[][]; content: string } {
+  return isRecord(value)
+    && Object.keys(value).every(key => ['id', 'pubkey', 'created_at', 'kind', 'tags', 'content', 'sig'].includes(key))
+    && typeof value.id === 'string' && HEX.test(value.id)
+    && typeof value.pubkey === 'string' && HEX.test(value.pubkey)
+    && isSafeTimestamp(value.created_at)
+    && typeof value.kind === 'number' && Number.isInteger(value.kind) && value.kind >= 0 && value.kind <= 65535
+    && isTags(value.tags)
+    && typeof value.content === 'string';
+}
+
+function isAction(value: string | undefined): value is Action {
+  return value === 'request' || value === 'accept' || value === 'decline' || value === 'remove';
+}
 
 async function inboxRelays(nostr: ReturnType<typeof useNostr>['nostr'], pubkey: string, signal: AbortSignal): Promise<string[]> {
   const events = await nostr.query([{ kinds: [10050], authors: [pubkey], limit: 10 }], { signal });
@@ -30,20 +59,79 @@ async function wrapMessage(user: NonNullable<ReturnType<typeof useCurrentUser>['
   return finalizeEvent({ kind: 1059, created_at: randomTime(), tags: [['p', recipient]], content: ciphertext }, key);
 }
 
-async function unwrapMessage(user: NonNullable<ReturnType<typeof useCurrentUser>['user']>, wrap: NostrEvent): Promise<Message | null> {
-  if (!user.signer.nip44 || wrap.kind !== 1059 || !verifyEvent(wrap) || !wrap.tags.some(([n, v]) => n === 'p' && v === user.pubkey)) return null;
+function isRumor(value: unknown): value is Rumor {
+  return isEventFields(value) && value.kind === 14 && !('sig' in value);
+}
+
+function isSignedEvent(value: unknown): value is NostrEvent {
+  return isEventFields(value)
+    && typeof value.sig === 'string'
+    && /^[0-9a-f]{128}$/.test(value.sig);
+}
+
+function parseJson(value: string): unknown {
   try {
-    const seal = JSON.parse(await user.signer.nip44.decrypt(wrap.pubkey, wrap.content)) as NostrEvent;
-    if (seal.kind !== 13 || !Array.isArray(seal.tags) || seal.tags.length !== 0 || !verifyEvent(seal)) return null;
-    const rumor = JSON.parse(await user.signer.nip44.decrypt(seal.pubkey, seal.content)) as Rumor;
-    if (rumor.kind !== 14 || rumor.pubkey !== seal.pubkey || !Array.isArray(rumor.tags) || getEventHash(rumor) !== rumor.id) return null;
-    const recipients = rumor.tags.filter(([n]) => n === 'p').map(([, p]) => p);
-    const tag = rumor.tags.find(([n]) => n === APP_TAG);
-    const action = tag?.[1]; const token = tag?.[2];
-    if (recipients.length !== 1 || !HEX.test(recipients[0]) || !HEX.test(rumor.pubkey) || !token || !/^[0-9a-f]{32}$/.test(token) || !action || !['request', 'accept', 'decline', 'remove'].includes(action)) return null;
-    if (rumor.pubkey !== user.pubkey && recipients[0] !== user.pubkey) return null;
-    return { id: rumor.id, from: rumor.pubkey, to: recipients[0], token, action: action as Action, created_at: rumor.created_at };
-  } catch { return null; }
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+async function unwrapMessage(user: NonNullable<ReturnType<typeof useCurrentUser>['user']>, wrap: NostrEvent): Promise<UnwrapResult> {
+  if (!user.signer.nip44
+    || !isSignedEvent(wrap)
+    || wrap.kind !== 1059
+    || !verifyEvent(wrap)) return { status: 'processed', message: null };
+
+  const recipientTags = wrap.tags.filter(([name]) => name === 'p');
+  if (recipientTags.length !== 1
+    || (recipientTags[0].length !== 2 && recipientTags[0].length !== 3)
+    || !HEX.test(recipientTags[0][1])
+    || recipientTags[0][1] !== user.pubkey) return { status: 'processed', message: null };
+
+  let sealValue: unknown;
+  try {
+    sealValue = await user.signer.nip44.decrypt(wrap.pubkey, wrap.content).then(parseJson);
+  } catch {
+    // A signer failure may be temporary or require user interaction. Don't cache it;
+    // the next inbox refresh should be able to retry this wrap.
+    return { status: 'retry' };
+  }
+  if (!isSignedEvent(sealValue)
+    || sealValue.kind !== 13
+    || sealValue.tags.length !== 0
+    || !verifyEvent(sealValue)) return { status: 'processed', message: null };
+
+  let rumorValue: unknown;
+  try {
+    rumorValue = await user.signer.nip44.decrypt(sealValue.pubkey, sealValue.content).then(parseJson);
+  } catch {
+    return { status: 'retry' };
+  }
+  if (!isRumor(rumorValue)
+    || rumorValue.pubkey !== sealValue.pubkey
+    || getEventHash(rumorValue) !== rumorValue.id) return { status: 'processed', message: null };
+
+  const recipientTagsInRumor = rumorValue.tags.filter(([name]) => name === 'p');
+  const appTags = rumorValue.tags.filter(([name]) => name === APP_TAG);
+  if (recipientTagsInRumor.length !== 1
+    || (recipientTagsInRumor[0].length !== 2 && recipientTagsInRumor[0].length !== 3)
+    || !HEX.test(recipientTagsInRumor[0][1])
+    || appTags.length !== 1
+    || appTags[0].length !== 3) return { status: 'processed', message: null };
+
+  const recipient = recipientTagsInRumor[0][1];
+  const action = appTags[0][1];
+  const token = appTags[0][2];
+  if (!HEX.test(rumorValue.pubkey)
+    || !isAction(action)
+    || !/^[0-9a-f]{32}$/.test(token)
+    || (rumorValue.pubkey !== user.pubkey && recipient !== user.pubkey)) return { status: 'processed', message: null };
+
+  return {
+    status: 'processed',
+    message: { id: rumorValue.id, from: rumorValue.pubkey, to: recipient, token, action, created_at: rumorValue.created_at },
+  };
 }
 
 function derive(messages: Message[], me: string) {
@@ -102,12 +190,22 @@ export function useFriends() {
       const cached = queryClient.getQueryData<Message[]>(['ostrify-friend-messages', user.pubkey]) ?? [];
       const seen = new Set(cached.map(message => message.id));
       const messages: Message[] = [...cached];
+      const processedWrapIds = new Set(
+        (queryClient.getQueryData<string[]>(['ostrify-friend-wrap-ids', user.pubkey]) ?? []).filter(id => HEX.test(id)),
+      );
       // Signer requests can be interactive; do not decrypt hundreds in parallel.
       for (const event of events) {
         if (signal.aborted) break;
-        const message = await unwrapMessage(user, event);
-        if (message && !seen.has(message.id)) { seen.add(message.id); messages.push(message); }
+        if (processedWrapIds.has(event.id)) continue;
+        const result = await unwrapMessage(user, event);
+        if (result.status === 'retry') continue;
+        processedWrapIds.add(event.id);
+        if (result.message && !seen.has(result.message.id)) {
+          seen.add(result.message.id);
+          messages.push(result.message);
+        }
       }
+      queryClient.setQueryData(['ostrify-friend-wrap-ids', user.pubkey], [...processedWrapIds].slice(-MAX_PROCESSED_WRAP_IDS));
       queryClient.setQueryData(['ostrify-friend-messages', user.pubkey], messages);
       return derive(messages, user.pubkey);
     },
