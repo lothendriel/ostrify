@@ -3,7 +3,13 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const eventName = 'ostrify-listening-sharing';
 const keyFor = (pubkey: string) => `ostrify:listening-sharing:${pubkey}`;
-const CLEAR_EVENT = 'ostrify:clear-listening-status';
+export const CLEAR_LISTENING_STATUS_EVENT = 'ostrify:clear-listening-status';
+export const LISTENING_STATUS_CLEAR_RESULT_EVENT = 'ostrify:listening-status-clear-result';
+export type ListeningStatusClearState = 'pending' | 'published' | 'failed' | 'superseded';
+export interface ListeningStatusClearResult {
+  state: ListeningStatusClearState;
+  message?: string;
+}
 function subscribe(listener: () => void) {
   const onStorage = (event: StorageEvent) => {
     if (event.key?.startsWith('ostrify:listening-sharing:') || event.key === null) listener();
@@ -33,7 +39,8 @@ export function useListeningSharing() {
     if (!key) return;
     if (!value) {
       try { localStorage.setItem(key, 'false'); } catch { throw new Error('Could not save listening activity privacy in this browser.'); }
-      window.dispatchEvent(new Event(CLEAR_EVENT));
+      window.dispatchEvent(new CustomEvent(LISTENING_STATUS_CLEAR_RESULT_EVENT, { detail: { state: 'pending' satisfies ListeningStatusClearState } }));
+      window.dispatchEvent(new Event(CLEAR_LISTENING_STATUS_EVENT));
     } else {
       try { localStorage.setItem(key, 'true'); } catch { throw new Error('Could not save listening activity privacy in this browser.'); }
     }

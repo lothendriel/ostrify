@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePlayer } from '@/hooks/usePlayer';
-import { useListeningSharing } from '@/hooks/useListeningSharing';
+import { CLEAR_LISTENING_STATUS_EVENT, LISTENING_STATUS_CLEAR_RESULT_EVENT, useListeningSharing, type ListeningStatusClearResult } from '@/hooks/useListeningSharing';
 
 /** Publish explicitly enabled public NIP-38 music statuses, clearing on pause/disable. */
 export function ListeningStatusSync() {
@@ -15,16 +15,32 @@ export function ListeningStatusSync() {
 
   useEffect(() => {
     const clearStatus = async () => {
-      if (!user) return;
+      const publishResult = (result: ListeningStatusClearResult) => window.dispatchEvent(new CustomEvent(LISTENING_STATUS_CLEAR_RESULT_EVENT, { detail: result }));
+      if (user) last.current = `${user.pubkey}:off`;
+      if (!user) {
+        publishResult({ state: 'failed', message: 'Log in with the same account to publish a status-clearing update.' });
+        return;
+      }
       const sequenceAtStart = ++sequence.current;
       try {
         const event = await user.signer.signEvent({ kind: 30315, content: '', tags: [['d', 'music']], created_at: Math.floor(Date.now() / 1000) });
-        if (sequenceAtStart !== sequence.current) return;
+        if (sequenceAtStart !== sequence.current) {
+          publishResult({ state: 'superseded' });
+          return;
+        }
         await nostr.event(event, { signal: AbortSignal.timeout(5000) });
-      } catch (error) { console.warn('Could not clear listening status after privacy change', error); }
+        publishResult({ state: 'published' });
+      } catch (error) {
+        console.warn('Could not clear listening status after privacy change', error);
+        if (sequenceAtStart !== sequence.current) {
+          publishResult({ state: 'superseded' });
+          return;
+        }
+        publishResult({ state: 'failed', message: error instanceof Error ? error.message : 'The clearing update could not be published.' });
+      }
     };
-    window.addEventListener('ostrify:clear-listening-status', clearStatus);
-    return () => window.removeEventListener('ostrify:clear-listening-status', clearStatus);
+    window.addEventListener(CLEAR_LISTENING_STATUS_EVENT, clearStatus);
+    return () => window.removeEventListener(CLEAR_LISTENING_STATUS_EVENT, clearStatus);
   }, [user, nostr]);
 
   useEffect(() => {

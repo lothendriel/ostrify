@@ -1,11 +1,12 @@
 import { useSeoMeta } from "@unhead/react";
+import { useEffect, useState } from "react";
 import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users, Mic, HardDriveUpload, Disc3 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RelayListManager } from "@/components/RelayListManager";
 import { useTheme } from "@/hooks/useTheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useListeningSharing } from "@/hooks/useListeningSharing";
+import { LISTENING_STATUS_CLEAR_RESULT_EVENT, useListeningSharing, type ListeningStatusClearResult } from "@/hooks/useListeningSharing";
 import { Switch } from "@/components/ui/switch";
 import { useDirectoryEnrollment } from "@/hooks/useOstrifyDirectory";
 import { useToast } from "@/hooks/useToast";
@@ -17,9 +18,22 @@ const SettingsPage = () => {
   const { theme, setTheme } = useTheme();
   const { user } = useCurrentUser();
   const sharing = useListeningSharing();
+  const [clearResult, setClearResult] = useState<ListeningStatusClearResult | null>(null);
   const directory = useDirectoryEnrollment();
   const privacy = useProfilePrivacy();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const handleClearResult = (event: Event) => {
+      const result = (event as CustomEvent<ListeningStatusClearResult>).detail;
+      setClearResult(result);
+      if (result.state === 'failed') {
+        toast({ title: 'Status clearing update failed', description: 'Sharing is off in Ostrify, but an earlier public status may remain visible until it expires.', variant: 'destructive' });
+      }
+    };
+    window.addEventListener(LISTENING_STATUS_CLEAR_RESULT_EVENT, handleClearResult);
+    return () => window.removeEventListener(LISTENING_STATUS_CLEAR_RESULT_EVENT, handleClearResult);
+  }, [toast]);
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
@@ -103,7 +117,7 @@ const SettingsPage = () => {
       <Card>
         <CardHeader>
           <CardTitle>Listening activity</CardTitle>
-          <CardDescription id="listening-sharing-description">When sharing is on, Ostrify publishes the name of your current track as a public Nostr status that other people can see. When off, Ostrify stops sharing and asks relays to clear your current status. This preference is saved on this device, and relays or other clients may retain older copies.</CardDescription>
+          <CardDescription id="listening-sharing-description">When sharing is on, Ostrify publishes the name of your current track as a public Nostr status that other people can see. When off, Ostrify stops publishing new statuses and attempts to publish a clearing update. This preference is saved on this device; a failed update can leave an earlier status visible until it expires, and relays or other clients may retain older copies.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -113,12 +127,15 @@ const SettingsPage = () => {
               checked={sharing.enabled}
               disabled={!user}
               className={sharing.enabled ? 'data-[state=checked]:bg-emerald-600' : 'data-[state=unchecked]:bg-destructive'}
-              onCheckedChange={value => { try { sharing.setEnabled(value); toast({ title: value ? 'Listening activity is public' : 'Listening activity is private', description: value ? 'Your current track will be shared publicly.' : 'Ostrify asks relays to clear your current status where possible.' }); } catch (error) { toast({ title: 'Could not update listening privacy', description: error instanceof Error ? error.message : 'Try again.', variant: 'destructive' }); } }}
+              onCheckedChange={value => { try { setClearResult(null); sharing.setEnabled(value); toast({ title: value ? 'Listening activity sharing enabled' : 'Sharing is off in Ostrify', description: value ? 'Your current track may be published publicly.' : 'Ostrify is attempting to publish a clearing update; this does not confirm that relays removed an earlier status.' }); } catch (error) { toast({ title: 'Could not update listening privacy', description: error instanceof Error ? error.message : 'Try again.', variant: 'destructive' }); } }}
             />
             <label htmlFor="listening-sharing" className={`text-sm font-semibold ${sharing.enabled ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'}`}>
-              {sharing.enabled ? 'Public — share my current track' : 'Private — do not share my listening activity'}
+              {sharing.enabled ? 'Public — share my current track' : 'Sharing off in Ostrify — do not publish new statuses'}
             </label>
           </div>
+          {!sharing.enabled && clearResult?.state === 'pending' && <p role="status" className="text-sm text-muted-foreground">Sharing is off in Ostrify. Publishing a clearing update…</p>}
+          {!sharing.enabled && clearResult?.state === 'published' && <p role="status" className="text-sm text-muted-foreground">A clearing update was accepted by the configured relay publisher. Other relays or clients may still retain older copies.</p>}
+          {!sharing.enabled && clearResult?.state === 'failed' && <p role="alert" className="text-sm text-destructive">Sharing is off in Ostrify, but the clearing update failed. An earlier status may remain visible until it expires. {clearResult.message}</p>}
           {!user && <p className="text-sm text-muted-foreground">Log in to change this setting.</p>}
         </CardContent>
       </Card>
