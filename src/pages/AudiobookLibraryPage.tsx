@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
@@ -20,7 +21,10 @@ function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; 
 export default function AudiobookLibraryPage() {
   const { id } = useParams<{ id: string }>();
   const library = useAudiobookLibrary();
-  const sync = useAudiobookLibrarySync();
+  const sync = useAudiobookLibrarySync(true);
+  useEffect(() => {
+    sync.requestSync();
+  }, [id, sync.requestSync]);
   const collection = library.collections.find(item => item.id === id);
   const collectionBooks = id ? library.booksInCollection(id) : [];
   const favoriteIds = new Set(library.favoriteBooks.map(book => book.id));
@@ -51,16 +55,16 @@ export default function AudiobookLibraryPage() {
     {!id && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><ListMusic className="size-5" /> Collections</h2>
       {library.collections.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.collections.map(item => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-4">
         <Link to={`/audiobook-library/${encodeURIComponent(item.id)}`} className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-primary"><h3 className="truncate font-semibold hover:underline">{item.title}</h3><p className="text-sm text-muted-foreground">{item.audiobookIds.length} books</p></Link>
-        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${item.title}`} onClick={() => library.deleteCollection(item.id)}><Trash2 className="size-4" /></Button>
+        <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${item.title}`} onClick={() => { sync.requestSync(); library.deleteCollection(item.id); }}><Trash2 className="size-4" /></Button>
       </div>)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Create a collection from an audiobook’s Save menu to organize books here.</p>}
     </section>}
 
     <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><Heart className="size-5" />{collection ? 'Favorites in this collection' : 'Favorite Audiobooks'}</h2>
-      {favoriteSection.length ? <div className="grid gap-2 sm:grid-cols-2">{favoriteSection.map(book => <AudiobookTile key={book.id} book={book} onRemove={() => library.toggleFavorite(book)} removeLabel={`Remove ${book.title} from favorites`} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{collection ? 'No favorites from this collection yet.' : 'Favorite an audiobook from its Save menu and it will appear here.'}</p>}
+      {favoriteSection.length ? <div className="grid gap-2 sm:grid-cols-2">{favoriteSection.map(book => <AudiobookTile key={book.id} book={book} onRemove={() => { sync.requestSync(); library.toggleFavorite(book); }} removeLabel={`Remove ${book.title} from favorites`} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{collection ? 'No favorites from this collection yet.' : 'Favorite an audiobook from its Save menu and it will appear here.'}</p>}
     </section>
 
     {collection && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><BookOpen className="size-5" />Other books in this collection</h2>
-      {savedSection.length ? <div className="grid gap-2 sm:grid-cols-2">{savedSection.map(book => <AudiobookTile key={book.id} book={book} onRemove={() => library.removeFromCollection(collection.id, book.id)} removeLabel={`Remove ${book.title} from collection`} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">No other books in this collection yet.</p>}
+      {savedSection.length ? <div className="grid gap-2 sm:grid-cols-2">{savedSection.map(book => <AudiobookTile key={book.id} book={book} onRemove={() => { sync.requestSync(); library.removeFromCollection(collection.id, book.id); }} removeLabel={`Remove ${book.title} from collection`} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">No other books in this collection yet.</p>}
     </section>}
 
     {!id && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><BookOpen className="size-5" />Recently saved audiobooks</h2>

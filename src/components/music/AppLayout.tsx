@@ -13,14 +13,7 @@ import { FriendsActivityPanel, FriendsActivitySheet } from "./FriendsActivityShe
 import { NotificationsBell, NotificationsPanel } from "./NotificationsBell";
 import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
-import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
 import { useIsMobile } from '@/hooks/useIsMobile';
-
-function AudiobookLibrarySyncService() {
-  useAudiobookLibrarySync();
-  return null;
-}
-
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | null>(null);
@@ -30,8 +23,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const togglePanel = (panel: 'friends' | 'queue' | 'notifications') => setActivePanel(current => current === panel ? null : panel);
 
   return (
-    <>
-    <AudiobookLibrarySyncService />
     <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
       <div className="flex-1 flex min-h-0 gap-0 md:gap-2 md:p-2">
         {/* Desktop sidebar */}
@@ -102,6 +93,5 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
  
       <PlayerBar onQueueToggle={() => togglePanel('queue')} queueOpen={activePanel === 'queue'} />
     </div>
-    </>
   );
 }

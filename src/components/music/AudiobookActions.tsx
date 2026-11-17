@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Heart, ListPlus, Plus } from 'lucide-react';
 import type { SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { useAudiobookLibrary } from '@/hooks/useAudiobookLibrary';
+import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 
 export function AudiobookActions({ book, compact = false }: { book: SavedAudiobook; compact?: boolean }) {
   const library = useAudiobookLibrary();
+  const sync = useAudiobookLibrarySync(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [collectionTitle, setCollectionTitle] = useState('');
   const favorite = library.isFavorite(book.id);
@@ -27,6 +29,7 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
   const createCollection = () => {
     const title = collectionTitle.trim();
     if (!title) return;
+    sync.requestSync();
     const id = library.createCollection(title);
     library.toggleInCollection(id, savedBook);
     setCollectionTitle('');
@@ -42,7 +45,7 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>Save audiobook</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => library.toggleFavorite(savedBook)}>
+        <DropdownMenuItem onSelect={() => { sync.requestSync(); library.toggleFavorite(savedBook); }}>
           <Heart className={`size-4 ${favorite ? 'fill-current text-primary' : ''}`} />
           <span className="flex-1">{favorite ? 'Remove from favorites' : 'Favorite audiobook'}</span>
           {favorite && <Check className="size-4 text-primary" />}
@@ -51,7 +54,7 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
         <DropdownMenuLabel>Collections</DropdownMenuLabel>
         {library.collections.length ? library.collections.map(collection => {
           const isInCollection = library.isInCollection(collection.id, savedBook.id);
-          return <DropdownMenuItem key={collection.id} onSelect={() => library.toggleInCollection(collection.id, savedBook)}>
+          return <DropdownMenuItem key={collection.id} onSelect={() => { sync.requestSync(); library.toggleInCollection(collection.id, savedBook); }}>
             <span className="truncate flex-1">{collection.title}</span>
             {isInCollection && <Check className="size-4 text-primary" />}
           </DropdownMenuItem>;

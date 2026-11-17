@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -35,7 +35,6 @@ function mergeLibraries(local: AudiobookLibraryState, remote: AudiobookLibrarySt
 }
 
 const baselineKey = (pubkey: string) => `ostrify-audiobook-library-sync-baseline:${pubkey}`;
-let processedRemoteVersion: string | null = null;
 let syncBaseline: string | null = null;
 let syncCanPublish = false;
 let syncInFlight = false;
@@ -82,21 +81,27 @@ function serializeLibrary(library: AudiobookLibraryState): string {
 }
 
 /** Syncs the current user's audiobook library as NIP-44 encrypted NIP-78 app data. */
-export function useAudiobookLibrarySync() {
+export function useAudiobookLibrarySync(enabled = true) {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { mutateAsync: publish } = useNostrPublish();
   const { toast } = useToast();
   const library = useAudiobookLibrary();
+  const [syncRequested, setSyncRequested] = useState(false);
+  const syncRequestedRef = useRef(false);
+  const queryRequestedByLibrary = useRef(false);
+  const previousIdentity = useRef<string | null>(null);
+  const previousEnabled = useRef(enabled);
   const relays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
   const relayKey = relays.join('|');
   const writeRelayKey = config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url).sort().join('|');
   const query = useQuery({
     queryKey: ['audiobook-library-remote', user?.pubkey ?? '', relayKey],
-    enabled: !!user && !!relayKey,
+    enabled: enabled && !!user && !!relayKey && syncRequested,
     staleTime: 0,
-    refetchOnWindowFocus: true,
+    retry: false,
+    refetchOnWindowFocus: false,
     queryFn: async ({ signal }): Promise<RemoteLibraryResult> => {
       if (!user) return { library: null, complete: false };
       if (!user.signer.nip44) throw new Error('Your Nostr signer must support NIP-44 encryption to sync this private library.');
@@ -113,16 +118,38 @@ export function useAudiobookLibrarySync() {
   });
 
   const [syncReadyFor, setSyncReadyFor] = useState<string | null>(null);
+  const previousQueryResult = useRef<{ pubkey?: string; dataUpdatedAt: number }>({ dataUpdatedAt: 0 });
 
   useEffect(() => {
-    if (!user) {
-      processedRemoteVersion = null;
-      syncBaseline = null;
-      syncCanPublish = false;
-      setSyncReadyFor(null);
-      return;
-    }
-    if (!query.isSuccess || !query.dataUpdatedAt || query.isError || (processedRemoteVersion === `${user.pubkey}:${query.dataUpdatedAt}` && syncReadyFor === user.pubkey)) return;
+    syncRequestedRef.current = syncRequested;
+  }, [syncRequested]);
+
+  useEffect(() => {
+    const currentPubkey = user?.pubkey ?? null;
+    if (currentPubkey === previousIdentity.current && enabled === previousEnabled.current) return;
+    previousIdentity.current = currentPubkey;
+    syncBaseline = null;
+    syncCanPublish = false;
+    syncRequestedRef.current = false;
+    queryRequestedByLibrary.current = false;
+    previousEnabled.current = enabled;
+    setSyncRequested(false);
+    setSyncReadyFor(null);
+    previousQueryResult.current = { pubkey: currentPubkey ?? undefined, dataUpdatedAt: 0 };
+  }, [enabled, user?.pubkey]);
+
+  const requestSync = useCallback(() => {
+    if (!enabled) return;
+    const wasRequested = syncRequestedRef.current;
+    syncRequestedRef.current = true;
+    queryRequestedByLibrary.current = true;
+    setSyncRequested(true);
+    if (wasRequested) void query.refetch();
+  }, [enabled, query.refetch]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!syncRequested || !query.isSuccess || !query.dataUpdatedAt || query.isError || (previousQueryResult.current.pubkey === user.pubkey && previousQueryResult.current.dataUpdatedAt === query.dataUpdatedAt)) return;
     const local = getAudiobookLibrarySnapshot();
     const savedBaseline = readSavedBaseline(user.pubkey);
     if (query.data.library) {
@@ -153,18 +180,25 @@ export function useAudiobookLibrarySync() {
       syncBaseline = serializeLibrary(getAudiobookLibrarySnapshot());
       syncCanPublish = false;
     }
-    processedRemoteVersion = `${user.pubkey}:${query.dataUpdatedAt}`;
+    const currentSerialized = serializeLibrary(getAudiobookLibrarySnapshot());
+    if (!syncCanPublish || currentSerialized === syncBaseline || !writeRelayKey || !user.signer.nip44) {
+      queryRequestedByLibrary.current = false;
+      syncRequestedRef.current = false;
+      setSyncRequested(false);
+    }
+    previousQueryResult.current = { pubkey: user.pubkey, dataUpdatedAt: query.dataUpdatedAt };
     setSyncReadyFor(user.pubkey);
-  }, [user?.pubkey, query.data, query.dataUpdatedAt, query.isSuccess, syncReadyFor, query.isError]);
+  }, [user?.pubkey, query.data, query.dataUpdatedAt, query.isSuccess, syncReadyFor, query.isError, syncRequested]);
 
   useEffect(() => {
-    if (!user || syncReadyFor !== user.pubkey || !query.isSuccess || !relayKey || !syncCanPublish || syncInFlight) return;
+    if (!user || !syncRequested || !queryRequestedByLibrary.current || syncReadyFor !== user.pubkey || !query.isSuccess || !relayKey || !syncCanPublish || syncInFlight) return;
     const serialized = serializeLibrary(getAudiobookLibrarySnapshot());
     if (serialized === syncBaseline || !user.signer.nip44 || !writeRelayKey) return;
 
     let cancelled = false;
     const publishingPubkey = user.pubkey;
     syncInFlight = true;
+    queryRequestedByLibrary.current = false;
     void user.signer.nip44.encrypt(user.pubkey, serialized).then(content => publish({
       kind: LIBRARY_KIND,
       content,
@@ -173,21 +207,25 @@ export function useAudiobookLibrarySync() {
       if (!cancelled) {
         syncBaseline = serialized;
         saveBaseline(publishingPubkey, serialized);
+        syncRequestedRef.current = false;
+        setSyncRequested(false);
       }
     }).catch(error => {
       if (!cancelled) toast({ title: 'Audiobook sync failed', description: error instanceof Error ? error.message : 'Could not publish the encrypted library.', variant: 'destructive' });
     }).finally(() => {
       syncInFlight = false;
-      if (serializeLibrary(getAudiobookLibrarySnapshot()) !== serialized) void query.refetch();
+      if (serializeLibrary(getAudiobookLibrarySnapshot()) !== serialized) requestSync();
     });
     return () => { cancelled = true; };
-  }, [library, user?.pubkey, syncReadyFor, query.isSuccess, query.dataUpdatedAt, relayKey, writeRelayKey, publish, user, toast]);
+  }, [library, user?.pubkey, syncRequested, syncReadyFor, query.isSuccess, query.dataUpdatedAt, relayKey, writeRelayKey, publish, user, toast]);
 
   return {
     isSignedIn: !!user,
-    isReady: !!user && syncReadyFor === user.pubkey,
-    isLoading: !!user && query.isLoading,
-    isError: query.isError,
+    requestSync,
+    isRequested: syncRequested,
+    isReady: !!user && syncRequested && syncReadyFor === user.pubkey,
+    isLoading: !!user && syncRequested && query.isLoading,
+    isError: syncRequested && query.isError,
     error: query.error,
     isPartial: query.data?.complete === false,
     hasReadRelays: !!relayKey,
