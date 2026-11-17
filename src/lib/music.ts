@@ -13,6 +13,8 @@ export interface Track {
   id: string;
   /** The underlying Nostr event, when the track was published on Nostr. */
   event?: NostrEvent;
+  /** Nostr event kind preserved in share links when event payload is not carried. */
+  eventKind?: number;
   /** External catalog tracks are not Nostr events. */
   source?: "wavlake" | "librivox" | "gutenberg" | "tunestr" | "fountain" | "podcast-index";
   artistId?: string;

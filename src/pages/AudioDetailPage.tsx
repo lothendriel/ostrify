@@ -118,8 +118,10 @@ export default function AudioDetailPage() {
   const rawId = searchParams.get("track") ?? "";
   const trackId = decodeAudioId(rawId)?.trim() ?? "";
   const sharedTrack = useMemo<Track | undefined>(() => {
-    if (!trackId || !searchParams.has("url")) return undefined;
-    const url = sanitizeUrl(searchParams.get("url"));
+    if (!trackId) return undefined;
+    const urlParam = searchParams.get("url");
+    if (urlParam === null) return undefined;
+    const url = sanitizeUrl(urlParam);
     const title = searchParams.get("title")?.trim();
     const kind = searchParams.get("kind");
     if (!url || url.length > 2048 || !title || title.length > 500 || !["music", "podcast", "audiobook"].includes(kind ?? "")) return undefined;
@@ -127,10 +129,14 @@ export default function AudioDetailPage() {
     const duration = Number.isFinite(durationValue) && durationValue > 0 ? durationValue : undefined;
     const sourceValue = searchParams.get("source");
     const source = ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(sourceValue ?? "") ? sourceValue as Track["source"] : undefined;
+    const rawEventKind = searchParams.get("eventKind");
+    const eventKindValue = rawEventKind ? Number(rawEventKind) : NaN;
+    const eventKind = Number.isInteger(eventKindValue) && [1, 54, 1063, 1053, 31337, 36787, 32123, 30440, 30311].includes(eventKindValue) ? eventKindValue : undefined;
     const createdAtValue = Number(searchParams.get("createdAt"));
     return {
       id: trackId,
       source,
+      eventKind,
       artistId: searchParams.get("artistId")?.slice(0, 100) || undefined,
       artistPubkey: /^[0-9a-f]{64}$/i.test(searchParams.get("artistPubkey") ?? "") ? searchParams.get("artistPubkey")!.toLowerCase() : undefined,
       showId: searchParams.get("showId")?.slice(0, 256) || undefined,
@@ -147,6 +153,7 @@ export default function AudioDetailPage() {
     } satisfies Track;
   }, [trackId, searchParams]);
   const nostrLookupId = useMemo(() => resolveTuneStrId(trackId), [trackId]);
+  const fallbackEventKind = /^[0-9a-f]{64}$/i.test(trackId) ? (searchParams.get("kind") === "podcast" ? 54 : 1) : undefined;
   const librivoxChapter = useMemo(() => parseAudiobookChapter(trackId, "librivox"), [trackId]);
   const gutenbergChapter = useMemo(() => parseAudiobookChapter(trackId, "gutenberg"), [trackId]);
   const fountainRss = useMemo(() => parseFountainRssId(trackId), [trackId]);
@@ -193,7 +200,9 @@ export default function AudioDetailPage() {
   const podcastShowId = podcastIndexFallback?.episodeId ? podcastIndexEpisode.data?.showId : undefined;
   const nostrTrack = directLookup.data?.tracks.find(item => item.id.toLowerCase() === nostrLookupId.toLowerCase()) ?? directLookup.data?.tracks[0];
   const resolvedTrack = chapter ?? bookTrack ?? (!librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !sharedTrack && !unsupportedExternalId ? nostrTrack : undefined) ?? fallbackEpisode ?? sharedTrack;
-  const trackWithPodcastShow = resolvedTrack && resolvedTrack.kind === "podcast" && !resolvedTrack.showId && podcastShowId ? { ...resolvedTrack, showId: podcastShowId } : resolvedTrack;
+  const tuneStrEventKind = resolvedTrack?.event?.kind ?? (trackId.startsWith("tunestr:n94:") ? 1053 : undefined);
+  const trackWithPodcastShowBase = resolvedTrack && resolvedTrack.kind === "podcast" && !resolvedTrack.showId && podcastShowId ? { ...resolvedTrack, showId: podcastShowId } : resolvedTrack;
+  const trackWithPodcastShow = trackWithPodcastShowBase && (tuneStrEventKind ?? fallbackEventKind) && !trackWithPodcastShowBase.eventKind ? { ...trackWithPodcastShowBase, eventKind: tuneStrEventKind ?? fallbackEventKind } : trackWithPodcastShowBase;
   const detailLoadError = (!!librivoxChapter && !librivoxBook.data && librivoxBook.isError) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isError) ||
     (!!fountainRss && (fountainShow.isError || fountainEpisodes.isError) && !fallbackEpisode) ||
     (!!podcastIndexFallback && (podcastIndexFallback.episodeId ? podcastIndexEpisode.isError : podcastIndexEpisodes.isError) && !fallbackEpisode) ||
@@ -221,6 +230,7 @@ export default function AudioDetailPage() {
   const bookLink = librivoxChapter?.isBookLink || gutenbergChapter?.isBookLink;
   const fountainGuid = track.kind === "podcast" ? fountainShowGuid(track.showId) : undefined;
   const podcastIndexShowId = track.kind === "podcast" && track.showId && /^podcast-index:\d{1,12}$/.test(track.showId) ? track.showId : undefined;
+  const shareTrack: Track = { ...track, eventKind: track.event?.kind ?? track.eventKind ?? tuneStrEventKind };
   const artist: ReactNode = fountainGuid
     ? <Link to={`/podcasts/fountain/${encodeURIComponent(fountainGuid)}`} className="hover:underline">{track.artist || "Podcast show"}</Link>
     : podcastIndexShowId
@@ -256,7 +266,7 @@ export default function AudioDetailPage() {
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" className="rounded-full" onClick={() => isCurrent ? player.togglePlay() : player.playTrack(track)}><span className="mr-2">{isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</span>{isPlaying ? "Pause" : "Play"}</Button>
       {track.kind === "music" && track.source !== "tunestr" && <LikeButton trackId={track.id} />}
-      <ShareTrackButton track={track} />
+      <ShareTrackButton track={shareTrack} />
       {track.kind !== "audiobook" && track.source !== "tunestr" && <QueueActionsMenu track={track} />}
       {track.source !== "librivox" && track.source !== "gutenberg" && track.source !== "tunestr" && <AddToPlaylistMenu trackId={track.id} />}
       {externalSource && <a href={externalSource} target="_blank" rel="noreferrer" className="rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-accent">View original source</a>}

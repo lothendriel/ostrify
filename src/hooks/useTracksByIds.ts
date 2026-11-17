@@ -77,6 +77,8 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true) {
             ? parseTunestrStreamEvent(event)?.track
             : eventToTrack(event);
         if (!track) continue;
+        if (track.event) track.eventKind = track.event.kind;
+        else if ([1, 54, 1063].includes(event.kind)) track.eventKind = event.kind;
         byId.set(event.id.toLowerCase(), track);
         if (event.kind === 1053) byId.set(`tunestr:n94:${event.id}`.toLowerCase(), track);
         const addressIdentifier = event.tags.find(([name]) => name === 'd')?.[1];

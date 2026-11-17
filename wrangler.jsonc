@@ -4,6 +4,16 @@
   "main": "worker.ts",
   "workers_dev": true,
   "compatibility_date": "2026-11-08",
+  "vars": {
+    "AUDIO_SHARE_APP_ORIGINS": "https://ostrify.shakespeare.wtf,https://ostrify.studio314.us,https://0171xlfg6yo0wjs9yhveno8onk4d56evm4dkxm6qq323hyigvhostrify.shakespeare.to",
+    "AUDIO_SHARE_WORKER_ORIGIN": "https://ostrify.lothendriel.workers.dev"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "AUDIO_SHARE_LINKS",
+      "id": "1a9d5b6863e9487d9cb03f9421927d02"
+    }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
