@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackCard } from "./TrackCard";
 import { TrackArtwork } from "./TrackArtwork";
+import { HorizontalCarousel } from "@/components/music/HorizontalCarousel";
 import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
@@ -102,19 +103,19 @@ export function MadeForYouSection({ candidates, isLoading, active = true }: { ca
         </div>
       </div>
       {isLoading || isPersonalDataLoading ? (
-        <div className="flex gap-2 overflow-hidden p-2" aria-label="Building your mix">
-          {Array.from({ length: 4 }, (_, index) => <div key={index} className="w-[min(42vw,176px)] shrink-0 space-y-2 rounded-lg p-1"><Skeleton className="aspect-square w-full rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
-        </div>
+        <HorizontalCarousel label="Building your Made for You mix" className="px-2">
+          {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 snap-start space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
+        </HorizontalCarousel>
       ) : mix.length ? (
         <>
-          <div className="grid w-full min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-2 px-2 pb-2 sm:grid-cols-[repeat(4,minmax(0,1fr))] lg:grid-cols-[repeat(6,minmax(0,1fr))]">
-            {mix.slice(0, 6).map(({ track, reason }) => (
-              <div key={track.id} className="min-w-0 max-w-full overflow-hidden">
+          <HorizontalCarousel label="Made for you tracks" className="px-2">
+            {mix.map(({ track, reason }) => (
+              <article key={track.id} className="min-w-0 snap-start max-w-full overflow-hidden">
                 <TrackCard track={track} showLikeAction showPlaylistAction compact />
                 <p className="px-2 pb-1 text-[11px] leading-tight text-violet-200/80">{reason}</p>
-              </div>
+              </article>
             ))}
-          </div>
+          </HorizontalCarousel>
           <p className="px-4 pb-3 text-[11px] text-muted-foreground sm:px-5">{mix.length} in today’s mix · focused on your taste with occasional nearby discoveries · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"}{catalogFailure ? " · Wavlake unavailable" : ""} · private to this browser</p>
         </>
       ) : (
