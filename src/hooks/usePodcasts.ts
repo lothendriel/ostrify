@@ -955,6 +955,7 @@ export async function fetchPodcastIndexEpisodes(episodeId: number, signal: Abort
   return {
     id: `podcast-index:episode:id:${episodeId}`,
     source: "podcast-index",
+    showId: typeof value.feedId === "number" && Number.isInteger(value.feedId) ? `podcast-index:${value.feedId}` : undefined,
     podcastIndexEpisodeId: episodeId,
     url: enclosure,
     title,

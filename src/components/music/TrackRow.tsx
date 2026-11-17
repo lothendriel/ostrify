@@ -9,6 +9,8 @@ import { LikeButton } from "./LikeButton";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { ArtistLink } from "./ArtistLink";
 import { QueueActionsMenu } from "./QueueActionsMenu";
+import { Link } from "react-router-dom";
+import { audioDetailPath } from "@/lib/audioDetail";
 
 interface TrackRowProps {
   track: Track;
@@ -53,34 +55,37 @@ export function TrackRow({ track, index, selectable = false, selected = false, o
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onClick={(event) => {
+      onClick={event => {
         if (event.target instanceof Element && event.target.closest("button, a, [role=menuitem], [data-queue-action='true']")) return;
         handlePlay();
       }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
-          e.preventDefault();
+      onKeyDown={event => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
           handlePlay();
         }
       }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Play ${track.title}`}
     >
       {selectable && <Checkbox checked={selected} aria-label={`${selected ? "Deselect" : "Select"} ${track.title}`} onCheckedChange={checked => onSelectedChange?.(checked === true)} onClick={event => event.stopPropagation()} />}
-      {/* Index / play indicator */}
-      <div className="relative flex w-8 items-center justify-center text-sm text-muted-foreground">
+      {/* Index / play control */}
+      <div className="relative flex h-10 w-8 items-center justify-center text-sm text-muted-foreground">
         {draggable && <GripVertical className="absolute -left-2 size-3.5 cursor-grab text-muted-foreground/60" aria-hidden="true" />}
-        <span className={cn("group-hover:opacity-0", isPlaying ? "opacity-0" : isCurrent && "text-primary")}>{index + 1}</span>
-        <span className="absolute inset-0 hidden group-hover:flex items-center justify-center text-foreground">
-          {isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
-        </span>
+        <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="absolute inset-0 flex items-center justify-center rounded focus-visible:outline-2 focus-visible:outline-primary">
+          <span className={cn("group-hover:opacity-0", isPlaying ? "opacity-0" : isCurrent && "text-primary")}>{index + 1}</span>
+          <span className="absolute inset-0 hidden items-center justify-center text-foreground group-hover:flex group-focus-within:flex">
+            {isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
+          </span>
+        </button>
       </div>
 
       {/* Artwork + title */}
       <div className="flex items-center gap-3 min-w-0">
-        <TrackArtwork track={track} className="w-10 h-10" />
+        <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="shrink-0 rounded focus-visible:outline-2 focus-visible:outline-primary"><TrackArtwork track={track} className="w-10 h-10" /></button>
         <div className="min-w-0">
-          <div className={cn("truncate font-medium", isCurrent && "text-primary")}>{track.title}</div>
+          <Link to={audioDetailPath(track)} onClick={event => event.stopPropagation()} className={cn("block truncate font-medium hover:underline focus-visible:underline", isCurrent && "text-primary")} title={`View details for ${track.title}`}>{track.title}</Link>
           <div className="truncate text-sm text-muted-foreground">
             <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />
           </div>

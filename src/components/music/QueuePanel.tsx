@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Clock3, GripVertical, ListMusic, ListPlus, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock3, GripVertical, ListMusic, ListPlus, Play, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatDuration, type Track } from '@/lib/music';
+import { Link } from 'react-router-dom';
+import { audioDetailPath } from '@/lib/audioDetail';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SheetHeader } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -232,12 +234,24 @@ function QueueTrack({ track, active = false, onPlay, onRemove, onMoveUp, onMoveD
     onDragEnd={onDragEnd}
     onDragOver={onDragOver}
     onDrop={onDrop}
-    className={`grid w-full min-w-0 ${draggable ? 'grid-cols-[1.5rem_2.75rem_minmax(0,1fr)_auto] gap-1' : 'grid-cols-[2.75rem_minmax(0,1fr)_auto] gap-2'} items-center overflow-hidden rounded-lg p-2 transition-opacity ${active ? 'bg-primary/10' : 'hover:bg-accent/40'} ${isDragging ? 'opacity-40' : ''}`}
+    onClick={event => {
+      if (event.target instanceof Element && event.target.closest("button, a")) return;
+      onPlay?.();
+    }}
+    onKeyDown={event => {
+      if (event.target === event.currentTarget && onPlay && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        onPlay();
+      }
+    }}
+    role={onPlay ? "button" : undefined}
+    tabIndex={onPlay ? 0 : undefined}
+    className={`group grid w-full min-w-0 ${onPlay ? 'cursor-pointer' : ''} ${draggable ? 'grid-cols-[1.5rem_2.75rem_minmax(0,1fr)_auto] gap-1' : 'grid-cols-[2.75rem_minmax(0,1fr)_auto] gap-2'} items-center overflow-hidden rounded-lg p-2 transition-opacity ${active ? 'bg-primary/10' : 'hover:bg-accent/40'} ${isDragging ? 'opacity-40' : ''}`}
   >
     {draggable && <span className="grid size-6 cursor-grab touch-none place-items-center text-muted-foreground active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder"><GripVertical className="size-4" /></span>}
-    <TrackArtwork track={track} className="size-11" />
+      {onPlay ? <button type="button" onClick={event => { event.stopPropagation(); onPlay(); }} aria-label={`Play ${track.title}`} className="relative size-11 rounded focus-visible:outline-2 focus-visible:outline-primary"><TrackArtwork track={track} className="size-11" /><span className="absolute inset-0 hidden items-center justify-center rounded bg-black/55 text-white group-hover:flex group-focus-within:flex"><Play className="size-4 fill-current" /></span></button> : <TrackArtwork track={track} className="size-11" />}
     <div className="min-w-0 overflow-hidden">
-      {onPlay ? <button type="button" className={`block w-full truncate text-left text-sm font-medium hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${active ? 'text-primary' : ''}`} title={`Play ${track.title}`} onClick={onPlay}>{track.title}</button> : <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>}
+      {onPlay ? <Link to={audioDetailPath(track)} onClick={event => event.stopPropagation()} className={`block truncate text-sm font-medium hover:underline ${active ? 'text-primary' : ''}`} title={`View details for ${track.title}`}>{track.title}</Link> : <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>}
       <p className="truncate text-xs text-muted-foreground"><ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist ?? track.album ?? (track.kind === 'audiobook' ? 'Audiobook' : track.kind === 'podcast' ? 'Podcast episode' : 'Unknown artist')} />{track.duration ? ` · ${formatDuration(track.duration)}` : ''}</p>
     </div>
     <div className="flex w-max shrink-0 items-center justify-self-end">

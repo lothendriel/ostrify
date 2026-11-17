@@ -19,6 +19,7 @@ import { usePlayer } from "@/hooks/usePlayer";
 import { nip19 } from "nostr-tools";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { audioDetailPath } from "@/lib/audioDetail";
 
 export function CombinedPodcastEpisodesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -504,7 +505,7 @@ function PodcastEpisodeList({ tracks, show, favorites, onToggleFavorite, onPlayT
     const episodeId = track.podcastIndexEpisodeId;
     const favorite: PodcastFavorite | undefined = episodeId ? { id: `podcast-index:episode:id:${episodeId}`, source: "podcast-index", title: track.title, publisher: show.title, image: track.image ?? show.image, feedId: show.feedId, episode: true, episodeId } : undefined;
     const isSaved = false;
-    return <div key={track.id} className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/10"><Checkbox checked={selectedIds.includes(track.id)} aria-label={`${selectedIds.includes(track.id) ? "Deselect" : "Select"} ${track.title}`} onCheckedChange={checked => setSelectedIds(ids => checked === true ? [...new Set([...ids, track.id])] : ids.filter(id => id !== track.id))} /><span className="text-center text-sm text-muted-foreground">{pageStart + index + 1}</span><button type="button" className="min-w-0 truncate text-left font-medium hover:text-primary" onClick={() => onPlayTrack(track)}>{track.title}</button><span className="hidden truncate text-sm text-muted-foreground md:block">{show.title}</span><div className="flex items-center gap-1">{favorite ? <PodcastFavoriteButton favorite={favorite} saved={isSaved} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /> : null}<LikeButton trackId={track.id} /><AddToPlaylistMenu trackId={track.id} /><QueueActionsMenu track={track} /></div></div>;
+    return <div key={track.id} className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/10"><Checkbox checked={selectedIds.includes(track.id)} aria-label={`${selectedIds.includes(track.id) ? "Deselect" : "Select"} ${track.title}`} onCheckedChange={checked => setSelectedIds(ids => checked === true ? [...new Set([...ids, track.id])] : ids.filter(id => id !== track.id))} /><span className="text-center text-sm text-muted-foreground">{pageStart + index + 1}</span><Link to={audioDetailPath(track)} aria-label={`View details for ${track.title}`} title={`View details for ${track.title}`} className="min-w-0 truncate text-left font-medium hover:text-primary hover:underline">{track.title}</Link><span className="hidden truncate text-sm text-muted-foreground md:block">{show.title}</span><div className="flex items-center gap-1">{favorite ? <PodcastFavoriteButton favorite={favorite} saved={isSaved} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /> : null}<LikeButton trackId={track.id} /><AddToPlaylistMenu trackId={track.id} /><QueueActionsMenu track={track} /></div></div>;
   })}{tracks.length > 20 && pagination("bottom")}</div>;
 }
 

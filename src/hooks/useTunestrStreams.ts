@@ -139,7 +139,7 @@ export function parseTunestrStreamEvent(event: NostrEvent): TunestrStream | null
   const duration = durationTag ? Number(durationTag) : undefined;
   const status = isLive ? 'live' : 'ended';
   const track: Track = {
-    id: `30311:${event.pubkey}:${d}`,
+    id: event.id,
     event: event as Track['event'],
     source: 'tunestr',
     url,

@@ -8,16 +8,30 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
+import { audioDetailPath } from '@/lib/audioDetail';
 
 function defaultMessage(track: Track): string {
-  const message = `I'm listening to ${track.title} on Ostrify. Check it out!`;
+  const message = `I'm listening to ${track.title.slice(0, 500)} on Ostrify. Check it out!`;
   const audioUrl = sanitizeUrl(track.url);
-  if (!audioUrl) return message;
+  if (!audioUrl || audioUrl.length > 2048) return message;
 
-  const shareUrl = new URL('/listen', window.location.origin);
+  const shareUrl = new URL(audioDetailPath(track), window.location.origin);
+  if (shareUrl.href.length > 8000) return message;
   shareUrl.searchParams.set('url', audioUrl);
-  shareUrl.searchParams.set('title', track.title);
+  shareUrl.searchParams.set('title', track.title.slice(0, 500));
   shareUrl.searchParams.set('kind', track.kind);
+  if (track.artist) shareUrl.searchParams.set('artist', track.artist.slice(0, 300));
+  if (track.image && sanitizeUrl(track.image)) shareUrl.searchParams.set('image', sanitizeUrl(track.image)!);
+  if (track.duration && Number.isFinite(track.duration) && track.duration > 0) shareUrl.searchParams.set('duration', String(track.duration));
+  if (track.source) shareUrl.searchParams.set('source', track.source);
+  if (track.album) shareUrl.searchParams.set('album', track.album.slice(0, 300));
+  if (track.artistId) shareUrl.searchParams.set('artistId', track.artistId.slice(0, 100));
+  if (track.artistPubkey && /^[0-9a-f]{64}$/i.test(track.artistPubkey)) shareUrl.searchParams.set('artistPubkey', track.artistPubkey);
+  if (track.showId && track.showId.length <= 256) shareUrl.searchParams.set('showId', track.showId);
+  if (/^[0-9a-f]{64}$/i.test(track.pubkey)) shareUrl.searchParams.set('pubkey', track.pubkey);
+  if (track.topics.length) shareUrl.searchParams.set('topics', track.topics.slice(0, 12).map(topic => topic.slice(0, 50)).join(','));
+  if (track.createdAt > 0) shareUrl.searchParams.set('createdAt', String(track.createdAt));
+  if (shareUrl.href.length > 8000) return message;
 
   return `${message}\n\n${shareUrl.toString()}`;
 }

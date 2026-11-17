@@ -8,6 +8,7 @@ import { ArtistLink } from "./ArtistLink";
 import { QueueActionsMenu } from "./QueueActionsMenu";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { LikeButton } from "./LikeButton";
+import { audioDetailPath } from "@/lib/audioDetail";
 
 interface TrackCardProps {
   track: Track;
@@ -33,7 +34,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
 
   return (
     <div className={cn("group relative min-w-0 max-w-full overflow-hidden rounded-lg bg-card transition-colors hover:bg-accent/10", compact ? "p-2" : "p-3")}>
-      <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="block w-full text-left">
+      <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} title={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="group/play block w-full cursor-pointer text-left">
         <div className={cn("relative", compact ? "mb-2" : "mb-3")}>
           <TrackArtwork track={track} className="w-full aspect-square" rounded={compact ? "rounded-md" : "rounded-md shadow-lg"} />
           <span
@@ -44,14 +45,16 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
               "transition-all duration-200",
               isPlaying
                 ? "translate-y-0 opacity-100"
-                : "translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100",
+                : "translate-y-2 opacity-0 group-hover/play:translate-y-0 group-hover/play:opacity-100 group-focus-visible/play:translate-y-0 group-focus-visible/play:opacity-100",
             )}
           >
             {isPlaying ? <Pause className={cn("fill-current", compact ? "size-4" : "size-5")} /> : <Play className={cn("ml-0.5 fill-current", compact ? "size-4" : "size-5")} />}
           </span>
         </div>
-        <div className={cn("truncate font-semibold", compact && "text-sm")}>{track.title}</div>
       </button>
+      <Link to={audioDetailPath(track)} onClick={event => event.stopPropagation()} className={cn("mb-0.5 block truncate font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary", compact && "text-sm")} title={`View details for ${track.title}`}>
+        {track.title}
+      </Link>
       <div className={cn("flex items-center justify-between gap-2", compact && "text-xs")}>
         <div className={cn("min-w-0 truncate text-sm text-muted-foreground", compact && "text-xs")}>
           {fountainGuid ? <Link to={`/podcasts/fountain/${encodeURIComponent(fountainGuid)}`} onClick={event => event.stopPropagation()} className="hover:text-foreground hover:underline focus-visible:underline">{track.artist || "Fountain show"}</Link> : <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />}

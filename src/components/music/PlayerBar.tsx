@@ -23,6 +23,7 @@ import { ArtistLink } from "./ArtistLink";
 import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { QueuePanelButton } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
+import { audioDetailPath } from "@/lib/audioDetail";
 
 function PodcastShowLink({ track }: { track: Track }) {
   const fountainGuid = fountainShowGuid(track.showId);
@@ -59,7 +60,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             <>
               <TrackArtwork track={current} className="size-10 shrink-0 sm:size-14" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-medium sm:text-sm">{current.title}</div>
+                <Link to={audioDetailPath(current)} className="block truncate text-xs font-medium hover:underline sm:text-sm" title={`View details for ${current.title}`}>{current.title}</Link>
                 <div className="truncate text-[11px] text-muted-foreground sm:text-xs">
                   {current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
                 </div>

@@ -4,6 +4,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { usePlayer } from '@/hooks/usePlayer';
 import { useRadio } from '@/hooks/useRadio';
 import type { Track } from '@/lib/music';
+import { audioDetailPath } from '@/lib/audioDetail';
+import { Link } from 'react-router-dom';
 
 export function QueueActionsMenu({ track }: { track: Track }) {
   const player = usePlayer();
@@ -45,6 +47,9 @@ export function QueueActionsMenu({ track }: { track: Track }) {
         onSelect={() => player.addToQueue([track])}
       >
         <ListPlus className="size-4" /> {alreadyQueued ? 'Add again to queue' : 'Add to queue'}
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild data-queue-action="true">
+        <Link to={audioDetailPath(track)}>View audio details</Link>
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>;

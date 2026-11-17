@@ -41,6 +41,7 @@ const ArtistPage = lazy(() => import("./pages/ArtistPage").then(module => ({ def
 const ArtistAlbumPage = lazy(() => import("./pages/ArtistAlbumPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const ListenPage = lazy(() => import("./pages/ListenPage"));
+const AudioDetailPage = lazy(() => import("./pages/AudioDetailPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 
 export function AppRouter() {
@@ -56,6 +57,7 @@ export function AppRouter() {
                 <Suspense fallback={<div role="status" className="p-6 text-sm text-muted-foreground">Loading page…</div>}>
                   <Routes>
                     <Route path="/" element={<Index />} />
+                    <Route path="/audio" element={<AudioDetailPage />} />
                     <Route path="/listen" element={<ListenPage />} />
                     <Route path="/music-news" element={<MusicNewsPage />} />
                     <Route path="/search" element={<SearchPage />} />
