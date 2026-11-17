@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
+import { HorizontalCarousel } from '@/components/music/HorizontalCarousel';
 import { FollowButton } from '@/components/music/FollowButton';
 import { useRadio } from '@/hooks/useRadio';
 import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
@@ -75,14 +76,24 @@ function CatalogTracks({ artistId, onTracksChange }: { artistId?: string; onTrac
   </section>;
 }
 
+function RankedReleaseCard({ item }: { item: CatalogItem }) {
+  return <Link to={`/wavlake/${item.type}/${item.id}`} className="group min-w-0 rounded-lg bg-secondary/50 p-3 transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
+    <div className="mb-3 flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-muted">
+      {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <Music className="size-10 text-muted-foreground" />}
+    </div>
+    <div className="truncate font-semibold">{item.title}</div>
+    <div className="truncate text-sm text-muted-foreground">{item.type === 'album' && item.artist ? item.artist : 'Artist'}</div>
+  </Link>;
+}
+
 function FeaturedRankings() {
   const rankings = useWavlakeRankedReleases();
   if (rankings.isLoading) return <section className="space-y-3"><h2 className="text-2xl font-bold">From Wavlake’s top tracks</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div></section>;
   if (rankings.isError) return <p className="text-sm text-muted-foreground">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>;
   if (!rankings.data?.artists.length && !rankings.data?.albums.length) return <p className="text-sm text-muted-foreground">No ranked artists or albums are available right now.</p>;
   return <div className="space-y-8">
-    {rankings.data.artists.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div><CatalogLinks items={rankings.data.artists.slice(0, 8)} />{rankings.data.artists.length > 8 && <Button asChild variant="link" className="px-0"><Link to="/wavlake/top-artists">See all</Link></Button>}</section>}
-    {rankings.data.albums.length > 0 && <section className="space-y-3"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div><CatalogLinks items={rankings.data.albums.slice(0, 8)} />{rankings.data.albums.length > 8 && <Button asChild variant="link" className="px-0"><Link to="/wavlake/top-albums">See all</Link></Button>}</section>}
+    {rankings.data.artists.length > 0 && <section className="space-y-3"><div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-bold">Artists in top tracks</h2><p className="text-sm text-muted-foreground">Featured in Wavlake tracks ranked by sats earned over the last 30 days; not an artist chart.</p></div>{rankings.data.artists.length > 8 && <Link to="/wavlake/top-artists" className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">See all <ChevronRight className="size-4" /></Link>}</div><HorizontalCarousel label="Artists in top tracks">{rankings.data.artists.slice(0, 8).map(item => <div key={`${item.type}:${item.id}`} className="min-w-0 snap-start"><RankedReleaseCard item={item} /></div>)}</HorizontalCarousel></section>}
+    {rankings.data.albums.length > 0 && <section className="space-y-3"><div className="flex items-start justify-between gap-4"><div><h2 className="text-2xl font-bold">Albums in top tracks</h2><p className="text-sm text-muted-foreground">Albums represented in Wavlake’s top tracks over the last 30 days; not an album chart.</p></div>{rankings.data.albums.length > 8 && <Link to="/wavlake/top-albums" className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">See all <ChevronRight className="size-4" /></Link>}</div><HorizontalCarousel label="Albums in top tracks">{rankings.data.albums.slice(0, 8).map(item => <div key={`${item.type}:${item.id}`} className="min-w-0 snap-start"><RankedReleaseCard item={item} /></div>)}</HorizontalCarousel></section>}
   </div>;
 }
 
