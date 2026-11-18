@@ -13,15 +13,6 @@ import { audioDetailPath } from '@/lib/audioDetail';
 const PUBLIC_APP_ORIGIN = 'https://ostrify.studio314.us';
 
 function compactAudioDetailUrl(track: Track): URL | undefined {
-  const coordinateKind = /^(?:tunestr:)?(\d+):[0-9a-f]{64}:/i.exec(track.id)?.[1];
-  const eventKind = track.event?.kind
-    ?? track.eventKind
-    ?? (track.id.startsWith('tunestr:n94:') ? 1053 : track.id.startsWith('tunestr:') && /^[0-9a-f]{64}:/i.test(track.id.slice('tunestr:'.length)) ? 30311 : coordinateKind ? Number(coordinateKind) : /^[0-9a-f]{64}$/i.test(track.id) ? track.kind === 'podcast' ? 54 : 1 : undefined);
-  const isEventId = /^[0-9a-f]{64}$/i.test(track.id);
-  const isAddressableReference = /^(?:30311|31337|36787|32123|30440):[0-9a-f]{64}:\S{1,256}$/i.test(track.id)
-    || /^tunestr:[0-9a-f]{64}:\S{1,256}$/i.test(track.id);
-  // Catalog IDs can be looked up independently. Nostr events may only be
-  // available on the source relay, so share their metadata as a fallback.
   const isResolvableId = /^wavlake:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(track.id)
     || /^fountain:episode:id:[A-Za-z0-9]{20}$/.test(track.id)
     || /^fountain-rss:(?:fountain:(?:show:id:)?)?[^:\s]{1,512}:\S{1,512}$/.test(track.id)
@@ -29,17 +20,40 @@ function compactAudioDetailUrl(track: Track): URL | undefined {
     || /^podcast-index:https:\/\/[^:]+(?::\d+)?\/.*:\d{1,12}:.+$/s.test(track.id)
     || /^(?:gutenberg|librivox):[a-z0-9][a-z0-9_-]{0,159}(?::.{1,512})?$/i.test(track.id);
   if (!isResolvableId || track.id.length > 2048) return undefined;
-  if ((isEventId || /^tunestr:n94:/i.test(track.id)) && !eventKind) return undefined;
-  if (isAddressableReference && !eventKind) return undefined;
   const compactUrl = new URL('/audio', PUBLIC_APP_ORIGIN);
   compactUrl.searchParams.set('track', track.id);
-  if (eventKind) compactUrl.searchParams.set('eventKind', String(eventKind));
   return compactUrl;
+}
+
+function nostrAudioFallbackUrl(track: Track): URL | undefined {
+  const isEventId = /^[0-9a-f]{64}$/i.test(track.id);
+  const isAddressableReference = /^(?:30311|31337|36787|32123|30440):[0-9a-f]{64}:\S{1,256}$/i.test(track.id)
+    || /^tunestr:[0-9a-f]{64}:\S{1,256}$/i.test(track.id);
+  const isN94Reference = /^tunestr:n94:[0-9a-f]{64}$/i.test(track.id);
+  const isKindEventReference = /^(?:1|54|1063|1053):[0-9a-f]{64}$/i.test(track.id);
+  if (!isEventId && !isAddressableReference && !isN94Reference && !isKindEventReference) return undefined;
+
+  const coordinateKind = /^(?:tunestr:)?(\d+):[0-9a-f]{64}:/i.exec(track.id)?.[1];
+  const eventKind = track.event?.kind
+    ?? track.eventKind
+    ?? (isN94Reference ? 1053 : track.id.startsWith('tunestr:') && /^[0-9a-f]{64}:/i.test(track.id.slice('tunestr:'.length)) ? 30311 : coordinateKind ? Number(coordinateKind) : isEventId ? track.kind === 'podcast' ? 54 : 1 : undefined);
+  const audioUrl = sanitizeUrl(track.url);
+  if (!audioUrl || audioUrl.length > 2048 || !track.title.trim() || !eventKind) return undefined;
+
+  const fallbackUrl = new URL('/audio', PUBLIC_APP_ORIGIN);
+  fallbackUrl.searchParams.set('track', track.id);
+  fallbackUrl.searchParams.set('url', audioUrl);
+  fallbackUrl.searchParams.set('title', track.title.slice(0, 500));
+  fallbackUrl.searchParams.set('kind', track.kind);
+  fallbackUrl.searchParams.set('eventKind', String(eventKind));
+  return fallbackUrl.href.length <= 7000 ? fallbackUrl : undefined;
 }
 
 function audioDetailUrl(track: Track): URL | undefined {
   const compactUrl = compactAudioDetailUrl(track);
   if (compactUrl) return compactUrl;
+  const nostrFallbackUrl = nostrAudioFallbackUrl(track);
+  if (nostrFallbackUrl) return nostrFallbackUrl;
   const audioUrl = sanitizeUrl(track.url);
   if (audioUrl && audioUrl.length > 2048) return undefined;
   const eventKind = track.event?.kind ?? track.eventKind ?? (track.id.startsWith('tunestr:n94:') ? 1053 : /^[0-9a-f]{64}$/i.test(track.id) ? track.kind === 'podcast' ? 54 : 1 : undefined);
