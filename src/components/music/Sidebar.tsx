@@ -54,10 +54,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
-      <div className="flex items-center gap-2 px-5 pt-5 pb-2">
+      <NavLink
+        to="/"
+        end
+        onClick={onNavigate}
+        aria-label="Ostrify home"
+        className="mx-2 flex items-center gap-2 rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <img src="/ostrify-logo.png?v=ostrich-note" alt="" className="size-10 rounded-md object-contain" />
         <span className="font-bold text-xl tracking-tight">Ostrify</span>
-      </div>
+      </NavLink>
 
       <Collapsible open={menuOpen} onOpenChange={setMenuOpen} className="mx-2 shrink-0 rounded-lg bg-card">
         <CollapsibleTrigger asChild>
