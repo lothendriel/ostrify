@@ -23,8 +23,10 @@ const CONTENT_PATH_PREFIX = "/api/fountain/content/";
 const MAX_BODY_LENGTH = 2048;
 const AUDIO_SHARE_PATH = "/api/audio-shares";
 const AUDIO_SHARE_PREFIX = "/s/";
+const AUDIO_SHARE_PUBLIC_ORIGIN = "https://ostrify.lothendriel.workers.dev";
 const AUDIO_DETAIL_BASE_PATH = "/audio";
-const AUDIO_SHARE_CODE_RE = /^[A-Za-z0-9_-]{12}$/;
+// Accept legacy 12-character links while issuing 128-bit codes for new links.
+const AUDIO_SHARE_CODE_RE = /^(?:[A-Za-z0-9_-]{12}|[A-Za-z0-9_-]{22})$/;
 const AUDIO_SHARE_MAX_PATH_LENGTH = 7000;
 const AUDIO_SHARE_TARGET_TTL_SECONDS = 60 * 60 * 24 * 365 * 5;
 const AUDIO_SHARE_RATE_LIMIT = 20;
@@ -265,7 +267,8 @@ function audioShareJson(body: unknown, status: number, origin?: string): Respons
 }
 
 function createShareCode(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(9));
+  // 128 random bits make the non-atomic KV collision check safe in practice.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
@@ -294,9 +297,9 @@ function isSafeShareableHttpsUrl(value: string): boolean {
   }
   const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (parsed.protocol !== "https:" || parsed.username || parsed.password) return false;
-  if (hostname === "localhost" || hostname.endsWith(".localhost") || hostname.endsWith(".local")) return false;
+  if (/\.(?:localhost|local|internal|home|lan|test|invalid|example|onion|arpa|nip\.io|sslip\.io|xip\.io|localtest\.me|vcap\.me|lvh\.me|traefik\.me)$/.test(hostname) || hostname === "localhost") return false;
   if (/^\d+(?:\.\d+){0,3}$/.test(hostname) || hostname.includes(":")) return !isPrivateOrReservedAddress(hostname);
-  return hostname.length <= 253 && hostname.split(".").every(label => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label));
+  return hostname.length <= 253 && hostname.split(".").every(label => label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label));
 }
 
 function isSafeAudioSharePath(value: unknown, env: Env): value is string {
@@ -307,22 +310,38 @@ function isSafeAudioSharePath(value: unknown, env: Env): value is string {
   } catch {
     return false;
   }
-  if (!isAllowedAudioShareOrigin(target.origin, env) || target.pathname !== AUDIO_DETAIL_BASE_PATH) return false;
+  if (target.username || target.password || target.hash || !isAllowedAudioShareOrigin(target.origin, env) || target.pathname !== AUDIO_DETAIL_BASE_PATH) return false;
   const track = target.searchParams.get("track");
   const title = target.searchParams.get("title");
   const kind = target.searchParams.get("kind");
   if (!track || track.length > 2048 || !title || title.length > 500 || !["music", "podcast", "audiobook"].includes(kind ?? "")) return false;
-  const stableExternalId = /^(?:wavlake:[0-9a-f-]{36}|fountain:episode:id:\S{20}|podcast-index:episode:id:\d{1,12}|(?:gutenberg|librivox):[a-z0-9][a-z0-9_-]{0,159}(?::.{1,512})?|tunestr:n94:[0-9a-f]{64}|tunestr:[0-9a-f]{64}(?::.+)?|\d+:[0-9a-f]{64}:.+)$/i.test(track);
-  const fallbackDataPresent = target.searchParams.has("url");
-  if (!stableExternalId && !fallbackDataPresent) return false;
   const expectedSource = track.startsWith("wavlake:") ? "wavlake" : track.startsWith("fountain:") ? "fountain" : track.startsWith("podcast-index:") ? "podcast-index" : track.startsWith("librivox:") ? "librivox" : track.startsWith("gutenberg:") ? "gutenberg" : undefined;
   const source = target.searchParams.get("source");
   if (expectedSource && source !== expectedSource) return false;
-  if (/^[0-9a-f]{64}$/i.test(track) && !target.searchParams.has("eventKind")) return false;
+  if (source && !["wavlake", "fountain", "podcast-index", "librivox", "gutenberg", "tunestr"].includes(source)) return false;
+  const isWavlakeId = /^wavlake:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(track);
+  const isPodcastIndexId = /^podcast-index:episode:id:\d{1,12}$/.test(track);
+  const isFountainId = /^fountain:episode:id:\S{20}$/.test(track);
+  const isAudiobookId = /^(?:gutenberg|librivox):[a-z0-9][a-z0-9_-]{0,159}(?::.{1,512})?$/i.test(track);
+  const isEventId = /^[0-9a-f]{64}$/i.test(track);
+  const tuneStrN94Match = /^tunestr:n94:([0-9a-f]{64})$/i.exec(track);
+  const tuneStrCoordinate = /^tunestr:([0-9a-f]{64}):(.+)$/i.exec(track);
+  const nostrCoordinate = /^(\d+):([0-9a-f]{64}):(.+)$/.exec(track);
+  const fountainRssId = /^fountain-rss:\S{1,512}:\S{1,512}$/.test(track);
+  const podcastIndexFallbackId = /^podcast-index:(https:\/\/[^:]+(?::\d+)?\/.*):(\d{1,12}):(.+)$/s.test(track);
+  const isTuneStrCoordinate = !!tuneStrCoordinate && /^[^\s]{1,256}$/.test(tuneStrCoordinate[2]);
+  const isNostrCoordinate = !!nostrCoordinate && [30311, 31337, 36787, 32123, 30440].includes(Number(nostrCoordinate[1])) && /^[^\s]{1,256}$/.test(nostrCoordinate[3]);
   const eventKind = target.searchParams.get("eventKind");
-  if (eventKind && !["1", "54", "1063", "1053", "31337", "36787", "32123", "30440", "30311"].includes(eventKind)) return false;
-  if (/^tunestr:/i.test(track) && !/^(?:tunestr:[0-9a-f]{64}|tunestr:n94:[0-9a-f]{64})(?::.+)?$/i.test(track)) return false;
-  if (/^30311:/i.test(track) && !/^30311:[0-9a-f]{64}:.+$/i.test(track)) return false;
+  const allowedEventKinds = [1, 54, 1063, 1053, 31337, 36787, 32123, 30440, 30311];
+  if (isEventId && (!eventKind || !allowedEventKinds.includes(Number(eventKind)))) return false;
+  if (eventKind && !allowedEventKinds.includes(Number(eventKind))) return false;
+  if (tuneStrN94Match && eventKind !== "1053") return false;
+  if (isTuneStrCoordinate && eventKind !== "30311") return false;
+  if (isNostrCoordinate && Number(eventKind) !== Number(nostrCoordinate?.[1])) return false;
+  const isKnownTrackId = isWavlakeId || isPodcastIndexId || podcastIndexFallbackId || isFountainId || fountainRssId || isAudiobookId || isEventId || tuneStrN94Match || isTuneStrCoordinate || isNostrCoordinate;
+  if (!isKnownTrackId) return false;
+  if ((podcastIndexFallbackId || fountainRssId) && !target.searchParams.has("url")) return false;
+  if (kind === "audiobook" && !/^(?:gutenberg|librivox):/i.test(track) && !target.searchParams.has("url")) return false;
   const mediaUrl = target.searchParams.get("url");
   if (mediaUrl) {
     let safeMediaUrl: URL;
@@ -384,10 +403,9 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const requestOrigin = request.headers.get("Origin");
-    const allowedShareOrigin = requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env)
+    const corsOrigin = requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env)
       ? new URL(requestOrigin).origin
-      : url.origin;
-    const corsOrigin = requestOrigin && isAllowedAudioShareOrigin(requestOrigin, env) ? new URL(requestOrigin).origin : undefined;
+      : undefined;
 
     if (url.pathname === AUDIO_SHARE_PATH) {
       if (request.method === "OPTIONS") {
@@ -429,7 +447,7 @@ export default {
           const key = `link:${code}`;
           if (await env.AUDIO_SHARE_LINKS.get(key)) continue;
           await env.AUDIO_SHARE_LINKS.put(key, normalizedPath.toString(), { expirationTtl: AUDIO_SHARE_TARGET_TTL_SECONDS });
-          return audioShareJson({ url: new URL(`${AUDIO_SHARE_PREFIX}${code}`, url.origin).toString() }, 201, responseOrigin);
+          return audioShareJson({ url: new URL(`${AUDIO_SHARE_PREFIX}${code}`, AUDIO_SHARE_PUBLIC_ORIGIN).toString() }, 201, responseOrigin);
         }
         return audioShareJson({ error: "Could not allocate a share link. Please try again." }, 503, responseOrigin);
       } catch {
@@ -440,7 +458,7 @@ export default {
     if (url.pathname.startsWith(AUDIO_SHARE_PREFIX)) {
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
       const code = url.pathname.slice(AUDIO_SHARE_PREFIX.length);
-      if (!AUDIO_SHARE_CODE_RE.test(code)) return env.ASSETS.fetch(request);
+      if (!AUDIO_SHARE_CODE_RE.test(code)) return new Response("Share link not found", { status: 404 });
       try {
         const target = await env.AUDIO_SHARE_LINKS.get(`link:${code}`);
         if (!target || !isSafeAudioSharePath(target, env)) return new Response("Share link not found", { status: 404 });

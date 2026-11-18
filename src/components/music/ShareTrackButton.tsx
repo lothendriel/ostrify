@@ -93,7 +93,7 @@ async function createShortAudioLink(track: Track): Promise<string | undefined> {
   if (!payload || typeof payload !== 'object' || !('url' in payload) || typeof payload.url !== 'string') return undefined;
   try {
     const shortUrl = new URL(payload.url, workerUrl);
-    if (shortUrl.origin !== workerUrl.origin || !/^\/s\/[A-Za-z0-9_-]{12}$/.test(shortUrl.pathname)) return undefined;
+    if (shortUrl.origin !== workerUrl.origin || !/^\/s\/(?:[A-Za-z0-9_-]{12}|[A-Za-z0-9_-]{22})$/.test(shortUrl.pathname)) return undefined;
     return shortUrl.toString();
   } catch {
     return undefined;
@@ -122,6 +122,7 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
   const [sharedTrack, setSharedTrack] = useState<Track>();
   const [isShortening, setIsShortening] = useState(false);
   const requestIdRef = useRef<string | undefined>(undefined);
+  const messageEditedRef = useRef(false);
 
   const openShareDialog = async () => {
     if (!track) return;
@@ -129,6 +130,7 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
     const initialMessage = defaultMessage(trackToShare);
     const requestId = `${Date.now()}-${Math.random()}`;
     requestIdRef.current = requestId;
+    messageEditedRef.current = false;
     setSharedTrack(trackToShare);
     setMessage(initialMessage);
     setOpen(true);
@@ -136,9 +138,8 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
     try {
       const shortUrl = await createShortAudioLink(trackToShare);
       if (requestIdRef.current !== requestId) return;
-      if (shortUrl) {
-        const shortenedMessage = defaultMessage(trackToShare, shortUrl);
-        setMessage(currentMessage => currentMessage === initialMessage ? shortenedMessage : currentMessage);
+      if (shortUrl && !messageEditedRef.current) {
+        setMessage(defaultMessage(trackToShare, shortUrl));
       }
     } catch {
       // Keep the longer direct detail URL if the short-link Worker is unavailable.
@@ -189,7 +190,7 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
           <Textarea
             autoFocus
             value={message}
-            onChange={event => setMessage(event.target.value)}
+            onChange={event => { messageEditedRef.current = true; setMessage(event.target.value); }}
             aria-label="Post message"
             placeholder="Write a message about what you’re listening to…"
             maxLength={5000}
