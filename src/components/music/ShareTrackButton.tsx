@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { LoaderCircle, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,6 +11,7 @@ import type { Track } from '@/lib/music';
 import { audioDetailPath, encodeAudioDetailFallback } from '@/lib/audioDetail';
 
 const PUBLIC_APP_ORIGIN = 'https://ostrify.studio314.us';
+const AUDIO_SHARE_API_URL = '/api/audio-shares';
 
 function compactAudioDetailUrl(track: Track): URL | undefined {
   const isResolvableId = /^wavlake:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(track.id)
@@ -22,6 +23,9 @@ function compactAudioDetailUrl(track: Track): URL | undefined {
   if (!isResolvableId || track.id.length > 2048) return undefined;
   const compactUrl = new URL('/audio', PUBLIC_APP_ORIGIN);
   compactUrl.searchParams.set('track', track.id);
+  compactUrl.searchParams.set('title', track.title.slice(0, 500));
+  compactUrl.searchParams.set('kind', track.kind);
+  if (track.source) compactUrl.searchParams.set('source', track.source);
   return compactUrl;
 }
 
@@ -91,6 +95,25 @@ function audioDetailUrl(track: Track): URL | undefined {
   return undefined;
 }
 
+async function createShortAudioLink(path: string): Promise<string | undefined> {
+  try {
+    const response = await fetch(AUDIO_SHARE_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return undefined;
+    const result: unknown = await response.json();
+    if (!result || typeof result !== 'object' || !('url' in result) || typeof result.url !== 'string') return undefined;
+    const shortUrl = new URL(result.url, PUBLIC_APP_ORIGIN);
+    if (shortUrl.origin !== PUBLIC_APP_ORIGIN || !/^\/s\/[A-Za-z0-9_-]{22}$/.test(shortUrl.pathname) || shortUrl.search || shortUrl.hash) return undefined;
+    return shortUrl.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function defaultMessage(track: Track): string {
   const message = `I'm listening to ${track.title.slice(0, 500)} on Ostrify. Check it out!`;
   const detailUrl = audioDetailUrl(track)?.toString();
@@ -117,10 +140,13 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [sharedTrack, setSharedTrack] = useState<Track>();
+  const [isPreparingLink, setIsPreparingLink] = useState(false);
+  const compressedFallbackRef = useRef<string | undefined>(undefined);
 
   const openShareDialog = () => {
     if (!track) return;
     setSharedTrack(track);
+    compressedFallbackRef.current = audioDetailUrl(track)?.toString();
     setMessage(defaultMessage(track));
     setOpen(true);
   };
@@ -129,8 +155,20 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
     event.preventDefault();
     if (!sharedTrack || !message.trim() || !user) return;
 
+    setIsPreparingLink(true);
     try {
-      await publish({ kind: 1, content: message.trim(), tags: trackTags(sharedTrack) });
+      let content = message.trim();
+      const fallbackPath = compressedFallbackRef.current;
+      if (fallbackPath) {
+        const pathStartsAt = content.indexOf(fallbackPath);
+        if (pathStartsAt >= 0) {
+          const shortUrl = await createShortAudioLink(fallbackPath);
+          if (shortUrl) {
+            content = `${content.slice(0, pathStartsAt)}${shortUrl}${content.slice(pathStartsAt + fallbackPath.length)}`;
+          }
+        }
+      }
+      await publish({ kind: 1, content, tags: trackTags(sharedTrack) });
       setOpen(false);
       toast({ title: 'Shared to Nostr', description: `Your post about “${sharedTrack.title}” was published.` });
     } catch (error) {
@@ -139,6 +177,8 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
         description: error instanceof Error ? error.message : 'Please try again.',
         variant: 'destructive',
       });
+    } finally {
+      setIsPreparingLink(false);
     }
   };
 
@@ -178,9 +218,9 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
           />
           {!user && <p role="status" className="text-sm text-muted-foreground">Sign in with Nostr to publish this post.</p>}
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending}>Cancel</Button>
-            <Button type="submit" disabled={!user || !message.trim() || isPending}>
-              {isPending ? <><LoaderCircle className="size-4 animate-spin" /> Sharing…</> : <><Share2 className="size-4" /> Share to Nostr</>}
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending || isPreparingLink}>Cancel</Button>
+            <Button type="submit" disabled={!user || !message.trim() || isPending || isPreparingLink}>
+              {isPending || isPreparingLink ? <><LoaderCircle className="size-4 animate-spin" /> {isPreparingLink ? 'Preparing link…' : 'Sharing…'}</> : <><Share2 className="size-4" /> Share to Nostr</>}
             </Button>
           </DialogFooter>
         </form>

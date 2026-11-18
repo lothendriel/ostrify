@@ -1,3 +1,5 @@
+import { decompressFromEncodedURIComponent } from "lz-string";
+
 interface AssetFetcher {
   fetch(request: Request): Promise<Response>;
 }
@@ -23,7 +25,7 @@ const CONTENT_PATH_PREFIX = "/api/fountain/content/";
 const MAX_BODY_LENGTH = 2048;
 const AUDIO_SHARE_PATH = "/api/audio-shares";
 const AUDIO_SHARE_PREFIX = "/s/";
-const AUDIO_SHARE_PUBLIC_ORIGIN = "https://ostrify.lothendriel.workers.dev";
+const AUDIO_SHARE_PUBLIC_ORIGIN = "https://ostrify.studio314.us";
 const AUDIO_DETAIL_BASE_PATH = "/audio";
 // Accept legacy 12-character links while issuing 128-bit codes for new links.
 const AUDIO_SHARE_CODE_RE = /^(?:[A-Za-z0-9_-]{12}|[A-Za-z0-9_-]{22})$/;
@@ -302,6 +304,29 @@ function isSafeShareableHttpsUrl(value: string): boolean {
   return hostname.length <= 253 && hostname.split(".").every(label => label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label));
 }
 
+function isValidCompressedFallback(value: string): boolean {
+  if (value.length > 12000 || !/^[A-Za-z0-9+\-$]+$/.test(value)) return false;
+  try {
+    const decoded = decompressFromEncodedURIComponent(value);
+    if (!decoded || decoded.length > 12000) return false;
+    const payload: unknown = JSON.parse(decoded);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+    const track = payload as Record<string, unknown>;
+    const validEventKind = typeof track.eventKind === "number" && [1, 54, 1063, 1053, 31337, 36787, 32123, 30440, 30311].includes(track.eventKind);
+    const validNostrId = typeof track.id === "string" && (/^[0-9a-f]{64}$/i.test(track.id)
+      || /^tunestr:n94:[0-9a-f]{64}$/i.test(track.id)
+      || /^tunestr:[0-9a-f]{64}:[^\s]{1,256}$/i.test(track.id)
+      || /^(?:(?:tunestr:)?(?:30311|31337|36787|32123|30440):[0-9a-f]{64}:[^\s]{1,256})$/i.test(track.id)
+      || /^(?:1|54|1063|1053):[0-9a-f]{64}$/i.test(track.id));
+    return validNostrId && typeof track.title === "string" && !!track.title.trim() && track.title.length <= 500
+      && typeof track.url === "string" && isSafeShareableHttpsUrl(track.url)
+      && ["music", "podcast", "audiobook"].includes(String(track.kind))
+      && validEventKind;
+  } catch {
+    return false;
+  }
+}
+
 function isSafeAudioSharePath(value: unknown, env: Env): value is string {
   if (typeof value !== "string" || value.length > AUDIO_SHARE_MAX_PATH_LENGTH) return false;
   let target: URL;
@@ -311,6 +336,11 @@ function isSafeAudioSharePath(value: unknown, env: Env): value is string {
     return false;
   }
   if (target.username || target.password || target.hash || !isAllowedAudioShareOrigin(target.origin, env) || target.pathname !== AUDIO_DETAIL_BASE_PATH) return false;
+  const fallbackPayload = target.searchParams.get("fallback");
+  if (fallbackPayload) {
+    if (target.searchParams.size !== 1 || !isValidCompressedFallback(fallbackPayload)) return false;
+    return true;
+  }
   const track = target.searchParams.get("track");
   const title = target.searchParams.get("title");
   const kind = target.searchParams.get("kind");
