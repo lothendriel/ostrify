@@ -134,8 +134,8 @@ export default function MusicDiscovery() {
         <div className="space-y-6">
           <div className="flex flex-wrap gap-3"><Link to="/settings" className="inline-flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-semibold hover:bg-secondary/80"><Radio className="size-4" /> {relayCount} read {relayCount === 1 ? 'relay' : 'relays'} · Settings</Link></div>
           <div className="space-y-2"><div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input className="h-12 rounded-full bg-secondary pl-11" aria-label="Search Nostr music" placeholder="Search tracks, artists, albums, and tags" value={nostrSearch} onChange={event => { setNostrSearch(event.target.value); setTrackPage(1); }} /></div><p className="text-sm text-muted-foreground">Searches loaded relay tracks by title, artist, album, and tags. Use Next to search older batches.</p></div>
-          {feed.isLoading && <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artist discoveries">{Array.from({ length: 4 }, (_, i) => <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse motion-reduce:animate-none" />)}</div>}
-          {!nostrSearch.trim() && !feed.isLoading && !tunestr.isLoading && <NostrCollections tracks={tracks} showAllPublishersOption />}
+          {feed.isLoading && tracks.length === 0 && <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artist discoveries">{Array.from({ length: 4 }, (_, i) => <div key={i} className="aspect-square rounded-lg bg-muted animate-pulse motion-reduce:animate-none" />)}</div>}
+          {!nostrSearch.trim() && tracks.length > 0 && <NostrCollections tracks={tracks} showAllPublishersOption />}
           {!nostrSearch.trim() && <PublicMusicPlaylists enabled={activeTab === 'nostr'} />}
           <div className="flex flex-wrap gap-2 items-baseline justify-between"><h2 className="text-2xl font-bold">Discover tracks</h2><p className="text-sm text-muted-foreground">{matchingTracks.length}{nostrSearch.trim() ? ` of ${tracks.length}` : ''} tracks available · discovered from your read relays</p></div>
           <label className="inline-flex items-center gap-2 text-sm text-muted-foreground"><input type="checkbox" checked={hideClips} onChange={event => { setHideClips(event.target.checked); setTrackPage(1); }} className="accent-green-500 size-4" /> Hide clips shorter than 30 seconds (when duration is known)</label>
@@ -143,7 +143,7 @@ export default function MusicDiscovery() {
           {feed.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Some relays could not be queried. <Button variant="link" onClick={() => feed.refetch()}><RefreshCw className="size-4" /> Retry</Button></div>}
 
           {failed.length > 0 && <div className="rounded-lg border border-border bg-secondary/30 p-4 text-sm text-muted-foreground">{failed.length} {failed.length === 1 ? 'relay did' : 'relays did'} not respond in the latest batch. Results from responding relays are shown. <Link to="/settings" className="text-primary underline">Check relay settings</Link>.</div>}
-          {relayCount > 0 && <TrackList tracks={filteredTracks} isLoading={feed.isLoading} emptyMessage={nostrSearch.trim() ? 'No loaded tracks match that search. Try another title, artist, album, or tag.' : 'No playable tracks were found in this batch. Try loading older music or checking your read relays.'} hasMore={feed.hasNextPage} isLoadingMore={feed.isFetchingNextPage} onLoadMore={loadMusicTracks} page={currentTrackPage} onPageChange={nextPage => setTrackPage(Math.max(1, Math.min(trackPageCount + (feed.hasNextPage ? 1 : 0), nextPage)))} />}
+          {relayCount > 0 && <TrackList tracks={filteredTracks} isLoading={feed.isLoading && tracks.length === 0} emptyMessage={nostrSearch.trim() ? 'No loaded tracks match that search. Try another title, artist, album, or tag.' : 'No playable tracks were found in this batch. Try loading older music or checking your read relays.'} hasMore={feed.hasNextPage} isLoadingMore={feed.isFetchingNextPage} onLoadMore={loadMusicTracks} page={currentTrackPage} onPageChange={nextPage => setTrackPage(Math.max(1, Math.min(trackPageCount + (feed.hasNextPage ? 1 : 0), nextPage)))} />}
           {(filteredTracks.length > 0 || feed.hasNextPage) && <p className="text-xs text-muted-foreground">Results depend on relay availability and the formats each relay stores. Older batches appear after currently loaded tracks.</p>}
         </div>
       </TabsContent>
@@ -156,14 +156,14 @@ export default function MusicDiscovery() {
 
           <section aria-labelledby="tunestr-live-heading" className="space-y-4">
             <div><h2 id="tunestr-live-heading" className="text-2xl font-bold">Live streams</h2><p className="text-sm text-muted-foreground">Currently live TuneStr shows.</p></div>
-            {tunestr.isLoading && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <Skeleton key={index} className="aspect-video rounded-xl" />)}</div>}
+            {tunestr.isLoading && liveStreams.length === 0 && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <Skeleton key={index} className="aspect-video rounded-xl" />)}</div>}
             {!tunestr.isLoading && !liveStreams.length && !tunestr.isError && <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">No live TuneStr streams were found.</div>}
             {liveStreams.length > 0 && <div className="grid gap-4 sm:grid-cols-2">{liveStreams.map(stream => <TunestrStreamCard key={stream.id} stream={stream} onSelect={openStream} />)}</div>}
           </section>
 
           <section aria-labelledby="tunestr-recordings-heading" className="space-y-4">
             <div><h2 id="tunestr-recordings-heading" className="text-2xl font-bold">Recordings</h2><p className="text-sm text-muted-foreground">Recent recordings appear first. Load older recordings to browse further back.</p></div>
-            {tunestr.isLoading && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <Skeleton key={`recording-${index}`} className="aspect-video rounded-xl" />)}</div>}
+            {tunestr.isLoading && recordings.length === 0 && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 2 }, (_, index) => <Skeleton key={`recording-${index}`} className="aspect-video rounded-xl" />)}</div>}
             {!tunestr.isLoading && !recordings.length && !tunestr.isError && <div className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">No TuneStr recordings were found in the recent results.</div>}
             {recordings.length > 0 && <div className="grid gap-4 sm:grid-cols-2">{visibleRecordings.map(stream => <TunestrStreamCard key={stream.id} stream={stream} onSelect={openStream} />)}</div>}
             {visibleRecordingCount < recordings.length && <Button variant="outline" onClick={() => setVisibleRecordingCount(count => count + 24)}>Show more recordings</Button>}

@@ -21,7 +21,7 @@ export default function MusicNewsPage() {
         <p className="mt-2 max-w-2xl text-muted-foreground">Recent music updates, reviews, releases, and articles shared across your enabled read relays.</p>
       </header>
 
-      {news.isLoading ? (
+      {news.isLoading && news.events.length === 0 ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Loading music news">
           {Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="h-36 rounded-xl" />)}
         </div>

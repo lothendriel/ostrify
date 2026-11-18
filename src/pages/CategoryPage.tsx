@@ -78,13 +78,13 @@ const CategoryPage = () => {
         tracks={tracks}
       />
       <div className="px-3 sm:px-6 space-y-8">
-        {isError && <p role="alert" className="text-sm text-muted-foreground">Could not load this category from your relays. <button type="button" onClick={() => void refetch()} className="text-primary underline">Try again</button></p>}
-        {(isLoading || isWavlakeLoading) ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artists and albums">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div> : <NostrCollections tracks={nostrTracks} categoryId={category.id} wavlakeArtists={wavlakeArtists} wavlakeAlbums={wavlakeAlbums} shuffleSeed={collectionShuffleKey ?? 0} />}
+        {isError && !nostrTracks.length && <p role="alert" className="text-sm text-muted-foreground">Could not load this category from your relays. <button type="button" onClick={() => void refetch()} className="text-primary underline">Try again</button></p>}
+        {(isLoading || isWavlakeLoading) && tracks.length === 0 ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artists and albums">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div> : <NostrCollections tracks={nostrTracks} categoryId={category.id} wavlakeArtists={wavlakeArtists} wavlakeAlbums={wavlakeAlbums} shuffleSeed={collectionShuffleKey ?? 0} />}
         {isWavlakeError && <p role="status" className="text-sm text-muted-foreground">Some Wavlake catalog results are unavailable right now. <button type="button" onClick={() => void refetchWavlake()} className="text-primary underline">Try again</button></p>}
         <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2>
         <TrackList
           tracks={tracks}
-          isLoading={isLoading || isWavlakeLoading}
+          isLoading={(isLoading || isWavlakeLoading) && tracks.length === 0}
           emptyMessage={`No ${category.label} tracks found right now. We look for the genre in Nostr tags and catalog track metadata — check back later or browse another genre.`}
         />
         </section>

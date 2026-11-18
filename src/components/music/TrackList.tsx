@@ -70,7 +70,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
     onReorder(next);
     setDraggedIndex(null);
   };
-  if (isLoading) {
+  if (isLoading && tracks.length === 0) {
     return (
       <div className="space-y-1">
         {Array.from({ length: 8 }).map((_, i) => (

@@ -136,8 +136,8 @@ const SearchPage = () => {
 
   const anyLoading = debouncedQuery !== query || (query.length >= 2 && (
     (tracksQuery.isLoading && !tracksQuery.data) || (podcastsQuery.isLoading && !podcastsQuery.data) ||
-    wavlakeQuery.isLoading || podcastIndexQuery.isLoading || podcastEpisodesQuery.isLoading || librivoxTitleQuery.isLoading || librivoxAuthorQuery.isLoading ||
-    gutenbergTitleQuery.isLoading || gutenbergAuthorQuery.isLoading || (directoryQuery.isLoading && directoryQuery.hasReadRelays)
+    (wavlakeQuery.isLoading && !wavlakeQuery.data) || (podcastIndexQuery.isLoading && !podcastIndexQuery.data) || (podcastEpisodesQuery.isLoading && !podcastEpisodesQuery.data) || (librivoxTitleQuery.isLoading && !librivoxTitleQuery.data) || (librivoxAuthorQuery.isLoading && !librivoxAuthorQuery.data) ||
+    (gutenbergTitleQuery.isLoading && !gutenbergTitleQuery.data) || (gutenbergAuthorQuery.isLoading && !gutenbergAuthorQuery.data) || (directoryQuery.isLoading && !directoryQuery.data && directoryQuery.hasReadRelays)
   ));
   const noResults = !nostrAudio.length && !wavlakeTrackResults.length && !catalogLinks.length && !audiobookBooks.length && !podcastShows.length && !podcastEpisodeResults.length && !matchingAuthors.length;
 
@@ -156,7 +156,7 @@ const SearchPage = () => {
         <p className="text-sm text-muted-foreground">Searching Nostr audio, Wavlake, podcast directories, audiobook collections, and opted-in Ostrify profiles. Availability depends on each source.</p>
       </header>
 
-      {anyLoading && <div className="space-y-3" aria-label="Searching catalogs"><Skeleton className="h-5 w-40" /><SectionLoading /><SectionLoading /><SectionLoading /></div>}
+      {anyLoading && noResults && <div className="space-y-3" aria-label="Searching catalogs"><Skeleton className="h-5 w-40" /><SectionLoading /><SectionLoading /><SectionLoading /></div>}
       {!anyLoading && noResults && <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No matches were found in the sources available for this search. Try another keyword or check the source availability.</div>}
 
       {!!nostrAudio.length && <section className="space-y-3"><h2 className="text-xl font-bold">Nostr songs & podcast episodes <span className="text-sm font-normal text-muted-foreground">{nostrAudio.length}</span></h2><TrackList tracks={nostrAudio} emptyMessage="No Nostr audio matches." /></section>}

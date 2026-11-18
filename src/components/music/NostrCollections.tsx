@@ -241,7 +241,7 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
   const pageCount = Math.max(1, Math.ceil(items.length / 15));
   const requestedPage = Number(searchParams.get('page') ?? '1');
   const page = Number.isInteger(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
-  const isCollectionLoading = feed.isLoading || (type === 'publishers' && publisherKeys.length > 0 && profiles.isLoading);
+  const isCollectionLoading = (feed.isLoading && !feed.data) || (type === 'publishers' && publisherKeys.length > 0 && profiles.isLoading && !profiles.data);
   const visiblePublishers = type === 'publishers' ? publishers.slice((page - 1) * 15, page * 15) : [];
   const visibleAlbums = type === 'albums' ? collections.albums.slice((page - 1) * 15, page * 15) : [];
   const hasVisibleItems = visiblePublishers.length > 0 || visibleAlbums.length > 0;

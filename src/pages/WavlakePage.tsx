@@ -72,7 +72,7 @@ function CatalogTracks({ artistId, onTracksChange }: { artistId?: string; onTrac
   return <section className="space-y-4">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-2xl font-bold">{artistId ? 'Songs' : 'Latest tracks'}</h2><span className="text-sm text-muted-foreground">{catalog.data?.pages[0]?.total != null ? `${catalog.data.pages[0].total.toLocaleString()} tracks in this catalog` : 'From Wavlake'}</span></div>
     {catalog.isError && <p role="alert" className="text-sm text-destructive">Could not load Wavlake tracks. {catalog.error.message} <button className="underline" onClick={() => catalog.refetch()}>Try again</button></p>}
-    <TrackList tracks={tracks} isLoading={catalog.isLoading} emptyMessage="No playable tracks found in this catalog." hasMore={catalog.hasNextPage} isLoadingMore={catalog.isFetchingNextPage} onLoadMore={loadWavlakeTracks} page={visiblePage} onPageChange={nextPageNumber => updatePage(Math.max(1, Math.min(pageCount + (catalog.hasNextPage ? 1 : 0), nextPageNumber)))} />
+    <TrackList tracks={tracks} isLoading={catalog.isLoading && tracks.length === 0} emptyMessage="No playable tracks found in this catalog." hasMore={catalog.hasNextPage} isLoadingMore={catalog.isFetchingNextPage} onLoadMore={loadWavlakeTracks} page={visiblePage} onPageChange={nextPageNumber => updatePage(Math.max(1, Math.min(pageCount + (catalog.hasNextPage ? 1 : 0), nextPageNumber)))} />
 
   </section>;
 }
@@ -89,7 +89,7 @@ function RankedReleaseCard({ item }: { item: CatalogItem }) {
 
 function FeaturedRankings() {
   const rankings = useWavlakeRankedReleases();
-  if (rankings.isLoading) return <section className="space-y-3"><h2 className="text-2xl font-bold">From Wavlake’s top tracks</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div></section>;
+  if (rankings.isLoading && !rankings.data) return <section className="space-y-3"><h2 className="text-2xl font-bold">From Wavlake’s top tracks</h2><div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div></section>;
   if (rankings.isError) return <p className="text-sm text-muted-foreground">Wavlake rankings are unavailable right now. <button className="underline" onClick={() => void rankings.refetch()}>Try again</button></p>;
   if (!rankings.data?.artists.length && !rankings.data?.albums.length) return <p className="text-sm text-muted-foreground">No ranked artists or albums are available right now.</p>;
   return <div className="space-y-8">
@@ -149,8 +149,8 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
   return <div className="p-4 sm:p-6 space-y-6">
 
     <header><p className="text-sm font-semibold text-primary uppercase tracking-wider">Wavlake catalog</p><h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight">{title}</h1><p className="mt-2 text-muted-foreground">Browse {kindLabel} found across Wavlake’s track catalog, with the most recently released tracks first. This is a catalog browse, not a top-tracks ranking.</p></header>
-    {catalog.isLoading && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
-    {catalog.isError && <p role="alert" className="text-sm text-destructive">Wavlake catalog is unavailable right now. <button className="underline" onClick={() => void catalog.refetch()}>Try again</button></p>}
+    {catalog.isLoading && !items.length && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
+    {catalog.isError && !items.length && <p role="alert" className="text-sm text-destructive">Wavlake catalog is unavailable right now. <button className="underline" onClick={() => void catalog.refetch()}>Try again</button></p>}
     {!catalog.isLoading && !catalog.isError && items.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No {kindLabel} were found in the Wavlake catalog.</div>}
     {visibleItems.length > 0 && <><ReleaseLinks items={visibleItems} />
       {catalog.isFetchingNextPage && <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" aria-label={`Loading more ${kindLabel}`}>{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div>}
@@ -190,7 +190,7 @@ export function WavlakeDiscovery() {
     <div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-muted-foreground" /><Input className="pl-11 h-12 rounded-full bg-secondary" aria-label="Search Wavlake" placeholder="Search artists, albums, and tracks" value={query} onChange={e => updateQuery(e.target.value)} /></div>
     <p className="text-sm text-muted-foreground">Like tracks and follow artists in Ostrify. Your library is stored publicly on Nostr.</p>
     {query.trim().length >= 2 ? <section className="space-y-4"><h2 className="text-2xl font-bold">Search results</h2>
-      {search.isFetching || debounced !== query.trim() ? <Skeleton className="h-24 w-full" /> : search.isError ? <p role="alert" className="text-destructive">Wavlake search is unavailable. <button className="underline" onClick={() => search.refetch()}>Try again</button></p> : <><CatalogLinks items={links} /><TrackList tracks={tracks} emptyMessage={links.length ? 'No playable tracks in these results.' : 'No matching Wavlake results.'} /></>}
+      {(debounced !== query.trim() || (search.isFetching && !results.length)) ? <Skeleton className="h-24 w-full" /> : search.isError && !results.length ? <p role="alert" className="text-destructive">Wavlake search is unavailable. <button className="underline" onClick={() => search.refetch()}>Try again</button></p> : <><CatalogLinks items={links} /><TrackList tracks={tracks} emptyMessage={links.length ? 'No playable tracks in these results.' : 'No matching Wavlake results.'} /></>}
     </section> : <><FeaturedRankings /><CatalogTracks /></>}
   </div>;
 }
@@ -200,7 +200,7 @@ function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }
   const radio = useRadio();
   const [catalogTracks, setCatalogTracks] = useState<Track[]>([]);
   const updateCatalogTracks = useCallback((tracks: Track[]) => setCatalogTracks(tracks), []);
-  if (release.isLoading) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
+  if (release.isLoading && !release.data) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. </div>;
   const { title, artist, image, albums, tracks } = release.data;
   return <div className="p-4 sm:p-6 space-y-8">

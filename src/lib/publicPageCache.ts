@@ -5,13 +5,15 @@ const DATABASE_VERSION = 1;
 const STORE_NAME = "queries";
 const CACHE_KEY = "public-pages-v1";
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-const MAX_ENTRIES = 100;
+const MAX_ENTRIES = 160;
 const MAX_ENTRY_BYTES = 2_500_000;
-const MAX_TOTAL_BYTES = 10_000_000;
+const MAX_TOTAL_BYTES = 12_000_000;
 const WRITE_DELAY_MS = 400;
 const MUSIC_CATEGORIES = new Set(["rock", "electronic", "hiphop", "jazz", "classical", "folk", "pop", "ambient", "bitcoin"]);
 const WAVLAKE_GENRES = new Set(["Rock", "Alternative", "Electronic", "Dance/EDM", "Hip-Hop/Rap", "Jazz", "Blues", "R&B/Soul", "Classical", "Singer/Songwriter", "Country", "Pop", "New Age"]);
 const MUSIC_NEWS_TAGS = new Set(["music", "musicnews", "newmusic", "musicindustry", "musicjournalism", "musicreview", "albumreview", "musicbusiness", "musictechnology", "concert", "livemusic"]);
+const AUDIOBOOK_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,159}$/i;
+const WAVLAKE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface PersistedQuery {
   queryKey: QueryKey;
@@ -72,54 +74,92 @@ function removeHiddenMusic(value: unknown): unknown {
 function isPublicPageQueryKey(queryKey: QueryKey): boolean {
   const [scope, subtype, id, extra] = queryKey;
   if (scope === "nostr" && subtype === "author") {
-    return typeof id === "string" && /^[0-9a-f]{64}$/i.test(id) && extra === "public-artist-page" && queryKey.length === 4;
+    return typeof id === "string" && /^[0-9a-f]{64}$/i.test(id) && ((extra === "public-artist-page" && queryKey.length === 4) || (extra === undefined && queryKey.length === 3));
   }
   if (scope === "artist-tracks") {
-    return typeof subtype === "string" && /^[0-9a-f]{64}$/i.test(subtype) && hasSafeRelayKey(id) && isViewerIdentity(extra) && queryKey.length === 4;
+    return typeof subtype === "string" && /^[0-9a-f]{64}$/i.test(subtype) && hasSafeRelayKey(id) && extra === "public" && queryKey.length === 4;
   }
   if (scope === "artist-identified-tracks") {
-    return typeof subtype === "string" && /^[0-9a-f]{64}$/i.test(subtype) && queryKey.length === 3;
+    return typeof subtype === "string" && /^[0-9a-f]{64}$/i.test(subtype) && id === "public" && queryKey.length === 3;
+  }
+
+  if (scope === "tracks" && queryKey.length === 7) {
+    const limit = queryKey[1];
+    const topic = queryKey[2];
+    const author = queryKey[3];
+    const authors = queryKey[4];
+    const relayKey = queryKey[5];
+    const viewer = queryKey[6];
+    return typeof limit === "number" && Number.isInteger(limit) && limit > 0 && limit <= 300 && topic === "" && author === "" && authors === "" && hasSafeRelayKey(relayKey) && viewer === "public";
+  }
+  if (scope === "network-pulse") {
+    return hasSafeRelayKey(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
   }
   if (scope === "home-tracks" || scope === "fresh-nostr-tracks") {
     return hasSafeRelayKey(subtype) && isViewerIdentity(id) && extra === undefined && queryKey.length === 3 && subtype.length <= 2048;
   }
   if (scope === "category-tracks") {
-    return typeof subtype === "string" && MUSIC_CATEGORIES.has(subtype) && hasSafeRelayKey(id) && isViewerIdentity(extra) && queryKey.length === 4;
+    return typeof subtype === "string" && MUSIC_CATEGORIES.has(subtype) && hasSafeRelayKey(id) && extra === "public" && queryKey.length === 4;
   }
   if (scope === "wavlake" && subtype === "catalog") {
-    return (id === "" || (typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) && extra === undefined && queryKey.length === 3;
+    return (id === "" || (typeof id === "string" && WAVLAKE_ID_PATTERN.test(id))) && extra === undefined && queryKey.length === 3;
   }
   if (scope === "wavlake" && subtype === "genre-catalog") {
     return typeof id === "string" && WAVLAKE_GENRES.has(id) && extra === undefined && queryKey.length === 3;
   }
+  if (scope === "wavlake" && subtype === "browse-releases") {
+    return (id === "artist" || id === "album") && extra === undefined && queryKey.length === 3;
+  }
+  if (scope === "wavlake" && subtype === "rankings") {
+    return id === "sats" && extra === 30 && queryKey.length === 4;
+  }
+  if (scope === "wavlake" && (subtype === "artist" || subtype === "album")) {
+    return typeof id === "string" && WAVLAKE_ID_PATTERN.test(id) && extra === undefined && queryKey.length === 3;
+  }
+  if (scope === "wavlake" && subtype === "search") {
+    return typeof id === "string" && id.length <= 120 && extra === undefined && queryKey.length === 3;
+  }
+  if (scope === "wavlake" && subtype === "track-detail") {
+    return typeof id === "string" && WAVLAKE_ID_PATTERN.test(id) && extra === undefined && queryKey.length === 3;
+  }
   if (scope === "music-news") {
     return isStringArray(subtype) && subtype.length === MUSIC_NEWS_TAGS.size && subtype.every(tag => MUSIC_NEWS_TAGS.has(tag)) && (id === "home" || id === "full") && extra === undefined && queryKey.length === 3;
+  }
+  if (scope === "music-publisher-profiles") {
+    return isStringArray(subtype) && subtype.length <= 200 && subtype.every(pubkey => /^[0-9a-f]{64}$/i.test(pubkey)) && id === undefined && extra === undefined && queryKey.length === 2;
+  }
+  if (scope === "tunestr-live-streams") {
+    return hasSafeRelayKey(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
+  }
+  if (scope === "ostrify-public-playlists") {
+    return hasSafeRelayKey(subtype) && id === "" && extra === undefined && queryKey.length === 3;
+  }
+  if (scope === "ostrify-directory") {
+    return hasSafeRelayKey(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
   }
   if (scope === "music-discovery") {
     if (typeof subtype !== "string" || id !== undefined || extra !== undefined || queryKey.length !== 2) return false;
     const separator = subtype.lastIndexOf("|viewer:");
     if (separator < 0) return false;
-    return hasSafeRelayKey(subtype.slice(0, separator)) && subtype.slice(separator + "|viewer:".length) === "public" && queryKey.length === 2;
+    const viewer = subtype.slice(separator + "|viewer:".length);
+    return hasSafeRelayKey(subtype.slice(0, separator)) && isViewerIdentity(viewer) && queryKey.length === 2;
   }
-  if (scope === "podcast-episodes" && typeof subtype === "number") {
-    return Number.isInteger(subtype) && subtype > 0 && typeof id === "number" && Number.isInteger(id) && id >= 0 && hasSafeServiceKey(extra) && queryKey.length === 4;
-  }
+
   if (scope === "podcast-episodes" && subtype === "nostr-feed") return id === undefined && extra === undefined && queryKey.length === 2;
   if (scope === "podcast-shows") return (subtype === "nostr" || subtype === "fountain") && id === undefined && extra === undefined && queryKey.length === 2;
-  if (scope === "podcast-show-episodes") {
-    return typeof subtype === "string" && /^[0-9a-f]{64}$/i.test(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
+  if (scope === "podcast-show-episodes") return typeof subtype === "string" && /^[0-9a-f]{64}$/i.test(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
+  if (scope === "fountain-show") return typeof subtype === "string" && /^[^\s]{1,512}$/.test(subtype) && hasSafeServiceKey(id) && extra === undefined && queryKey.length === 3;
+  if (scope === "fountain-rss-episodes") return hasSafePublicUrl(subtype) && typeof id === "string" && /^[^\s]{1,513}$/.test(id) && hasSafeServiceKey(extra) && queryKey.length === 4;
+  if (scope === "podcast-index" && subtype === "feed") return hasSafePublicUrl(id) && extra === undefined && queryKey.length === 3;
+  if (scope === "podcast-index" && subtype === "episode-detail") return typeof id === "number" && Number.isInteger(id) && id > 0 && extra === undefined && queryKey.length === 3;
+  if (scope === "podcast-index" && subtype === "search") return typeof id === "string" && id.length >= 2 && id.length <= 120 && extra === undefined && queryKey.length === 3;
+  if (scope === "podcast-index" && subtype === "episode-search") return typeof id === "string" && id.length >= 2 && id.length <= 120 && extra === undefined && queryKey.length === 3;
+  if (scope === "podcast-index" && subtype === "episodes") return ((typeof id === "number" && Number.isInteger(id) && id > 0) || hasSafePublicUrl(id)) && typeof extra === "string" && extra.length <= 240 && queryKey.length === 4;
+  if (scope === "librivox-catalog" || scope === "gutenberg-audiobook-catalog") {
+    return typeof subtype === "string" && subtype.length <= 120 && (id === "title" || id === "author") && extra === undefined && queryKey.length === 3;
   }
-  if (scope === "podcast-index" && subtype === "feed") {
-    return hasSafePublicUrl(id) && extra === undefined && queryKey.length === 3;
-  }
-  if (scope === "podcast-index" && subtype === "episodes") {
-    return ((typeof id === "number" && Number.isInteger(id) && id > 0) || hasSafePublicUrl(id)) && (extra === undefined || typeof extra === "string") && queryKey.length === (extra === undefined ? 3 : 4);
-  }
-  if (scope === "fountain-show") {
-    return typeof subtype === "string" && /^[^\s]{1,512}$/.test(subtype) && hasSafeServiceKey(id) && extra === undefined && queryKey.length === 3;
-  }
-  if (scope === "fountain-rss-episodes") {
-    return hasSafePublicUrl(subtype) && typeof id === "string" && /^[^\s]{1,513}$/.test(id) && hasSafeServiceKey(extra) && queryKey.length === 4;
+  if (scope === "librivox-book" || scope === "gutenberg-audiobook") {
+    return typeof subtype === "string" && AUDIOBOOK_ID_PATTERN.test(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
   }
   return false;
 }
@@ -234,7 +274,7 @@ export function watchPublicPageCache(queryClient: QueryClient): () => void {
   const persist = () => {
     const now = Date.now();
     const entries: PersistedQuery[] = queryClient.getQueryCache().getAll().flatMap((query) => {
-      if (query.state.data === undefined || !isPublicPageQueryKey(query.queryKey)) return [];
+      if (query.state.status !== "success" || query.state.data === undefined || !isPublicPageQueryKey(query.queryKey)) return [];
       return [{ queryKey: query.queryKey, data: query.state.data, updatedAt: query.state.dataUpdatedAt || now }];
     });
     void writePersistedQueries(boundedEntries(entries, now));

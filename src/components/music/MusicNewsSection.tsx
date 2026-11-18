@@ -80,11 +80,11 @@ export function MusicNewsSection({ enabled = true, home = false }: { enabled?: b
         </Link>
       </div>
       <p className="text-sm text-muted-foreground">Recent music updates and articles shared across your relays.</p>
-      {!enabled || news.isLoading ? (
+      {!enabled || (news.isLoading && events.length === 0) ? (
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-32 rounded-xl" />)}
         </div>
-      ) : news.isError ? (
+      ) : news.isError && events.length === 0 ? (
         <div role="alert" className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
           Music news could not be loaded from your relays. <button type="button" className="font-medium text-primary hover:underline" onClick={() => void news.refetch()}>Try again</button>
         </div>

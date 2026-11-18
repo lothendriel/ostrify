@@ -12,7 +12,7 @@ function PodcastContent({ enabled }: { enabled: boolean }) {
       return true;
     }).slice(0, 10);
   }, [podcasts.data]);
-  return <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={tracks} isLoading={podcasts.isLoading} dense seeAllHref="/podcasts/episodes" />;
+  return <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={tracks} isLoading={podcasts.isLoading && tracks.length === 0} dense seeAllHref="/podcasts/episodes" />;
 }
 
 export function HomePodcastsSection({ enabled }: { enabled: boolean }) {
