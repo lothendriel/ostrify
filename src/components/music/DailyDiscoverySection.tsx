@@ -95,7 +95,7 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
         </div>
       </header>
 
-      {pending || (isLoading && !allCandidates.length) ? (
+      {(pending && !discoveries.length) || (isLoading && !allCandidates.length && !discoveries.length) ? (
         <HorizontalCarousel label="Loading daily discoveries">
           {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 snap-start space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
         </HorizontalCarousel>

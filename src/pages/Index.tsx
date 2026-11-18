@@ -30,7 +30,7 @@ function HomeFreshTracks({ candidates, enabled }: { candidates: Track[]; enabled
     }
     return [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, 15);
   }, [candidates, query.data]);
-  return <FreshTracksCarousel tracks={tracks} isLoading={query.isLoading} />;
+  return <FreshTracksCarousel tracks={tracks} isLoading={query.isLoading && tracks.length === 0} />;
 }
 
 const Index = () => {

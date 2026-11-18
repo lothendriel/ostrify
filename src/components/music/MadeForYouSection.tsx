@@ -102,7 +102,7 @@ export function MadeForYouSection({ candidates, isLoading, active = true }: { ca
           </Button>
         </div>
       </div>
-      {isLoading || isPersonalDataLoading ? (
+      {(isLoading || isPersonalDataLoading) && mix.length === 0 ? (
         <HorizontalCarousel label="Building your Made for You mix" className="px-2">
           {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 snap-start space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
         </HorizontalCarousel>
