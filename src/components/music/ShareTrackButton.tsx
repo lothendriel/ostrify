@@ -142,31 +142,42 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
   const [sharedTrack, setSharedTrack] = useState<Track>();
   const [isPreparingLink, setIsPreparingLink] = useState(false);
   const compressedFallbackRef = useRef<string | undefined>(undefined);
+  const shortLinkRef = useRef<string | undefined>(undefined);
+  const linkRequestIdRef = useRef(0);
 
   const openShareDialog = () => {
     if (!track) return;
+    const requestId = ++linkRequestIdRef.current;
+    const fallbackUrl = audioDetailUrl(track)?.toString();
+    compressedFallbackRef.current = fallbackUrl;
+    shortLinkRef.current = undefined;
     setSharedTrack(track);
-    compressedFallbackRef.current = audioDetailUrl(track)?.toString();
     setMessage(defaultMessage(track));
     setOpen(true);
+    if (!fallbackUrl || !user) return;
+
+    setIsPreparingLink(true);
+    void createShortAudioLink(fallbackUrl).then(shortUrl => {
+      if (requestId !== linkRequestIdRef.current || !shortUrl) return;
+      shortLinkRef.current = shortUrl;
+      setMessage(current => current.includes(fallbackUrl) ? current.replace(fallbackUrl, shortUrl) : current);
+    }).finally(() => {
+      if (requestId === linkRequestIdRef.current) setIsPreparingLink(false);
+    });
   };
 
   const share = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!sharedTrack || !message.trim() || !user) return;
+    if (!sharedTrack || !message.trim() || !user || isPreparingLink) return;
 
-    setIsPreparingLink(true);
     try {
       const fallbackPath = compressedFallbackRef.current;
-      if (!fallbackPath) throw new Error('A KV short link could not be prepared for this track.');
-      const shortUrl = await createShortAudioLink(fallbackPath);
-      if (!shortUrl) throw new Error('The short-link service is unavailable right now. Your post was not published; please try again later.');
+      const shortUrl = shortLinkRef.current;
+      if (!fallbackPath || !shortUrl) throw new Error('The short-link service is unavailable right now. Your post was not published; please close and reopen this dialog to try again.');
 
-      const contentBeforeShortLink = message.trim();
-      const pathStartsAt = contentBeforeShortLink.indexOf(fallbackPath);
-      const content = pathStartsAt >= 0
-        ? `${contentBeforeShortLink.slice(0, pathStartsAt)}${shortUrl}${contentBeforeShortLink.slice(pathStartsAt + fallbackPath.length)}`
-        : `${contentBeforeShortLink}\n\n${shortUrl}`;
+      let content = message.trim();
+      if (content.includes(fallbackPath)) content = content.replace(fallbackPath, shortUrl);
+      else if (!content.includes(shortUrl)) content = `${content}\n\n${shortUrl}`;
       await publish({ kind: 1, content, tags: trackTags(sharedTrack) });
       setOpen(false);
       toast({ title: 'Shared to Nostr', description: `Your post about “${sharedTrack.title}” was published.` });
@@ -213,13 +224,13 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
             rows={5}
             wrap="soft"
             className="block h-36 max-h-48 min-w-0 max-w-full resize-y overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-            disabled={isPending}
+            disabled={isPending || isPreparingLink}
           />
           {!user && <p role="status" className="text-sm text-muted-foreground">Sign in with Nostr to publish this post.</p>}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending || isPreparingLink}>Cancel</Button>
             <Button type="submit" disabled={!user || !message.trim() || isPending || isPreparingLink}>
-              {isPending || isPreparingLink ? <><LoaderCircle className="size-4 animate-spin" /> {isPreparingLink ? 'Preparing link…' : 'Sharing…'}</> : <><Share2 className="size-4" /> Share to Nostr</>}
+              {isPending ? <><LoaderCircle className="size-4 animate-spin" /> Sharing…</> : isPreparingLink ? <><LoaderCircle className="size-4 animate-spin" /> Preparing short link…</> : <><Share2 className="size-4" /> Share to Nostr</>}
             </Button>
           </DialogFooter>
         </form>
