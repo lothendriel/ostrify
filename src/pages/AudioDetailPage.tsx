@@ -20,6 +20,7 @@ import { fetchPodcastIndexEpisodes, fountainTrackUrl, useFountainRssEpisodes, us
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "@/hooks/useWavlake";
 import { fountainShowGuid, formatDuration, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
+import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 
 function resolveTuneStrId(id: string): string {
   if (id.startsWith("tunestr:n94:")) return id.slice("tunestr:n94:".length);
@@ -161,6 +162,8 @@ export default function AudioDetailPage() {
   const unsupportedExternalId = !sharedTrack && ((trackId.startsWith("podcast-index:") && !podcastIndexFallback) || (trackId.startsWith("fountain-rss:") && !fountainRss) || (trackId.startsWith("gutenberg:") && !gutenbergChapter) || (trackId.startsWith("librivox:") && !librivoxChapter) || (trackId.startsWith("tunestr:") && !isTuneStrReference(trackId)));
   const directLookup = useTracksByIds(
     trackId && !sharedTrack && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !unsupportedExternalId ? [nostrLookupId] : undefined,
+    true,
+    [DROPS_MUSIC_RELAY],
   );
   const librivoxBook = useLibriVoxBook(librivoxChapter?.catalogId);
   const gutenbergBook = useGutenbergAudiobook(gutenbergChapter?.catalogId);

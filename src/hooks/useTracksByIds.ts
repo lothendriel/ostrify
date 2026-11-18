@@ -8,13 +8,14 @@ import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
 import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
-export function useTracksByIds(ids: string[] | undefined, enabled = true) {
+export function useTracksByIds(ids: string[] | undefined, enabled = true, additionalRelays: string[] = []) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const key = (ids ?? []).join(",");
+  const relayKey = [...new Set(additionalRelays)].sort().join("|");
 
   return useQuery({
-    queryKey: ["tracks-by-ids", key, user?.pubkey ?? "public"],
+    queryKey: ["tracks-by-ids", key, relayKey, user?.pubkey ?? "public"],
     queryFn: async (c) => {
       if (!ids?.length) return { tracks: [] as Track[], unavailable: 0 };
       const addressRefs = ids.flatMap((id) => {
@@ -35,8 +36,17 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true) {
       });
       const uniqueEventIds = [...new Set([...eventIds, ...directTuneStrEventIds])];
       const byId = new Map<string, Track>();
+      const queryRelays = async (filters: Parameters<typeof nostr.query>[0]) => {
+        const signal = AbortSignal.any([c.signal, AbortSignal.timeout(12000)]);
+        const queries = [
+          nostr.query(filters, { signal }),
+          ...additionalRelays.map(relay => nostr.relay(relay).query(filters, { signal })),
+        ];
+        const results = await Promise.allSettled(queries);
+        return results.flatMap(result => result.status === "fulfilled" ? result.value : []);
+      };
       const eventsPromise = uniqueEventIds.length
-        ? nostr.query([{ ids: uniqueEventIds }], { signal: AbortSignal.any([c.signal, AbortSignal.timeout(12000)]) }).catch(() => [])
+        ? queryRelays([{ ids: uniqueEventIds }])
         : Promise.resolve([]);
       const addressGroups = new Map<string, { kind: number; pubkey: string; identifiers: Set<string> }>();
       for (const reference of addressRefs) {
@@ -45,10 +55,9 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true) {
         group.identifiers.add(reference.identifier);
         addressGroups.set(groupKey, group);
       }
-      const addressEventsPromise = Promise.all([...addressGroups.values()].map(group => nostr.query(
+      const addressEventsPromise = Promise.all([...addressGroups.values()].map(group => queryRelays(
         [{ kinds: [group.kind], authors: [group.pubkey], '#d': [...group.identifiers], limit: group.identifiers.size }],
-        { signal: AbortSignal.any([c.signal, AbortSignal.timeout(12000)]) },
-      ).catch(() => []))).then(results => results.flat());
+      ))).then(results => results.flat());
       const externalPromises = Promise.all(fountainIds.map((id) => fetchFountainTrack(
         id, AbortSignal.any([c.signal, AbortSignal.timeout(12000)]),
       ).catch(() => null)));

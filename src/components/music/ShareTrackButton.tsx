@@ -20,17 +20,14 @@ function compactAudioDetailUrl(track: Track): URL | undefined {
   const isEventId = /^[0-9a-f]{64}$/i.test(track.id);
   const isAddressableReference = /^(?:30311|31337|36787|32123|30440):[0-9a-f]{64}:\S{1,256}$/i.test(track.id)
     || /^tunestr:[0-9a-f]{64}:\S{1,256}$/i.test(track.id);
+  // Catalog IDs can be looked up independently. Nostr events may only be
+  // available on the source relay, so share their metadata as a fallback.
   const isResolvableId = /^wavlake:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(track.id)
     || /^fountain:episode:id:[A-Za-z0-9]{20}$/.test(track.id)
     || /^fountain-rss:(?:fountain:(?:show:id:)?)?[^:\s]{1,512}:\S{1,512}$/.test(track.id)
     || /^podcast-index:episode:id:\d{1,12}$/.test(track.id)
     || /^podcast-index:https:\/\/[^:]+(?::\d+)?\/.*:\d{1,12}:.+$/s.test(track.id)
-    || /^(?:gutenberg|librivox):[a-z0-9][a-z0-9_-]{0,159}(?::.{1,512})?$/i.test(track.id)
-    || /^tunestr:n94:[0-9a-f]{64}$/i.test(track.id)
-    || /^tunestr:[0-9a-f]{64}$/i.test(track.id)
-    || /^(?:1|54|1063|1053):[0-9a-f]{64}$/i.test(track.id)
-    || isAddressableReference
-    || isEventId;
+    || /^(?:gutenberg|librivox):[a-z0-9][a-z0-9_-]{0,159}(?::.{1,512})?$/i.test(track.id);
   if (!isResolvableId || track.id.length > 2048) return undefined;
   if ((isEventId || /^tunestr:n94:/i.test(track.id)) && !eventKind) return undefined;
   if (isAddressableReference && !eventKind) return undefined;
