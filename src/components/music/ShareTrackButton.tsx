@@ -157,17 +157,16 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
 
     setIsPreparingLink(true);
     try {
-      let content = message.trim();
       const fallbackPath = compressedFallbackRef.current;
-      if (fallbackPath) {
-        const pathStartsAt = content.indexOf(fallbackPath);
-        if (pathStartsAt >= 0) {
-          const shortUrl = await createShortAudioLink(fallbackPath);
-          if (shortUrl) {
-            content = `${content.slice(0, pathStartsAt)}${shortUrl}${content.slice(pathStartsAt + fallbackPath.length)}`;
-          }
-        }
-      }
+      if (!fallbackPath) throw new Error('A KV short link could not be prepared for this track.');
+      const shortUrl = await createShortAudioLink(fallbackPath);
+      if (!shortUrl) throw new Error('The short-link service is unavailable right now. Your post was not published; please try again later.');
+
+      const contentBeforeShortLink = message.trim();
+      const pathStartsAt = contentBeforeShortLink.indexOf(fallbackPath);
+      const content = pathStartsAt >= 0
+        ? `${contentBeforeShortLink.slice(0, pathStartsAt)}${shortUrl}${contentBeforeShortLink.slice(pathStartsAt + fallbackPath.length)}`
+        : `${contentBeforeShortLink}\n\n${shortUrl}`;
       await publish({ kind: 1, content, tags: trackTags(sharedTrack) });
       setOpen(false);
       toast({ title: 'Shared to Nostr', description: `Your post about “${sharedTrack.title}” was published.` });
