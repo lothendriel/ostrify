@@ -42,10 +42,69 @@ const PODCAST_INDEX_WORKER = (import.meta.env.VITE_PODCAST_INDEX_WORKER_URL ?? "
 function podcastIndexError(response: Response, operation: string): Error {
   return new Error(`${operation} failed with HTTP ${response.status}. Check the Ostrify Worker configuration.`);
 }
+
+class FountainLookupError extends Error {
+  constructor(message: string, readonly status?: number, readonly retryAfterMs?: number) {
+    super(message);
+    this.name = "FountainLookupError";
+  }
+}
+
+function isTransientFountainLookupError(error: unknown): boolean {
+  if (error instanceof FountainLookupError) return error.status === 408 || error.status === 429 || (error.status !== undefined && error.status >= 500);
+  return error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError";
+}
+
+function fountainRetryDelay(error: unknown, fallbackMs: number): number {
+  if (!(error instanceof FountainLookupError) || error.retryAfterMs === undefined) return fallbackMs;
+  return Math.min(error.retryAfterMs, 5_000);
+}
+
+function retryAfterMs(response: Response): number | undefined {
+  const value = response.headers.get("Retry-After");
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined;
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const abort = () => {
+      clearTimeout(timeout);
+      reject(signal.reason);
+    };
+    const timeout = setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, delayMs);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+async function withFountainLookupRetries<T>(operation: (signal: AbortSignal) => Promise<T>, signal: AbortSignal): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation(AbortSignal.any([signal, AbortSignal.timeout(FOUNTAIN_LOOKUP_TIMEOUT_MS)]));
+    } catch (error) {
+      const defaultDelay = FOUNTAIN_LOOKUP_RETRY_DELAYS_MS[attempt];
+      if (signal.aborted || defaultDelay === undefined || !isTransientFountainLookupError(error)) throw error;
+      await waitForRetry(fountainRetryDelay(error, defaultDelay), signal);
+    }
+  }
+}
+
 const EPISODE_GUID_RE = /^[^\s]{1,512}$/;
 const NOSTR_SHOW_PAGE_SIZE = 120;
 const FOUNTAIN_SHOWS_PER_LOOKUP_BATCH = 5;
 const FOUNTAIN_MAX_REFERENCE_BATCH = 16;
+const FOUNTAIN_LOOKUP_TIMEOUT_MS = 10_000;
+const FOUNTAIN_LOOKUP_RETRY_DELAYS_MS: readonly number[] = [500, 1_500];
 const NOSTR_NOTE_KIND = 1;
 const NOSTR_PODCAST_SHOW_KIND = 10154;
 const NOSTR_PODCAST_EPISODE_KIND = 54;
@@ -225,18 +284,19 @@ async function lookupFountainEpisode(
 ): Promise<Track | null> {
   if (!EPISODE_GUID_RE.test(itemGuid) || (feedGuid && !EPISODE_GUID_RE.test(feedGuid))) return null;
 
-  const response = await fetch(`${FOUNTAIN_API}/lookup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      id: `podcast:item:guid:${itemGuid}`,
-      ...(feedGuid ? { parent: `podcast:guid:${feedGuid}` } : {}),
-    }),
-    signal,
-  });
-  if (!response.ok) throw new Error(`Fountain returned ${response.status}`);
-
-  const data: unknown = await response.json();
+  const data = await withFountainLookupRetries(async attemptSignal => {
+    const result = await fetch(`${FOUNTAIN_API}/lookup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: `podcast:item:guid:${itemGuid}`,
+        ...(feedGuid ? { parent: `podcast:guid:${feedGuid}` } : {}),
+      }),
+      signal: attemptSignal,
+    });
+    if (!result.ok) throw new FountainLookupError(`Fountain returned ${result.status}`, result.status, retryAfterMs(result));
+    return await result.json() as unknown;
+  }, signal);
   if (!isRecord(data) || !Array.isArray(data.hits)) return null;
   const hit = data.hits.find((candidate): candidate is FountainEpisodeHit => {
     if (!isRecord(candidate) || candidate._type !== "EPISODE" || !isRecord(candidate.info)) return false;
@@ -549,14 +609,16 @@ export function useNostrPodcastShows(enabled = true) {
 /** Resolve a NIP-73 podcast feed GUID to its Fountain show metadata. */
 async function lookupFountainShow(feedGuid: string, signal: AbortSignal): Promise<PodcastShow | null> {
   if (!EPISODE_GUID_RE.test(feedGuid)) return null;
-  const response = await fetch(`${FOUNTAIN_API}/lookup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id: `podcast:guid:${feedGuid}` }),
-    signal,
-  });
-  if (!response.ok) throw new Error(`Fountain returned ${response.status}`);
-  const data: unknown = await response.json();
+  const data = await withFountainLookupRetries(async attemptSignal => {
+    const result = await fetch(`${FOUNTAIN_API}/lookup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: `podcast:guid:${feedGuid}` }),
+      signal: attemptSignal,
+    });
+    if (!result.ok) throw new FountainLookupError(`Fountain returned ${result.status}`, result.status, retryAfterMs(result));
+    return await result.json() as unknown;
+  }, signal);
   if (!isRecord(data) || !Array.isArray(data.hits)) return null;
   for (const value of data.hits) {
     if (!isRecord(value)) continue;
