@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
 import { HorizontalCarousel } from '@/components/music/HorizontalCarousel';
 import { FollowButton } from '@/components/music/FollowButton';
+import { SharePageButton } from '@/components/music/SharePageButton';
 import { useRadio } from '@/hooks/useRadio';
 import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
 import type { Track } from '@/lib/music';
@@ -204,6 +205,7 @@ function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }
   const { title, artist, image, albums, tracks } = release.data;
   return <div className="p-4 sm:p-6 space-y-8">
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" fetchPriority="high" decoding="async" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
+    {itemId && <SharePageButton title={title} pagePath={`/wavlake/${type}/${encodeURIComponent(itemId)}`} pageType={type === 'artist' ? 'artist' : 'album'} />}
     {type === 'album' && itemId && <div className="space-y-2"><SaveAlbumButton album={{ id: itemId, title }} artist={artist} image={image} className="rounded-full" /><p className="text-sm text-muted-foreground">Saved Albums sync across your devices. Private albums are hidden from your Ostrify profile, but bookmark data remains public on Nostr.</p></div>}
     {type === 'artist' && itemId && <div className="space-y-2"><div className="flex flex-wrap items-center gap-2"><FollowButton pubkey={`wavlake:${itemId}`} /><Button type="button" variant="outline" className="rounded-full gap-2" disabled={!tracks.length && !catalogTracks.length} onClick={() => radio.startArtistRadio(`wavlake:${itemId}`, catalogTracks.length ? catalogTracks : tracks)}><Radio className="size-4" /> Start artist radio</Button></div><p className="text-sm text-muted-foreground">Follows are saved publicly to your Ostrify library, not to Wavlake.</p></div>}
     {albums.length > 0 && <section className="space-y-4"><h2 className="text-2xl font-bold">Albums</h2><CatalogLinks items={albums} /></section>}

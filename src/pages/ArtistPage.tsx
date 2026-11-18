@@ -18,6 +18,7 @@ import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
+import { SharePageButton } from "@/components/music/SharePageButton";
 
 function PopularTrackRow({ track, index }: { track: Track; index: number }) {
   const player = usePlayer();
@@ -164,6 +165,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
           )}
         </Button>
         <FollowButton pubkey={pubkey} />
+        <SharePageButton title={name} pagePath={`/artist/${nip19.npubEncode(pubkey)}`} pageType="artist" referenceTags={[["p", pubkey]]} />
         <Button
           type="button"
           variant="outline"
