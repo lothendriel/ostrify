@@ -43,6 +43,13 @@ function podcastIndexError(response: Response, operation: string): Error {
   return new Error(`${operation} failed with HTTP ${response.status}. Check the Ostrify Worker configuration.`);
 }
 
+type FountainFailureCategory = "timeout" | "network" | "rate-limit" | "server" | "http" | "response" | "unknown";
+
+interface FountainLookupFailure {
+  category: FountainFailureCategory;
+  status?: number;
+}
+
 class FountainLookupError extends Error {
   constructor(message: string, readonly status?: number, readonly retryAfterMs?: number) {
     super(message);
@@ -50,8 +57,37 @@ class FountainLookupError extends Error {
   }
 }
 
+function describeFountainFailure(error: unknown): FountainLookupFailure {
+  if (error instanceof FountainLookupError) {
+    if (error.status === 408) return { category: "timeout", status: error.status };
+    if (error.status === 429) return { category: "rate-limit", status: error.status };
+    if (error.status !== undefined && error.status >= 500) return { category: "server", status: error.status };
+    if (error.status !== undefined && error.status >= 400) return { category: "http", status: error.status };
+  }
+  if (error instanceof DOMException && error.name === "TimeoutError") return { category: "timeout" };
+  if (error instanceof TypeError) return { category: "network" };
+  if (error instanceof SyntaxError) return { category: "response" };
+  return { category: "unknown" };
+}
+
+function summarizeFountainFailures(failures: FountainLookupFailure[]): string {
+  const labels: Record<FountainFailureCategory, string> = {
+    timeout: "timed out",
+    network: "network error",
+    "rate-limit": "rate limited",
+    server: "server error",
+    http: "HTTP error",
+    response: "invalid response",
+    unknown: "unexpected error",
+  };
+  const counts = new Map<FountainFailureCategory, number>();
+  for (const failure of failures) counts.set(failure.category, (counts.get(failure.category) ?? 0) + 1);
+  return [...counts.entries()].map(([category, count]) => `${count} ${labels[category]}${count === 1 ? "" : "s"}`).join(", ");
+}
+
 function isTransientFountainLookupError(error: unknown): boolean {
   if (error instanceof FountainLookupError) return error.status === 408 || error.status === 429 || (error.status !== undefined && error.status >= 500);
+  if (error instanceof SyntaxError) return false;
   return error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError";
 }
 
@@ -377,6 +413,39 @@ async function lookupFountainEpisode(itemGuid: string, feedGuid: string | undefi
 interface FountainEpisodeLookupFailure {
   itemGuid: string;
   feedGuid?: string;
+  failure: FountainLookupFailure;
+}
+
+function normalizeFountainFailure(value: unknown): FountainLookupFailure {
+  if (!isRecord(value) || typeof value.category !== "string") return { category: "unknown" };
+  const categories: FountainFailureCategory[] = ["timeout", "network", "rate-limit", "server", "http", "response", "unknown"];
+  const category = categories.find(candidate => candidate === value.category) ?? "unknown";
+  return { category, ...(typeof value.status === "number" ? { status: value.status } : {}) };
+}
+
+function normalizeFountainEpisodeLookupFailure(value: unknown): FountainEpisodeLookupFailure | null {
+  if (!isRecord(value) || typeof value.itemGuid !== "string") return null;
+  return {
+    itemGuid: value.itemGuid,
+    ...(typeof value.feedGuid === "string" ? { feedGuid: value.feedGuid } : {}),
+    failure: normalizeFountainFailure(value.failure),
+  };
+}
+
+interface FountainShowLookupFailure {
+  guid: string;
+  failure: FountainLookupFailure;
+}
+
+function normalizeFountainShowLookupFailure(value: unknown): FountainShowLookupFailure | null {
+  if (typeof value === "string") return { guid: value, failure: { category: "unknown" } };
+  if (!isRecord(value) || typeof value.guid !== "string") return null;
+  const category = isRecord(value.failure) && typeof value.failure.category === "string" && ["timeout", "network", "rate-limit", "server", "http", "response", "unknown"].includes(value.failure.category)
+    ? value.failure.category as FountainFailureCategory
+    : "unknown";
+  const status = isRecord(value.failure) && typeof value.failure.status === "number" ? value.failure.status : undefined;
+  const failure: FountainLookupFailure = { category, ...(status !== undefined ? { status } : {}) };
+  return { guid: value.guid, failure };
 }
 
 export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = true) {
@@ -385,7 +454,8 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
   const [isRetryingLookups, setIsRetryingLookups] = useState(false);
   const queryKey = ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API] as const;
   const failuresKey = ["podcast-episode-fountain-failures", limit, fountainLimit, FOUNTAIN_API] as const;
-  const fountainFailures = useQuery<FountainEpisodeLookupFailure[]>({ queryKey: failuresKey, enabled: false, initialData: [] });
+  const fountainFailuresQuery = useQuery<unknown>({ queryKey: failuresKey, enabled: false, initialData: [] });
+  const fountainFailures = (Array.isArray(fountainFailuresQuery.data) ? fountainFailuresQuery.data : []).map(normalizeFountainEpisodeLookupFailure).filter((item): item is FountainEpisodeLookupFailure => !!item);
 
   const query = useQuery<Track[]>({
     queryKey,
@@ -444,7 +514,7 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
           if (result.status === "fulfilled") resolvedFountain.push(result.value);
           else {
             if (signal.aborted) throw result.reason;
-            lookupFailures.push({ itemGuid: batch[index][0], feedGuid: batch[index][1] });
+            lookupFailures.push({ itemGuid: batch[index][0], feedGuid: batch[index][1], failure: describeFountainFailure(result.reason) });
             resolvedFountain.push(null);
           }
         });
@@ -480,7 +550,7 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
             recoveredTracks.push(failure.feedGuid ? { ...result.value, showId: `fountain:show:id:${failure.feedGuid}` } : result.value);
           }
         } else {
-          remainingFailures.push(failures[index]);
+          remainingFailures.push({ ...failures[index], failure: describeFountainFailure(result.reason) });
         }
       });
       if (recoveredTracks.length) {
@@ -495,7 +565,8 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
       setIsRetryingLookups(false);
     }
   };
-  return { ...query, fountainLookupFailures: fountainFailures.data, retryFountainLookups, isRetryingFountainLookups: isRetryingLookups };
+  const fountainLookupFailureSummary = summarizeFountainFailures(fountainFailures.map(item => item.failure));
+  return { ...query, fountainLookupFailures: fountainFailures, fountainLookupFailureSummary, retryFountainLookups, isRetryingFountainLookups: isRetryingLookups };
 }
 
 function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): PodcastShow | null {
@@ -917,7 +988,7 @@ export function useFountainPodcastShows(enabled = true) {
       let itemDone = pageParam.itemDone;
       let taggedDone = pageParam.taggedDone;
       const pendingFeedGuids = [...pageParam.pendingFeedGuids];
-      const lookupFailures: string[] = [];
+      const lookupFailures: FountainShowLookupFailure[] = [];
       const shows: PodcastShow[] = [];
       const seenGuids = new Set<string>();
       const episodeCounts = new Map<string, number>();
@@ -976,7 +1047,7 @@ export function useFountainPodcastShows(enabled = true) {
         const resolved = results.map((result, index) => {
           if (result.status === "fulfilled") return result.value;
           if (signal.aborted) throw result.reason;
-          lookupFailures.push(batch[index]);
+          lookupFailures.push({ guid: batch[index], failure: describeFountainFailure(result.reason) });
           return null;
         });
         for (const show of resolved) {
@@ -1001,24 +1072,25 @@ export function useFountainPodcastShows(enabled = true) {
     getNextPageParam: lastPage => lastPage.nextPage,
     staleTime: 5 * 60 * 1000,
   });
-  const lookupFailures = [...new Set(query.data?.pages.flatMap(page => page.lookupFailures) ?? [])];
+  const lookupFailures = [...new Map((query.data?.pages.flatMap(page => page.lookupFailures) ?? []).map(normalizeFountainShowLookupFailure).filter((item): item is FountainShowLookupFailure => !!item).map(item => [item.guid, item])).values()];
+  const fountainLookupFailureSummary = summarizeFountainFailures(lookupFailures.map(item => item.failure));
   const retryFountainShowLookups = async () => {
     const current = queryClient.getQueryData<typeof query.data>(["podcast-shows", "fountain"]);
     if (!current || !lookupFailures.length || isRetryingLookups) return;
     setIsRetryingLookups(true);
     try {
-      const pending = current.pages.flatMap((page, pageIndex) => page.lookupFailures.map(guid => ({ guid, pageIndex })));
+      const pending = current.pages.flatMap((page, pageIndex) => page.lookupFailures.map(({ guid }) => ({ guid, pageIndex })));
       const signal = AbortSignal.timeout(30000);
       const results = await Promise.allSettled(pending.map(({ guid }) => lookupFountainShow(guid, signal)));
       const recoveredByPage = new Map<number, PodcastShow[]>();
-      const failuresByPage = new Map<number, string[]>();
+      const failuresByPage = new Map<number, { guid: string; failure: FountainLookupFailure }[]>();
       results.forEach((result, index) => {
         const { guid, pageIndex } = pending[index];
         if (result.status === "fulfilled") {
           if (result.value) recoveredByPage.set(pageIndex, [...(recoveredByPage.get(pageIndex) ?? []), result.value]);
         } else {
           if (signal.aborted) throw result.reason;
-          failuresByPage.set(pageIndex, [...(failuresByPage.get(pageIndex) ?? []), guid]);
+          failuresByPage.set(pageIndex, [...(failuresByPage.get(pageIndex) ?? []), { guid, failure: describeFountainFailure(result.reason) }]);
         }
       });
       queryClient.setQueryData<typeof query.data>(["podcast-shows", "fountain"], data => {
@@ -1039,7 +1111,7 @@ export function useFountainPodcastShows(enabled = true) {
   const showMap = new Map<string, PodcastShow>();
   for (const page of query.data?.pages ?? []) for (const show of page.shows) showMap.set(show.id, show);
   const data = [...showMap.values()].sort((a, b) => a.title.localeCompare(b.title));
-  return { ...query, data, hasNextPage: query.hasNextPage ?? false, lookupFailures, retryFountainShowLookups, isRetryingFountainLookups: isRetryingLookups };
+  return { ...query, data, hasNextPage: query.hasNextPage ?? false, lookupFailures, fountainLookupFailureSummary, retryFountainShowLookups, isRetryingFountainLookups: isRetryingLookups };
 }
 
 export function usePodcastFavorites() {
