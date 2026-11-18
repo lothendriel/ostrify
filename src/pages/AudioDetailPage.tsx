@@ -21,6 +21,7 @@ import { fetchWavlakeTrack, wavlakeTrackUrl } from "@/hooks/useWavlake";
 import { fountainShowGuid, formatDuration, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
+import { decodeAudioDetailFallback } from "@/lib/audioDetail";
 
 function resolveTuneStrId(id: string): string {
   if (id.startsWith("tunestr:n94:")) return id.slice("tunestr:n94:".length);
@@ -116,9 +117,11 @@ function sourceHref(track: Track, bookId?: string): string | undefined {
 
 export default function AudioDetailPage() {
   const [searchParams] = useSearchParams();
-  const rawId = searchParams.get("track") ?? "";
+  const compressedFallback = useMemo(() => decodeAudioDetailFallback(searchParams.get("fallback")), [searchParams]);
+  const rawId = searchParams.get("track") ?? compressedFallback?.id ?? "";
   const trackId = decodeAudioId(rawId)?.trim() ?? "";
   const sharedTrack = useMemo<Track | undefined>(() => {
+    if (compressedFallback?.id === trackId) return compressedFallback;
     if (!trackId) return undefined;
     const urlParam = searchParams.get("url");
     if (urlParam === null) return undefined;

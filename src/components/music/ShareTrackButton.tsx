@@ -8,7 +8,7 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
-import { audioDetailPath } from '@/lib/audioDetail';
+import { audioDetailPath, encodeAudioDetailFallback } from '@/lib/audioDetail';
 
 const PUBLIC_APP_ORIGIN = 'https://ostrify.studio314.us';
 
@@ -40,12 +40,10 @@ function nostrAudioFallbackUrl(track: Track): URL | undefined {
   const audioUrl = sanitizeUrl(track.url);
   if (!audioUrl || audioUrl.length > 2048 || !track.title.trim() || !eventKind) return undefined;
 
+  const fallbackPayload = encodeAudioDetailFallback({ ...track, eventKind, url: audioUrl });
+  if (!fallbackPayload) return undefined;
   const fallbackUrl = new URL('/audio', PUBLIC_APP_ORIGIN);
-  fallbackUrl.searchParams.set('track', track.id);
-  fallbackUrl.searchParams.set('url', audioUrl);
-  fallbackUrl.searchParams.set('title', track.title.slice(0, 500));
-  fallbackUrl.searchParams.set('kind', track.kind);
-  fallbackUrl.searchParams.set('eventKind', String(eventKind));
+  fallbackUrl.searchParams.set('fallback', fallbackPayload);
   return fallbackUrl.href.length <= 7000 ? fallbackUrl : undefined;
 }
 
