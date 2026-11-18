@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Home, Menu } from "lucide-react";
 import { usePreviousLocation } from "@/components/NavigationHistory";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -14,12 +14,25 @@ import { NotificationsBell, NotificationsPanel } from "./NotificationsBell";
 import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useFollowedPeople } from '@/hooks/useFollowedPeople';
+import { useFriendStatuses } from '@/hooks/useFriendLibrary';
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | null>(null);
+  const { pathname } = useLocation();
+  const friendsPageOpen = pathname === '/friends';
+  const { user } = useCurrentUser();
+  const followedPeople = useFollowedPeople();
+  const friendKey = followedPeople.people.join('|');
+  const statuses = useFriendStatuses(followedPeople.people, friendsPageOpen ? 30_000 : activePanel === 'friends' ? 30_000 : 60_000);
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const { previousTo } = usePreviousLocation();
+  useEffect(() => {
+    if ((!friendsPageOpen && activePanel !== 'friends') || !user || !followedPeople.hasReadRelays || !followedPeople.people.length) return;
+    void statuses.refetch();
+  }, [friendsPageOpen, activePanel, user, followedPeople.hasReadRelays, friendKey, statuses.refetch]);
   const togglePanel = (panel: 'friends' | 'queue' | 'notifications') => setActivePanel(current => current === panel ? null : panel);
 
   return (
@@ -65,7 +78,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="hidden shrink-0 items-center gap-1 sm:flex">
               <DeveloperZapButton />
               <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
-              <FriendsActivitySheet open={activePanel === 'friends'} onToggle={() => togglePanel('friends')} />
+              <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
             </div>
             <div className="ml-auto hidden shrink-0 sm:block">
               <LoginArea className="max-w-60" />
@@ -74,7 +87,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-2">
                 <DeveloperZapButton />
                 <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
-                <FriendsActivitySheet open={activePanel === 'friends'} onToggle={() => togglePanel('friends')} />
+                <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
               </div>
               <LoginArea className="max-w-60" />
             </div>
@@ -86,14 +99,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </ScrollArea>
         </div>
         {!isMobile && <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue' && activePanel !== 'notifications'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : activePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : activePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
-          {activePanel === 'friends' && <FriendsActivityPanel open onClose={() => setActivePanel(null)} />}
+          {activePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
           {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
           {activePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
         </aside>}
         {isMobile && activePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-28 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
         {isMobile && <div className={`fixed inset-x-0 bottom-28 z-40 transition-[transform,opacity] duration-300 ease-in-out ${activePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!activePanel} inert={!activePanel}>
           <div className="mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl pb-[env(safe-area-inset-bottom)]">
-            {activePanel === 'friends' && <FriendsActivityPanel open onClose={() => setActivePanel(null)} />}
+            {activePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
             {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
             {activePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
           </div>

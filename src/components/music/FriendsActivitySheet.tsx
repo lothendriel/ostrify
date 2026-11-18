@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { Headphones, Users, X } from 'lucide-react';
@@ -51,15 +50,7 @@ function FriendsActivityContent({ close, user, followedPeople, statuses }: { clo
       </ScrollArea>;
 }
 
-export function FriendsActivitySheet({ open, onToggle }: { open: boolean; onToggle: () => void }) {
-  const { user } = useCurrentUser();
-  const followedPeople = useFollowedPeople();
-  const statuses = useFriendStatuses(followedPeople.people, false, false);
-  const liveFriendCount = statuses.data?.length ?? 0;
-  useEffect(() => {
-    if (!user || !open || !followedPeople.hasReadRelays) return;
-    void followedPeople.refetch();
-  }, [user, open, followedPeople.hasReadRelays, followedPeople.refetch]);
+export function FriendsActivitySheet({ open, onToggle, liveFriendCount }: { open: boolean; onToggle: () => void; liveFriendCount: number }) {
 
   return <Button type="button" variant="ghost" size="icon" className={`relative rounded-full ${open ? 'bg-accent text-foreground' : ''}`} aria-label={open ? 'Close friends listening activity' : 'Friends listening activity'} aria-pressed={open} title="Friends activity" onClick={onToggle}>
     <Users className="size-5" />
@@ -67,10 +58,7 @@ export function FriendsActivitySheet({ open, onToggle }: { open: boolean; onTogg
   </Button>;
 }
 
-export function FriendsActivityPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user } = useCurrentUser();
-  const followedPeople = useFollowedPeople();
-  const statuses = useFriendStatuses(followedPeople.people, open ? 30_000 : false, open);
+export function FriendsActivityPanel({ open, onClose, user, followedPeople, statuses }: { open: boolean; onClose: () => void; user: ReturnType<typeof useCurrentUser>["user"]; followedPeople: ReturnType<typeof useFollowedPeople>; statuses: ReturnType<typeof useFriendStatuses> }) {
   return <section className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70" aria-label="Friends listening activity">
     <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-4">
       <div className="flex items-start justify-between gap-2">
