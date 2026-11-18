@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNostr } from "@nostrify/react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
@@ -263,11 +264,21 @@ async function lookupFountainEpisode(
  * Fetch podcast episodes. Combines true NIP-F4 episodes (kind 54), audio
  * tracks/notes tagged as podcasts, and Fountain episode GUID references.
  */
+interface FountainEpisodeLookupFailure {
+  itemGuid: string;
+  feedGuid?: string;
+}
+
 export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = true) {
   const { nostr } = useNostr();
+  const queryClient = useQueryClient();
+  const [isRetryingLookups, setIsRetryingLookups] = useState(false);
+  const queryKey = ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API] as const;
+  const failuresKey = ["podcast-episode-fountain-failures", limit, fountainLimit, FOUNTAIN_API] as const;
+  const fountainFailures = useQuery<FountainEpisodeLookupFailure[]>({ queryKey: failuresKey, enabled: false, initialData: [] });
 
   const query = useQuery<Track[]>({
-    queryKey: ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API],
+    queryKey,
     enabled,
     placeholderData: (previousData) => previousData,
     retry: 1,
@@ -310,6 +321,7 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
       }
 
       const resolvedFountain: (Track | null)[] = [];
+      const lookupFailures: FountainEpisodeLookupFailure[] = [];
       const referencesToResolve = [...fountainReferences.entries()].slice(0, fountainLimit);
       const referenceBatches = Array.from(
         { length: Math.ceil(referencesToResolve.length / FOUNTAIN_SHOWS_PER_LOOKUP_BATCH) },
@@ -317,13 +329,17 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
       );
       for (const batch of referenceBatches) {
         if (signal.aborted) throw signal.reason;
-        resolvedFountain.push(...await Promise.all(batch.map(([itemGuid, feedGuid]) =>
-          lookupFountainEpisode(itemGuid, feedGuid, signal).catch((error: unknown) => {
-            if (signal.aborted) throw error;
-            return null;
-          }),
-        )));
+        const results = await Promise.allSettled(batch.map(([itemGuid, feedGuid]) => lookupFountainEpisode(itemGuid, feedGuid, signal)));
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") resolvedFountain.push(result.value);
+          else {
+            if (signal.aborted) throw result.reason;
+            lookupFailures.push({ itemGuid: batch[index][0], feedGuid: batch[index][1] });
+            resolvedFountain.push(null);
+          }
+        });
       }
+      queryClient.setQueryData(failuresKey, lookupFailures);
       for (const track of resolvedFountain) {
         if (!track || seen.has(track.url)) continue;
         seen.add(track.url);
@@ -338,7 +354,38 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
       return tracks.slice(0, limit);
     },
   });
-  return query;
+  const retryFountainLookups = async () => {
+    const failures = queryClient.getQueryData<FountainEpisodeLookupFailure[]>(failuresKey) ?? [];
+    if (!failures.length || isRetryingLookups) return;
+    setIsRetryingLookups(true);
+    try {
+      const signal = AbortSignal.timeout(30000);
+      const results = await Promise.allSettled(failures.map(failure => lookupFountainEpisode(failure.itemGuid, failure.feedGuid, signal)));
+      const remainingFailures: FountainEpisodeLookupFailure[] = [];
+      const recoveredTracks: Track[] = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          if (result.value) {
+            const failure = failures[index];
+            recoveredTracks.push(failure.feedGuid ? { ...result.value, showId: `fountain:show:id:${failure.feedGuid}` } : result.value);
+          }
+        } else {
+          remainingFailures.push(failures[index]);
+        }
+      });
+      if (recoveredTracks.length) {
+        queryClient.setQueryData<Track[]>(queryKey, current => {
+          const merged = new Map((current ?? []).map(track => [track.url, track]));
+          for (const track of recoveredTracks) merged.set(track.url, track);
+          return [...merged.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, limit);
+        });
+      }
+      queryClient.setQueryData(failuresKey, remainingFailures);
+    } finally {
+      setIsRetryingLookups(false);
+    }
+  };
+  return { ...query, fountainLookupFailures: fountainFailures.data, retryFountainLookups, isRetryingFountainLookups: isRetryingLookups };
 }
 
 function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): PodcastShow | null {
@@ -731,6 +778,8 @@ interface FountainShowsPageParam {
 /** NIP-73 show GUIDs discovered in Nostr notes, resolved to Fountain records. */
 export function useFountainPodcastShows(enabled = true) {
   const { nostr } = useNostr();
+  const queryClient = useQueryClient();
+  const [isRetryingLookups, setIsRetryingLookups] = useState(false);
   const initialPageParam: FountainShowsPageParam = {
     feedDone: false,
     itemDone: false,
@@ -751,6 +800,7 @@ export function useFountainPodcastShows(enabled = true) {
       let itemDone = pageParam.itemDone;
       let taggedDone = pageParam.taggedDone;
       const pendingFeedGuids = [...pageParam.pendingFeedGuids];
+      const lookupFailures: string[] = [];
       const shows: PodcastShow[] = [];
       const seenGuids = new Set<string>();
       const episodeCounts = new Map<string, number>();
@@ -805,10 +855,13 @@ export function useFountainPodcastShows(enabled = true) {
 
         if (!pendingFeedGuids.length) continue;
         const batch = pendingFeedGuids.splice(0, FOUNTAIN_SHOWS_PER_LOOKUP_BATCH);
-        const resolved = await Promise.all(batch.map(guid => lookupFountainShow(guid, signal).catch((error: unknown) => {
-          if (signal.aborted) throw error;
+        const results = await Promise.allSettled(batch.map(guid => lookupFountainShow(guid, signal)));
+        const resolved = results.map((result, index) => {
+          if (result.status === "fulfilled") return result.value;
+          if (signal.aborted) throw result.reason;
+          lookupFailures.push(batch[index]);
           return null;
-        })));
+        });
         for (const show of resolved) {
           if (show) shows.push({ ...show, episodeCount: episodeCounts.get(show.feedGuid ?? "") ?? 0 });
         }
@@ -826,15 +879,50 @@ export function useFountainPodcastShows(enabled = true) {
         taggedDone,
         pendingFeedGuids,
       } : undefined;
-      return { shows: pageShows, nextPage };
+      return { shows: pageShows, nextPage, lookupFailures };
     },
     getNextPageParam: lastPage => lastPage.nextPage,
     staleTime: 5 * 60 * 1000,
   });
+  const lookupFailures = [...new Set(query.data?.pages.flatMap(page => page.lookupFailures) ?? [])];
+  const retryFountainShowLookups = async () => {
+    const current = queryClient.getQueryData<typeof query.data>(["podcast-shows", "fountain"]);
+    if (!current || !lookupFailures.length || isRetryingLookups) return;
+    setIsRetryingLookups(true);
+    try {
+      const pending = current.pages.flatMap((page, pageIndex) => page.lookupFailures.map(guid => ({ guid, pageIndex })));
+      const signal = AbortSignal.timeout(30000);
+      const results = await Promise.allSettled(pending.map(({ guid }) => lookupFountainShow(guid, signal)));
+      const recoveredByPage = new Map<number, PodcastShow[]>();
+      const failuresByPage = new Map<number, string[]>();
+      results.forEach((result, index) => {
+        const { guid, pageIndex } = pending[index];
+        if (result.status === "fulfilled") {
+          if (result.value) recoveredByPage.set(pageIndex, [...(recoveredByPage.get(pageIndex) ?? []), result.value]);
+        } else {
+          if (signal.aborted) throw result.reason;
+          failuresByPage.set(pageIndex, [...(failuresByPage.get(pageIndex) ?? []), guid]);
+        }
+      });
+      queryClient.setQueryData<typeof query.data>(["podcast-shows", "fountain"], data => {
+        if (!data) return data;
+        return {
+          ...data,
+          pages: data.pages.map((page, pageIndex) => ({
+            ...page,
+            shows: [...page.shows, ...(recoveredByPage.get(pageIndex) ?? [])],
+            lookupFailures: failuresByPage.get(pageIndex) ?? [],
+          })),
+        };
+      });
+    } finally {
+      setIsRetryingLookups(false);
+    }
+  };
   const showMap = new Map<string, PodcastShow>();
   for (const page of query.data?.pages ?? []) for (const show of page.shows) showMap.set(show.id, show);
   const data = [...showMap.values()].sort((a, b) => a.title.localeCompare(b.title));
-  return { ...query, data, hasNextPage: query.hasNextPage ?? false };
+  return { ...query, data, hasNextPage: query.hasNextPage ?? false, lookupFailures, retryFountainShowLookups, isRetryingFountainLookups: isRetryingLookups };
 }
 
 export function usePodcastFavorites() {
