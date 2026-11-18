@@ -64,10 +64,10 @@ export function useFriendLibrary(pubkey: string | undefined) {
   });
 }
 
-export function useFriendStatuses(pubkeys: string[]) {
+export function useFriendStatuses(pubkeys: string[], refetchInterval: number | false = false, enabled = true) {
   const { nostr } = useNostr();
   return useQuery({
-    queryKey: ['friend-statuses', ...pubkeys.slice().sort()], enabled: pubkeys.length > 0, refetchInterval: 60000,
+    queryKey: ['friend-statuses', ...pubkeys.slice().sort()], enabled: pubkeys.length > 0 && enabled, refetchInterval,
     queryFn: async ({ signal }) => {
       const events = await nostr.query([{ kinds: [30315], authors: pubkeys, '#d': ['music'], limit: Math.max(50, pubkeys.length * 3) }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
       const latest = new Map<string, typeof events[number]>();

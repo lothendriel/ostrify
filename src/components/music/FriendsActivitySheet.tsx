@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Headphones, LoaderCircle, Users, X } from 'lucide-react';
+import { Headphones, Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SheetHeader } from '@/components/ui/sheet';
@@ -46,7 +46,6 @@ function FriendsActivityContent({ close, user, followedPeople, statuses }: { clo
         {!user ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Sign in to see your friends</p><p className="mt-1 text-sm text-muted-foreground">Your Ostrify friends and their listening activity will appear here.</p></div> : !followedPeople.hasReadRelays ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">Friends unavailable</p><p className="mt-1 text-sm text-muted-foreground">Enable a read relay to load your friends list.</p><Button type="button" variant="link" onClick={() => void followedPeople.refetch()}>Try again</Button></div> : followedPeople.isLoading ? <div className="space-y-2" aria-label="Loading friends"><Skeleton className="h-20 w-full" /><Skeleton className="h-20 w-full" /></div> : followedPeople.isError ? <div role="alert" className="rounded-lg border border-destructive/40 p-4 text-sm"><p>Could not load your friends: {followedPeople.error.message}</p><Button type="button" variant="link" className="mt-2 h-auto p-0" onClick={() => void followedPeople.refetch()}>Try again</Button></div> : !friendKeys.length ? <div className="py-10 text-center"><Users className="mx-auto size-10 text-muted-foreground" /><p className="mt-3 font-semibold">No friends yet</p><p className="mt-1 text-sm text-muted-foreground">Add people on Ostrify to see when they’re listening.</p><Button asChild className="mt-4"><Link to="/friends" onClick={close}>Find friends</Link></Button></div> : <div className="space-y-2">
           <div className="mb-3 flex items-center justify-between text-sm"><span className="font-semibold">Your friends</span><Link to="/friends" onClick={close} className="text-primary hover:underline">Manage friends</Link></div>
           {friendKeys.map(pubkey => <FriendActivity key={pubkey} pubkey={pubkey} status={statusByFriend.get(pubkey)} close={close} />)}
-          {statuses.isFetching && <p className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"><LoaderCircle className="size-3 animate-spin" /> Updating activity…</p>}
           {statuses.isError && <p role="status" className="text-xs text-muted-foreground">Listening statuses are temporarily unavailable.</p>}
         </div>}
       </ScrollArea>;
@@ -55,7 +54,7 @@ function FriendsActivityContent({ close, user, followedPeople, statuses }: { clo
 export function FriendsActivitySheet({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const { user } = useCurrentUser();
   const followedPeople = useFollowedPeople();
-  const statuses = useFriendStatuses(followedPeople.people);
+  const statuses = useFriendStatuses(followedPeople.people, false, false);
   const liveFriendCount = statuses.data?.length ?? 0;
   useEffect(() => {
     if (!user || !open || !followedPeople.hasReadRelays) return;
@@ -71,7 +70,7 @@ export function FriendsActivitySheet({ open, onToggle }: { open: boolean; onTogg
 export function FriendsActivityPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useCurrentUser();
   const followedPeople = useFollowedPeople();
-  const statuses = useFriendStatuses(followedPeople.people);
+  const statuses = useFriendStatuses(followedPeople.people, open ? 30_000 : false, open);
   return <section className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70" aria-label="Friends listening activity">
     <SheetHeader className="shrink-0 border-b border-border/70 px-4 py-4">
       <div className="flex items-start justify-between gap-2">
