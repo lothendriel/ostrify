@@ -416,6 +416,18 @@ interface FountainEpisodeLookupFailure {
   failure: FountainLookupFailure;
 }
 
+interface FountainEpisodeProgress {
+  tracks: Track[];
+  failures: FountainEpisodeLookupFailure[];
+  isResolving: boolean;
+}
+
+interface FountainShowProgress {
+  shows: PodcastShow[];
+  failures: FountainShowLookupFailure[];
+  isResolving: boolean;
+}
+
 function normalizeFountainFailure(value: unknown): FountainLookupFailure {
   if (!isRecord(value) || typeof value.category !== "string") return { category: "unknown" };
   const categories: FountainFailureCategory[] = ["timeout", "network", "rate-limit", "server", "http", "response", "unknown"];
@@ -453,9 +465,10 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
   const queryClient = useQueryClient();
   const [isRetryingLookups, setIsRetryingLookups] = useState(false);
   const queryKey = ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API] as const;
-  const failuresKey = ["podcast-episode-fountain-failures", limit, fountainLimit, FOUNTAIN_API] as const;
-  const fountainFailuresQuery = useQuery<unknown>({ queryKey: failuresKey, enabled: false, initialData: [] });
-  const fountainFailures = (Array.isArray(fountainFailuresQuery.data) ? fountainFailuresQuery.data : []).map(normalizeFountainEpisodeLookupFailure).filter((item): item is FountainEpisodeLookupFailure => !!item);
+  const progressKey = ["podcast-episode-fountain-progress", limit, fountainLimit, FOUNTAIN_API] as const;
+  const progressQuery = useQuery<FountainEpisodeProgress>({ queryKey: progressKey, enabled: false, initialData: { tracks: [], failures: [], isResolving: false } });
+  const progressTracks = (Array.isArray(progressQuery.data.tracks) ? progressQuery.data.tracks : []).filter((track): track is Track => !!track && typeof track === "object" && "url" in track);
+  const fountainFailures = (Array.isArray(progressQuery.data.failures) ? progressQuery.data.failures : []).map(normalizeFountainEpisodeLookupFailure).filter((item): item is FountainEpisodeLookupFailure => !!item);
 
   const query = useQuery<Track[]>({
     queryKey,
@@ -500,42 +513,52 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
         fountainReferences.set(itemGuid, feedGuid && EPISODE_GUID_RE.test(feedGuid) ? feedGuid : undefined);
       }
 
-      const resolvedFountain: (Track | null)[] = [];
       const lookupFailures: FountainEpisodeLookupFailure[] = [];
+      const provisionalTracks = new Map(tracks.map(track => [track.url, track]));
       const referencesToResolve = [...fountainReferences.entries()].slice(0, fountainLimit);
       const referenceBatches = Array.from(
         { length: Math.ceil(referencesToResolve.length / FOUNTAIN_SHOWS_PER_LOOKUP_BATCH) },
         (_, index) => referencesToResolve.slice(index * FOUNTAIN_SHOWS_PER_LOOKUP_BATCH, (index + 1) * FOUNTAIN_SHOWS_PER_LOOKUP_BATCH),
       );
+      queryClient.setQueryData<FountainEpisodeProgress>(progressKey, { tracks: [...tracks], failures: [], isResolving: true });
       for (const batch of referenceBatches) {
-        if (signal.aborted) throw signal.reason;
-        const results = await Promise.allSettled(batch.map(([itemGuid, feedGuid]) => lookupFountainEpisode(itemGuid, feedGuid, signal)));
-        results.forEach((result, index) => {
-          if (result.status === "fulfilled") resolvedFountain.push(result.value);
-          else {
-            if (signal.aborted) throw result.reason;
-            lookupFailures.push({ itemGuid: batch[index][0], feedGuid: batch[index][1], failure: describeFountainFailure(result.reason) });
-            resolvedFountain.push(null);
+        if (signal.aborted) {
+          queryClient.setQueryData<FountainEpisodeProgress>(progressKey, current => ({ tracks: current?.tracks ?? [], failures: current?.failures ?? [], isResolving: false }));
+          throw signal.reason;
+        }
+        await Promise.all(batch.map(async ([itemGuid, feedGuid]) => {
+          try {
+            const track = await lookupFountainEpisode(itemGuid, feedGuid, signal);
+            if (track && !provisionalTracks.has(track.url)) {
+              const reference = relatedEvents.get(itemGuid);
+              const feedReference = reference?.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
+              const relatedFeedGuid = feedReference?.slice("podcast:guid:".length);
+              provisionalTracks.set(track.url, relatedFeedGuid ? { ...track, showId: `fountain:show:id:${relatedFeedGuid}` } : track);
+            }
+          } catch (error) {
+            if (signal.aborted) {
+              queryClient.setQueryData<FountainEpisodeProgress>(progressKey, current => ({ tracks: current?.tracks ?? [], failures: current?.failures ?? [], isResolving: false }));
+              return;
+            }
+            lookupFailures.push({ itemGuid, feedGuid, failure: describeFountainFailure(error) });
           }
-        });
+          queryClient.setQueryData<FountainEpisodeProgress>(progressKey, {
+            tracks: [...provisionalTracks.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, limit),
+            failures: [...lookupFailures],
+            isResolving: true,
+          });
+        }));
       }
-      queryClient.setQueryData(failuresKey, lookupFailures);
-      for (const track of resolvedFountain) {
-        if (!track || seen.has(track.url)) continue;
-        seen.add(track.url);
-        const itemGuid = track.id.slice("fountain:episode:id:".length);
-        const reference = relatedEvents.get(itemGuid);
-        const feedReference = reference?.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:guid:"))?.[1];
-        const feedGuid = feedReference?.slice("podcast:guid:".length);
-        tracks.push(feedGuid ? { ...track, showId: `fountain:show:id:${feedGuid}` } : track);
-      }
-
-      tracks.sort((a, b) => b.createdAt - a.createdAt);
-      return tracks.slice(0, limit);
+      queryClient.setQueryData<FountainEpisodeProgress>(progressKey, {
+        tracks: [...provisionalTracks.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, limit),
+        failures: lookupFailures,
+        isResolving: false,
+      });
+      return [...provisionalTracks.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, limit);
     },
   });
   const retryFountainLookups = async () => {
-    const failures = queryClient.getQueryData<FountainEpisodeLookupFailure[]>(failuresKey) ?? [];
+    const failures = queryClient.getQueryData<FountainEpisodeProgress>(progressKey)?.failures ?? [];
     if (!failures.length || isRetryingLookups) return;
     setIsRetryingLookups(true);
     try {
@@ -560,13 +583,18 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
           return [...merged.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, limit);
         });
       }
-      queryClient.setQueryData(failuresKey, remainingFailures);
+      queryClient.setQueryData<FountainEpisodeProgress>(progressKey, current => ({ tracks: current?.tracks ?? [], failures: remainingFailures, isResolving: false }));
     } finally {
       setIsRetryingLookups(false);
     }
   };
   const fountainLookupFailureSummary = summarizeFountainFailures(fountainFailures.map(item => item.failure));
-  return { ...query, fountainLookupFailures: fountainFailures, fountainLookupFailureSummary, retryFountainLookups, isRetryingFountainLookups: isRetryingLookups };
+  const isResolvingFountainReferences = progressQuery.data.isResolving && progressTracks.some(track => track.source === "fountain");
+  const mergedTracks = new Map<string, Track>();
+  for (const track of query.data ?? []) mergedTracks.set(track.url, track);
+  for (const track of progressTracks) mergedTracks.set(track.url, track);
+  const data = [...mergedTracks.values()].sort((left, right) => right.createdAt - left.createdAt).slice(0, limit);
+  return { ...query, data, isResolvingFountainReferences, fountainLookupFailures: fountainFailures, fountainLookupFailureSummary, retryFountainLookups, isRetryingFountainLookups: isRetryingLookups };
 }
 
 function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): PodcastShow | null {
@@ -974,8 +1002,13 @@ export function useFountainPodcastShows(enabled = true) {
     taggedDone: false,
     pendingFeedGuids: [],
   };
+  const queryKey = ["podcast-shows", "fountain"] as const;
+  const progressKey = ["podcast-shows", "fountain", "progress"] as const;
+  const progressQuery = useQuery<FountainShowProgress>({ queryKey: progressKey, enabled: false, initialData: { shows: [], failures: [], isResolving: false } });
+  const progressShows = Array.isArray(progressQuery.data.shows) ? progressQuery.data.shows : [];
+  const progressFailures = Array.isArray(progressQuery.data.failures) ? progressQuery.data.failures.map(normalizeFountainShowLookupFailure).filter((item): item is FountainShowLookupFailure => !!item) : [];
   const query = useInfiniteQuery({
-    queryKey: ["podcast-shows", "fountain"],
+    queryKey,
     enabled,
     initialPageParam,
     retry: 1,
@@ -992,6 +1025,9 @@ export function useFountainPodcastShows(enabled = true) {
       const shows: PodcastShow[] = [];
       const seenGuids = new Set<string>();
       const episodeCounts = new Map<string, number>();
+      const progressShowMap = new Map(progressShows.map(show => [show.id, show]));
+      const progressLookupFailures: FountainShowLookupFailure[] = [];
+      queryClient.setQueryData<FountainShowProgress>(progressKey, { shows: [...progressShowMap.values()], failures: [], isResolving: true });
       let scanCount = 0;
 
       // Keep scanning older relay results until we find a useful batch of shows
@@ -1043,16 +1079,34 @@ export function useFountainPodcastShows(enabled = true) {
 
         if (!pendingFeedGuids.length) continue;
         const batch = pendingFeedGuids.splice(0, FOUNTAIN_SHOWS_PER_LOOKUP_BATCH);
-        const results = await Promise.allSettled(batch.map(guid => lookupFountainShow(guid, signal)));
-        const resolved = results.map((result, index) => {
-          if (result.status === "fulfilled") return result.value;
-          if (signal.aborted) throw result.reason;
-          lookupFailures.push({ guid: batch[index], failure: describeFountainFailure(result.reason) });
-          return null;
-        });
-        for (const show of resolved) {
-          if (show) shows.push({ ...show, episodeCount: episodeCounts.get(show.feedGuid ?? "") ?? 0 });
-        }
+        await Promise.all(batch.map(async guid => {
+          try {
+            const show = await lookupFountainShow(guid, signal);
+            if (show) {
+              const enriched = { ...show, episodeCount: episodeCounts.get(show.feedGuid ?? "") ?? 0 };
+              shows.push(enriched);
+              progressShowMap.set(enriched.id, enriched);
+              queryClient.setQueryData<FountainShowProgress>(progressKey, {
+                shows: [...progressShowMap.values()],
+                failures: [...progressLookupFailures],
+                isResolving: true,
+              });
+            }
+          } catch (error) {
+            if (signal.aborted) {
+              queryClient.setQueryData<FountainShowProgress>(progressKey, current => ({ shows: current?.shows ?? [], failures: current?.failures ?? [], isResolving: false }));
+              return;
+            }
+            const failure = { guid, failure: describeFountainFailure(error) };
+            lookupFailures.push(failure);
+            progressLookupFailures.push(failure);
+          }
+          queryClient.setQueryData<FountainShowProgress>(progressKey, {
+            shows: [...progressShowMap.values()],
+            failures: [...progressLookupFailures],
+            isResolving: true,
+          });
+        }));
       }
 
       const deduped = new Map(shows.map(show => [show.id, show]));
@@ -1067,51 +1121,76 @@ export function useFountainPodcastShows(enabled = true) {
         taggedDone,
         pendingFeedGuids,
       } : undefined;
+      queryClient.setQueryData<FountainShowProgress>(progressKey, {
+        shows: [...progressShowMap.values()],
+        failures: [...progressLookupFailures],
+        isResolving: false,
+      });
       return { shows: pageShows, nextPage, lookupFailures };
     },
     getNextPageParam: lastPage => lastPage.nextPage,
     staleTime: 5 * 60 * 1000,
   });
-  const lookupFailures = [...new Map((query.data?.pages.flatMap(page => page.lookupFailures) ?? []).map(normalizeFountainShowLookupFailure).filter((item): item is FountainShowLookupFailure => !!item).map(item => [item.guid, item])).values()];
+  const lookupFailures = [...new Map([
+    ...(query.data?.pages.flatMap(page => page.lookupFailures) ?? []).map(normalizeFountainShowLookupFailure).filter((item): item is FountainShowLookupFailure => !!item),
+    ...progressFailures,
+  ].map(item => [item.guid, item])).values()];
   const fountainLookupFailureSummary = summarizeFountainFailures(lookupFailures.map(item => item.failure));
   const retryFountainShowLookups = async () => {
-    const current = queryClient.getQueryData<typeof query.data>(["podcast-shows", "fountain"]);
-    if (!current || !lookupFailures.length || isRetryingLookups) return;
+    const current = queryClient.getQueryData<typeof query.data>(queryKey);
+    const pendingFailures = queryClient.getQueryData<FountainShowProgress>(progressKey)?.failures ?? lookupFailures;
+    if (!pendingFailures.length || isRetryingLookups) return;
     setIsRetryingLookups(true);
     try {
-      const pending = current.pages.flatMap((page, pageIndex) => page.lookupFailures.map(({ guid }) => ({ guid, pageIndex })));
+      const pending = current
+        ? current.pages.flatMap((page, pageIndex) => page.lookupFailures.map(({ guid }) => ({ guid, pageIndex })))
+        : pendingFailures.map(({ guid }) => ({ guid, pageIndex: 0 }));
       const signal = AbortSignal.timeout(30000);
       const results = await Promise.allSettled(pending.map(({ guid }) => lookupFountainShow(guid, signal)));
       const recoveredByPage = new Map<number, PodcastShow[]>();
       const failuresByPage = new Map<number, { guid: string; failure: FountainLookupFailure }[]>();
+      const recoveredProgressShows: PodcastShow[] = [];
+      const retryProgressFailures: FountainShowLookupFailure[] = [];
       results.forEach((result, index) => {
         const { guid, pageIndex } = pending[index];
         if (result.status === "fulfilled") {
-          if (result.value) recoveredByPage.set(pageIndex, [...(recoveredByPage.get(pageIndex) ?? []), result.value]);
+          if (result.value) {
+            recoveredByPage.set(pageIndex, [...(recoveredByPage.get(pageIndex) ?? []), result.value]);
+            recoveredProgressShows.push(result.value);
+          }
         } else {
           if (signal.aborted) throw result.reason;
-          failuresByPage.set(pageIndex, [...(failuresByPage.get(pageIndex) ?? []), { guid, failure: describeFountainFailure(result.reason) }]);
+          const failure = { guid, failure: describeFountainFailure(result.reason) };
+          failuresByPage.set(pageIndex, [...(failuresByPage.get(pageIndex) ?? []), failure]);
+          retryProgressFailures.push(failure);
         }
       });
-      queryClient.setQueryData<typeof query.data>(["podcast-shows", "fountain"], data => {
-        if (!data) return data;
-        return {
-          ...data,
-          pages: data.pages.map((page, pageIndex) => ({
-            ...page,
-            shows: [...page.shows, ...(recoveredByPage.get(pageIndex) ?? [])],
-            lookupFailures: failuresByPage.get(pageIndex) ?? [],
-          })),
-        };
+      const remainingFailures = [...failuresByPage.values()].flat();
+      queryClient.setQueryData<FountainShowProgress>(progressKey, data => {
+        const showsById = new Map((data?.shows ?? []).map(show => [show.id, show]));
+        for (const show of recoveredProgressShows) showsById.set(show.id, show);
+        return { shows: [...showsById.values()], failures: retryProgressFailures, isResolving: false };
       });
+      if (current) {
+        queryClient.setQueryData<typeof query.data>(queryKey, data => {
+          if (!data) return data;
+          const pages = data.pages.map((page, pageIndex) => {
+            const recovered = recoveredByPage.get(pageIndex) ?? [];
+            return { ...page, shows: [...page.shows, ...recovered], lookupFailures: failuresByPage.get(pageIndex) ?? [] };
+          });
+          return { ...data, pages };
+        });
+      }
     } finally {
       setIsRetryingLookups(false);
     }
   };
   const showMap = new Map<string, PodcastShow>();
   for (const page of query.data?.pages ?? []) for (const show of page.shows) showMap.set(show.id, show);
+  for (const show of progressShows) showMap.set(show.id, show);
   const data = [...showMap.values()].sort((a, b) => a.title.localeCompare(b.title));
-  return { ...query, data, hasNextPage: query.hasNextPage ?? false, lookupFailures, fountainLookupFailureSummary, retryFountainShowLookups, isRetryingFountainLookups: isRetryingLookups };
+  const isResolvingFountainShows = progressQuery.data.isResolving;
+  return { ...query, data, hasNextPage: query.hasNextPage ?? false, lookupFailures, fountainLookupFailureSummary, retryFountainShowLookups, isRetryingFountainLookups: isRetryingLookups, isResolvingFountainShows };
 }
 
 export function usePodcastFavorites() {
