@@ -223,7 +223,7 @@ function FriendsHome() {
   const [inviteIdentifier, setInviteIdentifier] = useState("");
   const hasCheckedMigration = followedPeople.data?.tags.some(([name, value]) => name === 'ostrify-migration' && value === 'nip17-friends-v1') ?? false;
   const list = followedPeople.people;
-  const statuses = useFriendStatuses(list);
+  const statuses = useFriendStatuses(list, 30_000);
   const outgoingInvites = new Set((friends.data?.outgoing ?? []).map(request => request.to));
   const inviteToFollowBack = (pubkey: string) => friends.send.mutate({ peer: pubkey, action: 'request' }, {
     onSuccess: () => toast({ title: 'Invite sent', description: 'Your private invite was sent. They can choose to follow you back.' }),
