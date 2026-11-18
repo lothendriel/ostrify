@@ -99,12 +99,57 @@ async function withFountainLookupRetries<T>(operation: (signal: AbortSignal) => 
   }
 }
 
+interface FountainLookupCacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+
+const fountainLookupCache = new Map<string, FountainLookupCacheEntry<PodcastShow | Track | null>>();
+
+function readFountainLookupCache<T extends PodcastShow | Track>(key: string): { found: boolean; value?: T | null } {
+  const entry = fountainLookupCache.get(key);
+  if (!entry) return { found: false };
+  if (entry.expiresAt <= Date.now()) {
+    fountainLookupCache.delete(key);
+    return { found: false };
+  }
+  return { found: true, value: entry.value as T | null };
+}
+
+function writeFountainLookupCache<T extends PodcastShow | Track>(key: string, value: T | null): void {
+  const ttl = value ? FOUNTAIN_LOOKUP_CACHE_TTL_MS : FOUNTAIN_LOOKUP_MISS_TTL_MS;
+  fountainLookupCache.delete(key);
+  fountainLookupCache.set(key, { value, expiresAt: Date.now() + ttl });
+  while (fountainLookupCache.size > FOUNTAIN_LOOKUP_CACHE_MAX_ENTRIES) {
+    const oldestKey = fountainLookupCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    fountainLookupCache.delete(oldestKey);
+  }
+}
+
+async function withFountainLookupCache<T extends PodcastShow | Track>(
+  key: string,
+  signal: AbortSignal,
+  lookup: () => Promise<T | null>,
+): Promise<T | null> {
+  const cached = readFountainLookupCache<T>(key);
+  if (cached.found) return cached.value ?? null;
+
+  if (signal.aborted) throw signal.reason;
+  const value = await lookup();
+  writeFountainLookupCache(key, value);
+  return value;
+}
+
 const EPISODE_GUID_RE = /^[^\s]{1,512}$/;
 const NOSTR_SHOW_PAGE_SIZE = 120;
 const FOUNTAIN_SHOWS_PER_LOOKUP_BATCH = 5;
 const FOUNTAIN_MAX_REFERENCE_BATCH = 16;
 const FOUNTAIN_LOOKUP_TIMEOUT_MS = 10_000;
 const FOUNTAIN_LOOKUP_RETRY_DELAYS_MS: readonly number[] = [500, 1_500];
+const FOUNTAIN_LOOKUP_CACHE_TTL_MS = 30 * 60 * 1000;
+const FOUNTAIN_LOOKUP_MISS_TTL_MS = 2 * 60 * 1000;
+const FOUNTAIN_LOOKUP_CACHE_MAX_ENTRIES = 500;
 const NOSTR_NOTE_KIND = 1;
 const NOSTR_PODCAST_SHOW_KIND = 10154;
 const NOSTR_PODCAST_EPISODE_KIND = 54;
@@ -277,7 +322,7 @@ export async function fetchFountainTrack(trackId: string, signal: AbortSignal): 
 }
 
 /** Return the first playable podcast episode Fountain can resolve for a NIP-73 GUID. */
-async function lookupFountainEpisode(
+async function lookupFountainEpisodeUncached(
   itemGuid: string,
   feedGuid: string | undefined,
   signal: AbortSignal,
@@ -294,6 +339,7 @@ async function lookupFountainEpisode(
       }),
       signal: attemptSignal,
     });
+    if (result.status === 404) return null;
     if (!result.ok) throw new FountainLookupError(`Fountain returned ${result.status}`, result.status, retryAfterMs(result));
     return await result.json() as unknown;
   }, signal);
@@ -318,6 +364,10 @@ async function lookupFountainEpisode(
   const contentId = text(hit._id);
   if (!contentId || !/^\S{20}$/.test(contentId)) return null;
   return createFountainTrack(`episode:id:${contentId}`, info, url, title, duration, publishedAt);
+}
+
+async function lookupFountainEpisode(itemGuid: string, feedGuid: string | undefined, signal: AbortSignal): Promise<Track | null> {
+  return withFountainLookupCache(`${FOUNTAIN_API}:episode:${itemGuid}:${feedGuid ?? ""}`, signal, () => lookupFountainEpisodeUncached(itemGuid, feedGuid, signal));
 }
 
 /**
@@ -607,7 +657,7 @@ export function useNostrPodcastShows(enabled = true) {
 }
 
 /** Resolve a NIP-73 podcast feed GUID to its Fountain show metadata. */
-async function lookupFountainShow(feedGuid: string, signal: AbortSignal): Promise<PodcastShow | null> {
+async function lookupFountainShowUncached(feedGuid: string, signal: AbortSignal): Promise<PodcastShow | null> {
   if (!EPISODE_GUID_RE.test(feedGuid)) return null;
   const data = await withFountainLookupRetries(async attemptSignal => {
     const result = await fetch(`${FOUNTAIN_API}/lookup`, {
@@ -616,6 +666,7 @@ async function lookupFountainShow(feedGuid: string, signal: AbortSignal): Promis
       body: JSON.stringify({ id: `podcast:guid:${feedGuid}` }),
       signal: attemptSignal,
     });
+    if (result.status === 404) return null;
     if (!result.ok) throw new FountainLookupError(`Fountain returned ${result.status}`, result.status, retryAfterMs(result));
     return await result.json() as unknown;
   }, signal);
@@ -641,6 +692,10 @@ export function useFountainShow(feedGuid: string | undefined) {
       return lookupFountainShow(feedGuid, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
     },
   });
+}
+
+async function lookupFountainShow(feedGuid: string, signal: AbortSignal): Promise<PodcastShow | null> {
+  return withFountainLookupCache(`${FOUNTAIN_API}:show:${feedGuid}`, signal, () => lookupFountainShowUncached(feedGuid, signal));
 }
 
 function parseRssDuration(value: string): number | undefined {
