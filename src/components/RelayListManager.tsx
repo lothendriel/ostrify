@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNostr } from '@nostrify/react';
 import { Plus, X, Wifi, Settings, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,8 @@ interface Relay {
   write: boolean;
 }
 
+type RelayHealth = 'checking' | 'reachable' | 'unreachable';
+
 /** Normalize a relay URL for set membership comparison (ignore trailing slash). */
 function normalizeForCompare(url: string): string {
   return url.trim().replace(/\/+$/, '').toLowerCase();
@@ -39,10 +42,49 @@ const DEFAULT_RELAY_URLS = new Set(
 
 export function RelayListManager() {
   const { config, updateConfig } = useAppContext();
+  const { nostr } = useNostr();
   const { toast } = useToast();
 
   const [relays, setRelays] = useState<Relay[]>(config.relayMetadata.relays);
   const [newRelayUrl, setNewRelayUrl] = useState('');
+  const [health, setHealth] = useState<Record<string, RelayHealth>>({});
+
+  // Probe each enabled relay with a small REQ. A successful EOSE means the
+  // WebSocket connected and accepted a Nostr subscription; errors/timeouts are offline.
+  useEffect(() => {
+    let active = true;
+    const checkRelays = async () => {
+      const urls = relays.map(relay => relay.url);
+      setHealth(current => Object.fromEntries(urls.map(url => [url, current[url] ?? 'checking'])));
+      await Promise.all(relays.map(async relay => {
+        try {
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 7000);
+          try {
+            let receivedEose = false;
+            for await (const message of nostr.relay(relay.url).req([{ kinds: [0], limit: 1 }], { signal: controller.signal })) {
+              if (message[0] === 'EOSE') {
+                receivedEose = true;
+                break;
+              }
+            }
+            if (active) setHealth(current => ({ ...current, [relay.url]: receivedEose ? 'reachable' : 'unreachable' }));
+          } finally {
+            window.clearTimeout(timeout);
+          }
+        } catch {
+          if (active) setHealth(current => ({ ...current, [relay.url]: 'unreachable' }));
+        }
+      }));
+    };
+
+    void checkRelays();
+    const interval = window.setInterval(() => { void checkRelays(); }, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [nostr, relays]);
 
   // Sync the editable relay list with its persisted app-specific configuration.
   useEffect(() => {
@@ -181,6 +223,20 @@ export function RelayListManager() {
             <span className="font-mono text-sm truncate min-w-0" title={relay.url}>
               {renderRelayUrl(relay.url)}
             </span>
+            <span
+              role="status"
+              aria-label={`${renderRelayUrl(relay.url)} read connection ${health[relay.url] ?? 'checking'}`}
+              title={`Read connection ${health[relay.url] ?? 'checking'} — write availability is not tested`}
+              className="inline-flex size-3 shrink-0 items-center justify-center rounded-full"
+            >
+              <span className={`size-2.5 rounded-full shadow-[0_0_8px_currentColor] ${
+                health[relay.url] === 'reachable'
+                  ? 'bg-emerald-500 text-emerald-500'
+                  : health[relay.url] === 'unreachable'
+                    ? 'bg-red-500 text-red-500'
+                    : 'animate-pulse bg-amber-400 text-amber-400'
+              }`} />
+            </span>
             {DEFAULT_RELAY_URLS.has(normalizeForCompare(relay.url)) ? (
               <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
                 Default
@@ -244,6 +300,10 @@ export function RelayListManager() {
           </div>
         ))}
       </div>
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-emerald-600 dark:text-emerald-400">Green</span> means the relay answered a read check;{' '}
+        <span className="font-medium text-red-600 dark:text-red-400">red</span> means it did not respond. Amber means checking. This does not test publishing.
+      </p>
 
       {/* Add Relay Form */}
       <div className="flex gap-2">
