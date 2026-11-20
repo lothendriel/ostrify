@@ -8,6 +8,7 @@ const CATALOG_EVENT_KINDS = [1, 54, 1063, 31337, 32123, 30440, 36787, 10154];
 
 export interface AudioCatalogCount {
   total: number;
+  estimatedBytes: number;
   complete: boolean;
   scannedKindOne: number;
 }
@@ -22,7 +23,7 @@ function isAudioCatalogEvent(event: NostrEvent): boolean {
 
 /** Count distinct currently queryable audio-track/episode metadata events on Ostrify's relay. */
 export async function countAudioCatalogEvents(nostr: NPool, signal: AbortSignal): Promise<AudioCatalogCount> {
-  const seen = new Set<string>();
+  const seen = new Map<string, number>();
   let scannedKindOne = 0;
   let complete = true;
 
@@ -45,7 +46,9 @@ export async function countAudioCatalogEvents(nostr: NPool, signal: AbortSignal)
       scannedForKind += events.length;
       if (kind === 1) scannedKindOne += events.length;
       for (const event of events) {
-        if (isAudioCatalogEvent(event)) seen.add(event.id);
+        if (isAudioCatalogEvent(event) && !seen.has(event.id)) {
+          seen.set(event.id, new TextEncoder().encode(JSON.stringify(event)).byteLength);
+        }
       }
 
       if (events.length < limit) break;
@@ -62,5 +65,6 @@ export async function countAudioCatalogEvents(nostr: NPool, signal: AbortSignal)
     }
   }
 
-  return { total: seen.size, complete, scannedKindOne };
+  const estimatedBytes = [...seen.values()].reduce((total, eventBytes) => total + eventBytes, 0);
+  return { total: seen.size, estimatedBytes, complete, scannedKindOne };
 }
