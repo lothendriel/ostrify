@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
+import { APP_RELAYS, isRequiredAppRelay } from '@/lib/appRelays';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -60,7 +61,21 @@ export function AppProvider(props: AppProviderProps) {
     setConfig(updater);
   };
 
-  const config = { ...defaultConfig, ...rawConfig };
+  const savedRelays = rawConfig.relayMetadata?.relays ?? defaultConfig.relayMetadata.relays;
+  const requiredRelay = APP_RELAYS.relays.find(relay => isRequiredAppRelay(relay.url));
+  const relays = [
+    ...(requiredRelay && !savedRelays.some(relay => isRequiredAppRelay(relay.url)) ? [requiredRelay] : []),
+    ...savedRelays.map(relay => isRequiredAppRelay(relay.url) && requiredRelay ? { ...relay, url: requiredRelay.url, read: true, write: true } : relay),
+  ];
+  const config = {
+    ...defaultConfig,
+    ...rawConfig,
+    relayMetadata: {
+      ...defaultConfig.relayMetadata,
+      ...rawConfig.relayMetadata,
+      relays,
+    },
+  };
 
   const appContextValue: AppContextType = {
     config,

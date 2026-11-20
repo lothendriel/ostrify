@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
-import { APP_RELAYS } from '@/lib/appRelays';
+import { APP_RELAYS, isRequiredAppRelay, normalizeRelayAddress } from '@/lib/appRelays';
 import { AudioCatalogCapturePanel } from '@/components/AudioCatalogCapturePanel';
 
 interface Relay {
@@ -33,7 +33,7 @@ type RelayHealth = 'checking' | 'reachable' | 'unreachable';
 
 /** Normalize a relay URL for set membership comparison (ignore trailing slash). */
 function normalizeForCompare(url: string): string {
-  return url.trim().replace(/\/+$/, '').toLowerCase();
+  return normalizeRelayAddress(url);
 }
 
 /** The set of Ostrify's recommended default relay URLs, normalized. */
@@ -148,6 +148,7 @@ export function RelayListManager() {
   };
 
   const handleRemoveRelay = (url: string) => {
+    if (isRequiredAppRelay(url)) return;
     const newRelays = relays.filter(r => r.url !== url);
     setRelays(newRelays);
     saveRelays(newRelays);
@@ -238,7 +239,11 @@ export function RelayListManager() {
                     : 'animate-pulse bg-amber-400 text-amber-400'
               }`} />
             </span>
-            {DEFAULT_RELAY_URLS.has(normalizeForCompare(relay.url)) ? (
+            {isRequiredAppRelay(relay.url) ? (
+              <Badge variant="default" className="col-start-2 w-fit shrink-0 px-1.5 py-0 text-[10px]">
+                Required
+              </Badge>
+            ) : DEFAULT_RELAY_URLS.has(normalizeForCompare(relay.url)) ? (
               <Badge variant="secondary" className="col-start-2 w-fit shrink-0 px-1.5 py-0 text-[10px]">
                 Default
               </Badge>
@@ -293,7 +298,9 @@ export function RelayListManager() {
                 size="icon"
                 onClick={() => handleRemoveRelay(relay.url)}
                 className="size-5 text-muted-foreground hover:text-destructive hover:bg-transparent shrink-0"
-                disabled={relays.length <= 1}
+                disabled={relays.length <= 1 || isRequiredAppRelay(relay.url)}
+                aria-label={isRequiredAppRelay(relay.url) ? 'Ostrify relay cannot be removed' : `Remove ${renderRelayUrl(relay.url)}`}
+                title={isRequiredAppRelay(relay.url) ? 'Required by Ostrify' : 'Remove relay'}
               >
                 <X className="h-4 w-4" />
               </Button>

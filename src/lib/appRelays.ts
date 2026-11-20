@@ -4,8 +4,20 @@ import type { RelayMetadata } from '@/contexts/AppContext';
  * Ostrify's recommended relay defaults. These initialize the app-specific
  * relay configuration and are not imported from or published to NIP-65.
  */
+export const OSTRIFY_RELAY_URL = 'wss://relay.studio314.us/nostrrelay/ostrify';
+
+export function normalizeRelayAddress(url: string): string {
+  return url.trim().replace(/\/+$/, '').toLowerCase();
+}
+
+export function isRequiredAppRelay(url: string): boolean {
+  return normalizeRelayAddress(url) === normalizeRelayAddress(OSTRIFY_RELAY_URL);
+}
+
 export const APP_RELAYS: RelayMetadata = {
   relays: [
+    // Ostrify's own catalog and user-library relay; always available to read and publish.
+    { url: OSTRIFY_RELAY_URL, read: true, write: true },
     // --- Music-focused sources (read) ---
     // DROPS is dedicated to Nostr kind 36787 music tracks.
     { url: 'wss://drops.basspistol.org/', read: true, write: false },
