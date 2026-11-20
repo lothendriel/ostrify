@@ -16,7 +16,7 @@ import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import type { Track } from '@/lib/music';
 import { useCategoryTracks } from '@/hooks/useCategoryTracks';
 import { useWavlakeGenreCatalog, type WavlakeRelease } from '@/hooks/useWavlake';
-import { CATEGORIES } from '@/lib/categories';
+import { CATEGORIES, tracksInCategory } from '@/lib/categories';
 
 function PublisherCard({ pubkey, podcast }: { pubkey: string; podcast: boolean }) {
   const { data } = useAuthor(pubkey);
@@ -125,14 +125,19 @@ export function CategoryCollectionsPage({ type }: { type: 'publishers' | 'albums
   const nostrQuery = useCategoryTracks(categoryId);
   const wavlakeQueries = useWavlakeGenreCatalog(category?.wavlakeGenres ?? []);
   const wavlakeTracks = wavlakeQueries.flatMap(query => query.data ?? []);
+  const categoryNostrTracks = useMemo(() => tracksInCategory(nostrQuery.data ?? [], categoryId), [categoryId, nostrQuery.data]);
+  const categoryWavlakeTracks = useMemo(() => {
+    const genreAliases = category?.match ?? [];
+    return wavlakeTracks.map(track => ({ ...track, topics: [...track.topics, ...genreAliases] }));
+  }, [category, wavlakeTracks]);
   const tracks = useMemo(() => {
     const seen = new Set<string>();
-    return [...(nostrQuery.data ?? []), ...wavlakeTracks].filter(track => {
+    return [...categoryNostrTracks, ...categoryWavlakeTracks].filter(track => {
       if (seen.has(track.url)) return false;
       seen.add(track.url);
       return true;
     });
-  }, [nostrQuery.data, wavlakeTracks]);
+  }, [categoryNostrTracks, categoryWavlakeTracks]);
   const collections = useMemo(() => collectionItems(tracks), [tracks]);
   const releases = useMemo(() => {
     const byId = new Map<string, WavlakeRelease>();

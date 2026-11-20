@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { useCategoryTracks } from "@/hooks/useCategoryTracks";
 import { useWavlakeGenreCatalog, type WavlakeRelease } from "@/hooks/useWavlake";
-import { CATEGORIES, categoryColor } from "@/lib/categories";
+import { CATEGORIES, categoryColor, tracksInCategory } from "@/lib/categories";
 import type { Track } from "@/lib/music";
 import { CollectionHeader } from "@/components/music/CollectionHeader";
 import { TrackList } from "@/components/music/TrackList";
@@ -39,17 +39,19 @@ const CategoryPage = () => {
   const isWavlakeError = wavlakeQueries.some((query) => query.isError);
   const refetchWavlake = () => Promise.all(wavlakeQueries.map((query) => query.refetch()));
   const tracks = useMemo(() => {
-    const seenIds = new Set(nostrTracks.map((track) => track.id));
-    const seenUrls = new Set(nostrTracks.map((track) => track.url));
-    const combined = [...nostrTracks];
+    const categoryNostrTracks = tracksInCategory(nostrTracks, category?.id ?? '');
+    const seenIds = new Set(categoryNostrTracks.map((track) => track.id));
+    const seenUrls = new Set(categoryNostrTracks.map((track) => track.url));
+    const combined = [...categoryNostrTracks];
     for (const track of wavlakeTracks) {
       if (seenIds.has(track.id) || seenUrls.has(track.url)) continue;
       seenIds.add(track.id);
       seenUrls.add(track.url);
       combined.push(track);
     }
-    return combined.sort((left, right) => right.createdAt - left.createdAt);
-  }, [nostrTracks, wavlakeTracks]);
+    return tracksInCategory(combined.sort((left, right) => right.createdAt - left.createdAt), category?.id ?? '');
+  }, [category?.id, nostrTracks, wavlakeTracks]);
+  const categoryNostrTracks = useMemo(() => tracksInCategory(nostrTracks, category?.id ?? ''), [category?.id, nostrTracks]);
   const wavlakeArtists = useMemo(() => wavlakeReleases(wavlakeTracks, 'artist'), [wavlakeTracks]);
   const wavlakeAlbums = useMemo(() => wavlakeReleases(wavlakeTracks, 'album'), [wavlakeTracks]);
   const collectionShuffleKey = collectionShuffle && collectionShuffle.categoryId === id ? collectionShuffle.key : undefined;
@@ -79,13 +81,13 @@ const CategoryPage = () => {
       />
       <div className="px-3 sm:px-6 space-y-8">
         {isError && !nostrTracks.length && <p role="alert" className="text-sm text-muted-foreground">Could not load this category from your relays. <button type="button" onClick={() => void refetch()} className="text-primary underline">Try again</button></p>}
-        {(isLoading || isWavlakeLoading) && tracks.length === 0 ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artists and albums">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div> : <NostrCollections tracks={nostrTracks} categoryId={category.id} wavlakeArtists={wavlakeArtists} wavlakeAlbums={wavlakeAlbums} shuffleSeed={collectionShuffleKey ?? 0} />}
+        {(isLoading || isWavlakeLoading) && tracks.length === 0 ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Loading artists and albums">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="aspect-square rounded-lg" />)}</div> : <NostrCollections tracks={categoryNostrTracks} categoryId={category.id} wavlakeArtists={wavlakeArtists} wavlakeAlbums={wavlakeAlbums} shuffleSeed={collectionShuffleKey ?? 0} />}
         {isWavlakeError && <p role="status" className="text-sm text-muted-foreground">Some Wavlake catalog results are unavailable right now. <button type="button" onClick={() => void refetchWavlake()} className="text-primary underline">Try again</button></p>}
         <section className="space-y-3"><h2 className="text-2xl font-bold">Tracks</h2>
         <TrackList
           tracks={tracks}
           isLoading={(isLoading || isWavlakeLoading) && tracks.length === 0}
-          emptyMessage={`No ${category.label} tracks found right now. We look for the genre in Nostr tags and catalog track metadata — check back later or browse another genre.`}
+          emptyMessage={`No ${category.label} tracks found right now. Genre shelves use explicit genre/topic tags; tracks without a recognized genre tag appear in General.`}
         />
         </section>
       </div>

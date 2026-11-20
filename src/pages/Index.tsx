@@ -69,13 +69,7 @@ const Index = () => {
     const selected = preferred.length < 15
       ? [...preferred, ...select(categoryTracks.filter(item => !preferred.some(track => track.id === item.id)), 15 - preferred.length)].slice(0, 15)
       : preferred;
-    const selectedIds = new Set(selected.map(track => track.id));
-    const broadFallback = allMusic.filter(track => track.kind === "music" && !selectedIds.has(track.id));
-    const completed = selected.length < 15
-      ? [...selected, ...select(broadFallback, 15 - selected.length)].slice(0, 15)
-      : selected;
-    const isSupplemented = completed.some(track => !categoryTracks.some(categoryTrack => categoryTrack.id === track.id));
-    return { category, tracks: completed, isSupplemented };
+    return { category, tracks: selected };
   }), [allMusic, followedArtists.data, shelfVariation, pageSeed, recentShelfHistory]);
 
   useEffect(() => {
@@ -125,9 +119,9 @@ const Index = () => {
       {homeTracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">Couldn’t load music from your read relays. Genre shelves may be unavailable. <button type="button" className="font-semibold text-primary underline" onClick={() => void homeTracksQuery.refetch()}>Try again</button></div>}
       {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}
       {wavlake.isError && <p role="status" className="text-xs text-muted-foreground">Wavlake catalog results aren’t available right now; genre shelves use music from responding relays.</p>}
-      {categoryShelves.map(({ category, tracks: categoryTracks, isSupplemented }) => (
+      {categoryShelves.map(({ category, tracks: categoryTracks }) => (
         <DeferredHomeSection key={category.id} title={category.label}>
-          <Shelf title={category.label} tracks={categoryTracks} dense seeAllHref={`/category/${category.id}`} subtitle={isSupplemented ? "Fresh picks first, with a few recent tracks to round out this shelf" : undefined} />
+          <Shelf title={category.label} tracks={categoryTracks} dense seeAllHref={`/category/${category.id}`} />
         </DeferredHomeSection>
       ))}
 
