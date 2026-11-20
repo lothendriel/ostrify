@@ -1,11 +1,12 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
-import type { NostrFilter } from "@nostrify/nostrify";
+import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 const RELAY_LIMIT = 100;
 const FEATURED_LIMIT = 300;
@@ -50,13 +51,15 @@ export function useHomeTracks(enabled = true) {
           const events = await nostr.relay(relay).query(filtersForRelay(relay), {
             signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
           });
-          return { relay, ok: true, tracks: events.map(eventToTrack).filter((track): track is Track => !!track) };
+          return { relay, ok: true, events, tracks: events.map(eventToTrack).filter((track): track is Track => !!track) };
         } catch (error) {
           if (signal.aborted) throw error;
-          return { relay, ok: false, tracks: [] as Track[] };
+          return { relay, ok: false, events: [] as NostrEvent[], tracks: [] as Track[] };
         }
       }));
 
+      const discoveredEvents = results.flatMap(result => result.ok ? result.events : []);
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
       const successful = results.filter(result => result.ok);
       const failedRelays = results.filter(result => !result.ok && result.relay !== DROPS_MUSIC_RELAY).map(result => result.relay);
       if (!successful.length) {

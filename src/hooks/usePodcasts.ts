@@ -8,6 +8,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 export interface PodcastShow {
   id: string;
@@ -462,6 +463,8 @@ function normalizeFountainShowLookupFailure(value: unknown): FountainShowLookupF
 
 export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = true) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const queryClient = useQueryClient();
   const [isRetryingLookups, setIsRetryingLookups] = useState(false);
   const queryKey = ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API] as const;
@@ -489,6 +492,7 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
         { signal },
       );
 
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
       const tracks: Track[] = [];
       const seen = new Set<string>();
       for (const event of events) {
@@ -618,6 +622,8 @@ function fountainShowFromHit(hit: Record<string, unknown>, feedGuid?: string): P
 /** Paginate recent Nostr podcast episodes from enabled relays. */
 export function useNostrPodcastEpisodesForShow(pubkey: string | undefined) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
   return useQuery({
     queryKey: ["podcast-show-episodes", pubkey ?? ""],
     enabled: !!pubkey && /^[0-9a-f]{64}$/i.test(pubkey),
@@ -628,6 +634,7 @@ export function useNostrPodcastEpisodesForShow(pubkey: string | undefined) {
         { kinds: [NOSTR_PODCAST_EPISODE_KIND], authors: [pubkey], limit: 100 },
         { kinds: [1063, NOSTR_NOTE_KIND], authors: [pubkey], "#t": PODCAST_TOPICS, limit: 100 },
       ], { signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]) });
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
       const seen = new Set<string>();
       return events.flatMap(event => {
         const hasPodcastTopic = event.tags.some(([name, value]) => name === "t" && value && PODCAST_TOPICS.includes(value.toLowerCase()));
@@ -643,6 +650,8 @@ export function useNostrPodcastEpisodesForShow(pubkey: string | undefined) {
 
 export function useNostrPodcastEpisodeFeed(enabled = true) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
   return useInfiniteQuery({
     queryKey: ["podcast-episodes", "nostr-feed"],
     enabled,
@@ -658,6 +667,7 @@ export function useNostrPodcastEpisodeFeed(enabled = true) {
         { kinds: [NOSTR_NOTE_KIND], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
       ];
       const events = await nostr.query(filters, { signal });
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
       const tracks: Track[] = [];
       const seen = new Set<string>();
       for (const event of events) {
@@ -680,6 +690,8 @@ export function useNostrPodcastEpisodeFeed(enabled = true) {
 /** Fetch podcast show metadata (NIP-F4 kind:10154) for set of pubkeys. */
 export function useNostrPodcastShows(enabled = true) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const query = useInfiniteQuery({
     queryKey: ["podcast-shows", "nostr"],
     enabled,
@@ -695,6 +707,7 @@ export function useNostrPodcastShows(enabled = true) {
         ],
         { signal },
       );
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
       const episodesByAuthor = new Map<string, NostrEvent[]>();
       for (const event of events) {
         const isNativePodcastEpisode = event.kind === NOSTR_PODCAST_EPISODE_KIND && !!parsePodcastEpisodeTrack(event);

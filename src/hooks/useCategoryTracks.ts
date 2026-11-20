@@ -7,6 +7,7 @@ import { CATEGORIES, tracksInCategory } from "@/lib/categories";
 import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 /**
  * Fetch tracks for a single category.
@@ -59,6 +60,7 @@ export function useCategoryTracks(categoryId: string | undefined) {
           { kinds: [...MUSIC_TRACK_KINDS], authors: FEATURED_MUSIC_PUBKEYS, limit: 300 },
         ], signal),
       ]);
+      captureDiscoveredAudioEvents(nostr, [...tagged, ...general], user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
 
       const taggedTracks = tagged
         .map(eventToTrack)

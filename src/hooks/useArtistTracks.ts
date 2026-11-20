@@ -6,6 +6,7 @@ import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 const ARTIST_TRACK_KINDS = [...MUSIC_TRACK_KINDS, 1063, 54, 1];
 const ARTIST_TRACK_LIMIT = 500;
@@ -35,6 +36,8 @@ export function useArtistTracks(pubkey: string | undefined) {
       if (relayResults.every(result => result.status === "rejected")) {
         throw new Error("Could not load audio published by this account from your read relays or DROPS.");
       }
+      const discoveredEvents = relayResults.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
 
       const byIdentity = new Map<string, Track>();
       for (const result of relayResults) {

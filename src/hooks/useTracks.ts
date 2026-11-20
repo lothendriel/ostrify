@@ -6,6 +6,7 @@ import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 interface UseTracksOptions {
   limit?: number;
@@ -60,6 +61,7 @@ export function useTracks(options: UseTracksOptions = {}) {
       const results = await Promise.allSettled(readRelays.map(relay => nostr.relay(relay).query(filtersForRelay(relay), { signal })));
       const events = results.flatMap(result => result.status === "fulfilled" ? result.value : []);
       if (!results.some(result => result.status === "fulfilled")) throw new Error("Could not load tracks from your read relays or DROPS.");
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
 
       const tracks: Track[] = [];
       const seen = new Set<string>();

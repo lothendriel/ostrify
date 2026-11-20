@@ -21,6 +21,7 @@ import {
 import { useAppContext } from '@/hooks/useAppContext';
 import { useToast } from '@/hooks/useToast';
 import { APP_RELAYS } from '@/lib/appRelays';
+import { AudioCatalogCapturePanel } from '@/components/AudioCatalogCapturePanel';
 
 interface Relay {
   url: string;
@@ -304,6 +305,7 @@ export function RelayListManager() {
         <span className="font-medium text-emerald-600 dark:text-emerald-400">Green</span> means the relay answered a read check;{' '}
         <span className="font-medium text-red-600 dark:text-red-400">red</span> means it did not respond. Amber means checking. This does not test publishing.
       </p>
+      <AudioCatalogCapturePanel />
 
       {/* Add Relay Form */}
       <div className="flex gap-2">

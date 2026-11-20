@@ -6,6 +6,7 @@ import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from '@/lib/music';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { isTrackVisibleInOstrify } from '@/lib/musicVisibility';
 import { DROPS_MUSIC_RELAY } from '@/lib/sources';
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 const KINDS = [...MUSIC_TRACK_KINDS, 1063, 1];
 const PAGE_SIZE = 100;
@@ -70,6 +71,8 @@ export function useMusicDiscovery(enabled = true) {
         const retryByUrl = new Map(retried.map(result => [result.url, result]));
         results = results.map(result => retryByUrl.get(result.url) ?? result);
       }
+      const discoveredEvents = results.flatMap(result => result.events);
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
       const failed = results.filter(result => !result.ok && !result.skipped && result.url !== DROPS_MUSIC_RELAY).map(result => result.url);
       const succeeded = results.filter(result => result.ok).length;
       if (!succeeded && failed.length) throw new Error('Could not reach any configured read relays or DROPS.');

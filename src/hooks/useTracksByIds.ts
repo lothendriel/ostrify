@@ -6,11 +6,14 @@ import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { parseN94Stream, parseTunestrStreamEvent } from "@/hooks/useTunestrStreams";
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
 import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
+import { useAppContext } from '@/hooks/useAppContext';
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
 export function useTracksByIds(ids: string[] | undefined, enabled = true, additionalRelays: string[] = []) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const key = (ids ?? []).join(",");
   const relayKey = [...new Set(additionalRelays)].sort().join("|");
 
@@ -79,7 +82,9 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true, additi
         const track = await fetchPodcastIndexEpisodes(episodeId, AbortSignal.any([c.signal, AbortSignal.timeout(12000)]));
         if (track) byId.set(track.id.toLowerCase(), track);
       }
-      for (const event of [...await eventsPromise, ...await addressEventsPromise]) {
+      const nostrEvents = [...await eventsPromise, ...await addressEventsPromise];
+      captureDiscoveredAudioEvents(nostr, nostrEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      for (const event of nostrEvents) {
         const track = event.kind === 1053
           ? parseN94Stream(event)?.track
           : event.kind === 30311
