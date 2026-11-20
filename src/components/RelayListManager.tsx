@@ -214,14 +214,14 @@ export function RelayListManager() {
   return (
     <div className="space-y-4">
       {/* Relay List */}
-      <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2">
         {relays.map((relay) => (
           <div
             key={relay.url}
-            className="flex items-center gap-3 p-3 rounded-md border bg-muted/20"
+            className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 rounded-md border bg-muted/20 p-2 sm:p-3"
           >
-            <Wifi className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="font-mono text-sm truncate min-w-0" title={relay.url}>
+            <Wifi className="size-4 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 truncate font-mono text-xs sm:text-sm" title={relay.url}>
               {renderRelayUrl(relay.url)}
             </span>
             <span
@@ -239,65 +239,65 @@ export function RelayListManager() {
               }`} />
             </span>
             {DEFAULT_RELAY_URLS.has(normalizeForCompare(relay.url)) ? (
-              <Badge variant="secondary" className="shrink-0 text-[10px] px-1.5 py-0">
+              <Badge variant="secondary" className="col-start-2 w-fit shrink-0 px-1.5 py-0 text-[10px]">
                 Default
               </Badge>
             ) : (
-              <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-muted-foreground">
+              <Badge variant="outline" className="col-start-2 w-fit shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground">
                 Custom
               </Badge>
             )}
-            <span className="flex-1" />
-
-            {/* Settings Popover */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-5 text-muted-foreground hover:text-foreground shrink-0"
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48" align="end">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={`read-${relay.url}`} className="text-sm cursor-pointer">
-                      Read
-                    </Label>
-                    <Switch
-                      id={`read-${relay.url}`}
-                      checked={relay.read}
-                      onCheckedChange={() => handleToggleRead(relay.url)}
-                      className="data-[state=checked]:bg-green-500 scale-75"
-                    />
+            <div className="col-start-3 row-start-2 flex items-center justify-end gap-1">
+              {/* Settings Popover */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-5 text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48" align="end">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`read-${relay.url}`} className="text-sm cursor-pointer">
+                        Read
+                      </Label>
+                      <Switch
+                        id={`read-${relay.url}`}
+                        checked={relay.read}
+                        onCheckedChange={() => handleToggleRead(relay.url)}
+                        className="data-[state=checked]:bg-green-500 scale-75"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor={`write-${relay.url}`} className="text-sm cursor-pointer">
+                        Write
+                      </Label>
+                      <Switch
+                        id={`write-${relay.url}`}
+                        checked={relay.write}
+                        onCheckedChange={() => handleToggleWrite(relay.url)}
+                        className="data-[state=checked]:bg-blue-500 scale-75"
+                      />
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor={`write-${relay.url}`} className="text-sm cursor-pointer">
-                      Write
-                    </Label>
-                    <Switch
-                      id={`write-${relay.url}`}
-                      checked={relay.write}
-                      onCheckedChange={() => handleToggleWrite(relay.url)}
-                      className="data-[state=checked]:bg-blue-500 scale-75"
-                    />
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+                </PopoverContent>
+              </Popover>
 
-            {/* Remove Button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleRemoveRelay(relay.url)}
-              className="size-5 text-muted-foreground hover:text-destructive hover:bg-transparent shrink-0"
-              disabled={relays.length <= 1}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+              {/* Remove Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleRemoveRelay(relay.url)}
+                className="size-5 text-muted-foreground hover:text-destructive hover:bg-transparent shrink-0"
+                disabled={relays.length <= 1}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         ))}
       </div>

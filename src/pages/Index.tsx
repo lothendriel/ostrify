@@ -110,10 +110,10 @@ const Index = () => {
       <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
       <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
       <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} />}</DeferredHomeSection>
-      <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Discover something new" rootMargin="0px">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />}</DeferredHomeSection>
 
-      <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home />}</DeferredHomeSection>
-      <DeferredHomeSection title="Fresh on Nostr">{near => <HomeFreshTracks candidates={tracks} enabled={near} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Music news" rootMargin="0px">{near => <MusicNewsSection enabled={near} home />}</DeferredHomeSection>
+      <DeferredHomeSection title="Fresh on Nostr" rootMargin="0px">{near => <HomeFreshTracks candidates={tracks} enabled={near} />}</DeferredHomeSection>
       <DeferredHomeSection title="Podcasts" rootMargin="0px">{near => <HomePodcastsSection enabled={near} />}</DeferredHomeSection>
 
       {homeTracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">Couldn’t load music from your read relays. Genre shelves may be unavailable. <button type="button" className="font-semibold text-primary underline" onClick={() => void homeTracksQuery.refetch()}>Try again</button></div>}

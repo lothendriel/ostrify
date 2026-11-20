@@ -8,8 +8,9 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
-const RELAY_LIMIT = 100;
-const FEATURED_LIMIT = 300;
+const RELAY_LIMIT = 60;
+const FEATURED_LIMIT = 100;
+const HOME_RELAY_GRACE_MS = 1500;
 const MUSIC_TOPICS = ["music", "tunestr", "song", "wavlake", "v4v", "value4value"];
 
 interface HomeTracksResult {
@@ -46,17 +47,43 @@ export function useHomeTracks(enabled = true) {
         return filters;
       };
 
-      const results = await Promise.all(relays.map(async relay => {
+      const relayController = new AbortController();
+      const relaySignal = AbortSignal.any([signal, relayController.signal]);
+      const results = relays.map(relay => ({
+        relay,
+        ok: false,
+        events: [] as NostrEvent[],
+        tracks: [] as Track[],
+      }));
+      const requests = relays.map(async (relay, index) => {
         try {
           const events = await nostr.relay(relay).query(filtersForRelay(relay), {
-            signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+            signal: AbortSignal.any([relaySignal, AbortSignal.timeout(8000)]),
           });
-          return { relay, ok: true, events, tracks: events.map(eventToTrack).filter((track): track is Track => !!track) };
+          results[index] = { relay, ok: true, events, tracks: events.map(eventToTrack).filter((track): track is Track => !!track) };
         } catch (error) {
           if (signal.aborted) throw error;
-          return { relay, ok: false, events: [] as NostrEvent[], tracks: [] as Track[] };
         }
-      }));
+      });
+      let graceTimer: ReturnType<typeof setTimeout> | undefined;
+      const firstResponse = await Promise.race([
+        Promise.any(requests.map(async (_request, index) => {
+          await requests[index];
+          if (!results[index].ok) throw new Error('Relay did not respond.');
+          return true;
+        })),
+        new Promise<false>(resolve => { graceTimer = setTimeout(() => resolve(false), HOME_RELAY_GRACE_MS); }),
+      ]).catch(() => false);
+      if (graceTimer) clearTimeout(graceTimer);
+      if (firstResponse && requests.some((_, index) => !results[index].ok)) {
+        await Promise.race([
+          Promise.allSettled(requests),
+          new Promise<void>(resolve => { graceTimer = setTimeout(resolve, HOME_RELAY_GRACE_MS); }),
+        ]);
+        if (graceTimer) clearTimeout(graceTimer);
+      }
+      if (signal.aborted) throw signal.reason;
+      relayController.abort();
 
       const discoveredEvents = results.flatMap(result => result.ok ? result.events : []);
       captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
