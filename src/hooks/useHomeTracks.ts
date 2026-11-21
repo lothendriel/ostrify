@@ -3,14 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
+import { CATEGORIES } from "@/lib/categories";
 import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
-const RELAY_LIMIT = 60;
-const FEATURED_LIMIT = 100;
+const RELAY_LIMIT = 150;
+const FEATURED_LIMIT = 250;
+const HOME_GENRE_TOPICS = [...new Set(CATEGORIES.flatMap(category => category.match.filter(topic => !topic.includes(" ")).slice(0, 2)))].filter(topic => topic.length <= 30);
 const HOME_RELAY_GRACE_MS = 1500;
 const MUSIC_TOPICS = ["music", "tunestr", "song", "wavlake", "v4v", "value4value"];
 
@@ -46,6 +48,9 @@ export function useHomeTracks(enabled = true) {
             ];
         if (relay !== DROPS_MUSIC_RELAY && relay !== OSTRIFY_RELAY_URL && FEATURED_MUSIC_PUBKEYS.length) {
           filters.push({ kinds: [...MUSIC_TRACK_KINDS], authors: FEATURED_MUSIC_PUBKEYS, limit: FEATURED_LIMIT });
+        }
+        for (let index = 0; index < HOME_GENRE_TOPICS.length; index += 10) {
+          filters.push({ kinds: [...MUSIC_TRACK_KINDS, 1063], "#t": HOME_GENRE_TOPICS.slice(index, index + 10), limit: RELAY_LIMIT });
         }
         return filters;
       };

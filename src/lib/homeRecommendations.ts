@@ -66,12 +66,14 @@ export function buildVariedHomeShelf({
   const tasteArtists = new Set([...musicHistory, ...musicLiked].flatMap(artistKeys));
   const followed = new Set<string>();
   for (const reference of followedArtists) {
-    if (/^[0-9a-f]{64}$/i.test(reference)) followed.add(`pubkey:${reference.toLowerCase()}`);
+    if (/^[0-9a-f]{64}$/i.test(reference)) {
+      followed.add(reference.toLowerCase());
+      followed.add(`publisher:${reference.toLowerCase()}`);
+      followed.add(`pubkey:${reference.toLowerCase()}`);
+    }
     if (reference.startsWith('wavlake:')) followed.add(reference.toLowerCase());
   }
   const tasteTopics = new Set([...musicHistory, ...musicLiked].flatMap(trackTopics));
-  const followedTopics = new Set([...followedArtists.flatMap(reference => reference.startsWith('topic:') ? [reference.slice(6).toLocaleLowerCase()] : [])]);
-  const allTasteTopics = new Set([...tasteTopics, ...followedTopics]);
   const heardIds = new Set(musicHistory.map(track => track.id));
   const heardUrls = new Set(musicHistory.map(track => track.url));
   const likedIds = new Set(musicLiked.map(track => track.id));
@@ -86,7 +88,7 @@ export function buildVariedHomeShelf({
     const artists = artistKeys(track);
     const topics = trackTopics(track);
     const artistMatch = artists.some(key => tasteArtists.has(key) || followed.has(key));
-    const topicMatch = topics.some(topic => allTasteTopics.has(topic));
+    const topicMatch = topics.some(topic => tasteTopics.has(topic));
     const familiar = artistMatch || topicMatch;
     const ageDays = track.createdAt > 0 ? Math.max(0, (now - track.createdAt) / 86400) : 365;
     // Treat tracks published on the same day as similarly fresh, so the per-load

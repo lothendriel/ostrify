@@ -1,6 +1,6 @@
 import type { Track } from "@/lib/music";
 import { Link } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, RefreshCw } from "lucide-react";
 import { TrackCard } from "./TrackCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalCarousel } from "@/components/music/HorizontalCarousel";
@@ -14,9 +14,12 @@ interface ShelfProps {
   compactCards?: boolean;
   seeAllHref?: string;
   emptyMessage?: string;
+  carouselRows?: 1 | 2;
+  carouselClassName?: string;
+  onRefresh?: () => void;
 }
 
-export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref, emptyMessage }: ShelfProps) {
+export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref, emptyMessage, carouselRows = 1, carouselClassName, onRefresh }: ShelfProps) {
   if (!isLoading && tracks.length === 0 && !emptyMessage) return null;
 
   return (
@@ -26,13 +29,16 @@ export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compa
           <h2 className="text-2xl font-bold tracking-tight">{title}</h2>
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
-        {seeAllHref && (
-          <Link to={seeAllHref} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
-            See all <ChevronRight className="size-4" />
-          </Link>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {onRefresh && <button type="button" onClick={onRefresh} aria-label={`Refresh ${title} tracks`} title={`Show another ${title} selection`} className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"><RefreshCw className="size-4" /></button>}
+          {seeAllHref && (
+            <Link to={seeAllHref} className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
+              See all <ChevronRight className="size-4" />
+            </Link>
+          )}
+        </div>
       </div>
-      {tracks.length === 0 && !isLoading && emptyMessage ? <div className="rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">{emptyMessage}</div> : <HorizontalCarousel label={`${title} tracks`}>
+      {tracks.length === 0 && !isLoading && emptyMessage ? <div className="rounded-lg border border-dashed border-border px-4 py-5 text-sm text-muted-foreground">{emptyMessage}</div> : <HorizontalCarousel label={`${title} tracks`} rows={carouselRows} className={carouselClassName}>
         {isLoading
           ? Array.from({ length: 8 }, (_, index) => (
               <div key={index} className="min-w-0 snap-start space-y-3 p-2 sm:p-3">

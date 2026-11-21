@@ -199,7 +199,7 @@ export function useWavlakeCatalog(artistId?: string, enabled = true) {
   });
 }
 
-export function useWavlakeGenreCatalog(genres: string[]) {
+export function useWavlakeGenreCatalog(genres: string[], enabled = true) {
   return useQueries({
     queries: genres.map((genre) => ({
       queryKey: ['wavlake', 'genre-catalog', genre],
@@ -210,6 +210,7 @@ export function useWavlakeGenreCatalog(genres: string[]) {
       },
       staleTime: 5 * 60 * 1000,
       retry: 1,
+      enabled,
     })),
   });
 }

@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { useHomeTracks } from "@/hooks/useHomeTracks";
-import { useWavlakeCatalog } from "@/hooks/useWavlake";
+import { useWavlakeCatalog, useWavlakeGenreCatalog } from "@/hooks/useWavlake";
 import { useFreshNostrTracks } from "@/hooks/useFreshNostrTracks";
 import { useNearViewport } from "@/hooks/useNearViewport";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
+import { usePlaylists } from "@/hooks/usePlaylists";
+import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { Shelf } from "@/components/music/Shelf";
 import { MadeForYouSection } from "@/components/music/MadeForYouSection";
 import { DailyDiscoverySection } from "@/components/music/DailyDiscoverySection";
@@ -45,43 +47,75 @@ const Index = () => {
   const tracksLoading = homeTracksQuery.isLoading;
   const wavlake = useWavlakeCatalog(undefined, discoveryEnabled);
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
+  const genreCatalogQueries = useWavlakeGenreCatalog([...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))], discoveryEnabled);
+  const genreCatalogVersion = genreCatalogQueries.map(query => query.dataUpdatedAt).join('|');
+  const genreCatalogTracks = useMemo(() => genreCatalogQueries.flatMap(query => query.data ?? []), [genreCatalogVersion]);
   const player = usePlayer();
   const followedArtists = useFollowedArtists(discoveryEnabled);
   const [pageSeed] = useState(() => crypto.randomUUID());
   const [shelfVariation, setShelfVariation] = useState(0);
-  const [recentShelfHistory] = useState(readHomeShelfHistory);
-  const allMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
-  const categoryShelves = useMemo(() => CATEGORIES.map(category => {
-    const categoryTracks = tracksInCategory(allMusic, category.id);
-    const recentlyShown = new Set(recentShelfHistory[category.id] ?? []);
-    const alternateTracks = categoryTracks.filter(track => !recentlyShown.has(track.id));
-    const select = (candidates: typeof allMusic, limit: number) => buildVariedHomeShelf({
-      candidates,
-      history: [],
-      liked: [],
-      followedArtists: [],
-      limit,
-      variation: shelfVariation,
-      seed: pageSeed,
-      familiarSlots: 1,
+  const recentShelfHistory = useRef(readHomeShelfHistory());
+  const currentShelves = useRef<{ categoryId: string; tracks: Track[] }[]>([]);
+  const allMusic = useMemo(() => [...tracks, ...wavlakeTracks, ...genreCatalogTracks], [tracks, wavlakeTracks, genreCatalogTracks]);
+  const playlists = usePlaylists(discoveryEnabled);
+  const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
+  const likedQuery = useTracksByIds(likedPlaylist?.trackIds, discoveryEnabled);
+  const likedTracks = likedQuery.data?.tracks ?? [];
+  const categoryShelves = useMemo(() => {
+    const shownOnPage = new Set<string>();
+    return CATEGORIES.map(category => {
+      const genreTracks = genreCatalogTracks.filter(track => category.wavlakeGenres?.some(genre => track.topics.includes(genre.toLowerCase())));
+      const categoryPool = category.wavlakeGenres?.length
+        ? [...allMusic, ...genreTracks].map(track => genreTracks.includes(track) && category.match.length ? { ...track, topics: [...track.topics, category.match[0]] } : track)
+        : allMusic;
+      const categoryTracks = tracksInCategory(categoryPool, category.id);
+      const recentlyShown = new Set(recentShelfHistory.current[category.id] ?? []);
+      const freshCandidates = categoryTracks.filter(track => !recentlyShown.has(track.id) && !recentlyShown.has(track.url));
+      const unshownCandidates = freshCandidates.filter(track => !shownOnPage.has(track.id) && !shownOnPage.has(track.url));
+      const select = (candidates: typeof allMusic, limit: number) => buildVariedHomeShelf({
+        candidates,
+        history: player.history,
+        liked: likedTracks,
+        followedArtists: followedArtists.data ?? [],
+        limit,
+        variation: shelfVariation,
+        seed: pageSeed,
+        familiarSlots: 2,
+      });
+      const preferred = select(unshownCandidates.length >= 4 ? unshownCandidates : freshCandidates, 4);
+      const selected = preferred.length < 4
+        ? [...preferred, ...select(categoryTracks.filter(item => !preferred.some(track => track.id === item.id || track.url === item.url)), 4 - preferred.length)].slice(0, 4)
+        : preferred;
+      for (const track of selected) {
+        shownOnPage.add(track.id);
+        shownOnPage.add(track.url);
+      }
+      return { category, tracks: selected };
     });
-    const preferred = select(alternateTracks, 15);
-    const selected = preferred.length < 15
-      ? [...preferred, ...select(categoryTracks.filter(item => !preferred.some(track => track.id === item.id)), 15 - preferred.length)].slice(0, 15)
-      : preferred;
-    return { category, tracks: selected };
-  }), [allMusic, shelfVariation, pageSeed, recentShelfHistory]);
+  }, [allMusic, genreCatalogVersion, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
 
   useEffect(() => {
-    if (!homeTracksQuery.data && !wavlake.data) return;
-    const nextHistory = { ...recentShelfHistory };
-    for (const { category, tracks: categoryTracks } of categoryShelves) {
-      const freshCategoryTracks = categoryTracks.filter(track => tracksInCategory([track], category.id).length > 0);
-      if (!freshCategoryTracks.length) continue;
-      nextHistory[category.id] = [...new Set([...freshCategoryTracks.map(track => track.id), ...(recentShelfHistory[category.id] ?? [])])].slice(0, 45);
+    if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
+    currentShelves.current = categoryShelves.map(({ category, tracks: shelfTracks }) => ({ categoryId: category.id, tracks: shelfTracks }));
+    const nextHistory = { ...recentShelfHistory.current };
+    for (const { categoryId, tracks: shelfTracks } of currentShelves.current) {
+      if (!shelfTracks.length) continue;
+      nextHistory[categoryId] = [...new Set([...shelfTracks.flatMap(track => [track.id, track.url]), ...(nextHistory[categoryId] ?? [])])].slice(0, 90);
     }
+    recentShelfHistory.current = nextHistory;
     writeHomeShelfHistory(nextHistory);
-  }, [categoryShelves, homeTracksQuery.data, wavlake.data, recentShelfHistory]);
+  }, [categoryShelves]);
+
+  const refreshGenreShelves = () => {
+    const nextHistory = { ...recentShelfHistory.current };
+    for (const { categoryId, tracks: shelfTracks } of currentShelves.current) {
+      if (!shelfTracks.length) continue;
+      nextHistory[categoryId] = [...new Set([...shelfTracks.flatMap(track => [track.id, track.url]), ...(recentShelfHistory.current[categoryId] ?? [])])].slice(0, 90);
+    }
+    recentShelfHistory.current = nextHistory;
+    writeHomeShelfHistory(nextHistory);
+    setShelfVariation(value => value + 1);
+  };
 
   const { greeting, greetingImage } = (() => {
     const hour = new Date().getHours();
@@ -119,11 +153,13 @@ const Index = () => {
       {homeTracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">Couldn’t load music from your read relays. Genre shelves may be unavailable. <button type="button" className="font-semibold text-primary underline" onClick={() => void homeTracksQuery.refetch()}>Try again</button></div>}
       {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}
       {wavlake.isError && <p role="status" className="text-xs text-muted-foreground">Wavlake catalog results aren’t available right now; genre shelves use music from responding relays.</p>}
-      {categoryShelves.map(({ category, tracks: categoryTracks }) => (
-        <DeferredHomeSection key={category.id} title={category.label}>
-          <Shelf title={category.label} tracks={categoryTracks} dense seeAllHref={`/category/${category.id}`} />
-        </DeferredHomeSection>
-      ))}
+      <section aria-label="Browse music by genre" className="grid grid-cols-1 gap-6 sm:grid-cols-2 2xl:grid-cols-3">
+        {categoryShelves.map(({ category, tracks: categoryTracks }) => (
+          <DeferredHomeSection key={category.id} title={category.label} rootMargin="600px 0px">
+            <Shelf title={category.label} tracks={categoryTracks} dense compactCards carouselRows={2} seeAllHref={`/category/${category.id}`} carouselClassName="grid-rows-2" onRefresh={refreshGenreShelves} />
+          </DeferredHomeSection>
+        ))}
+      </section>
 
       {discoveryEnabled && !tracksLoading && !wavlake.isLoading && allMusic.length === 0 && (
         <div className="rounded-lg border border-dashed border-border px-8 py-16 text-center">
