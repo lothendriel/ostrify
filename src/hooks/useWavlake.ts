@@ -36,6 +36,25 @@ function id(value: unknown): string | undefined { const v = text(value); return 
 
 const WAVLAKE_REQUEST_TIMEOUT_MS = 8000;
 
+function waitForCatalogStart(signal: AbortSignal, delayMs: number): Promise<void> {
+  if (delayMs <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 async function fetchAttempt(url: string, signal: AbortSignal): Promise<Response> {
   return fetch(url, {
     signal: AbortSignal.any([signal, AbortSignal.timeout(WAVLAKE_REQUEST_TIMEOUT_MS)]),
@@ -206,14 +225,15 @@ export function useWavlakeCatalog(artistId?: string, enabled = true, sessionScop
   });
 }
 
-export function useWavlakeGenreCatalog(genres: string[], enabled = true, enabledGenres?: string[], sessionScope?: string) {
+export function useWavlakeGenreCatalog(genres: string[], enabled = true, enabledGenres?: string[], sessionScope?: string, staggerRequests = false) {
   const { user } = useCurrentUser();
   const scopedSession = sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined;
   const enabledSet = enabledGenres ? new Set(enabledGenres) : undefined;
   return useQueries({
-    queries: genres.map((genre) => ({
+    queries: genres.map((genre, index) => ({
       queryKey: homeSessionQueryKey(scopedSession, ['wavlake', 'genre-catalog', genre]),
       queryFn: async ({ signal }) => {
+        if (staggerRequests) await waitForCatalogStart(signal, Math.min(index * 120, 900));
         const data = object(await fetchApi('tracks', { limit: '50', genre }, signal));
         if (!data || !Array.isArray(data.tracks)) throw new Error('Invalid Wavlake catalog response');
         return data.tracks.map(parseTrack).filter((track): track is Track => !!track);

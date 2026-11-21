@@ -103,7 +103,7 @@ const Index = () => {
   const categoriesNeedingCatalog = useMemo(() => new Set(baseSourcesLoading ? [] : CATEGORIES
     .filter(category => category.wavlakeGenres?.length && new Set((baseTracksByCategory.get(category.id) ?? []).map(track => track.url)).size < 8)
     .flatMap(category => category.wavlakeGenres ?? [])), [baseTracksByCategory, baseSourcesLoading]);
-  const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog], homeAccountScope);
+  const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog], homeAccountScope, true);
   const genreCatalogVersion = genreCatalogQueries.map((query, index) => `${HOME_WAVLAKE_GENRES[index]}:${query.dataUpdatedAt}:${query.isLoading}`).join('|');
   const genreCatalogTracks = useMemo(() => genreCatalogQueries.flatMap(query => query.data ?? []), [genreCatalogVersion]);
   const genreCatalogTracksByGenre = useMemo(() => new Map(HOME_WAVLAKE_GENRES.map((genre, index) => [genre, genreCatalogQueries[index]?.data ?? []] as const)), [genreCatalogVersion]);

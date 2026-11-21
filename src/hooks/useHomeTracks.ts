@@ -17,6 +17,26 @@ const HOME_GENRE_TOPICS = [...new Set(CATEGORIES.flatMap(category => category.ma
 const HOME_RELAY_GRACE_MS = 1500;
 const MUSIC_TOPICS = ["music", "tunestr", "song", "wavlake", "v4v", "value4value"];
 
+function waitForRelayStart(signal: AbortSignal, relayIndex: number): Promise<void> {
+  const delayMs = Math.min(relayIndex * 120, 600);
+  if (delayMs === 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 interface HomeTracksResult {
   tracks: Track[];
   failedRelays: string[];
@@ -71,6 +91,7 @@ export function useHomeTracks(enabled = true, sessionScope?: string) {
       }));
       const requests = relays.map(async (relay, index) => {
         try {
+          await waitForRelayStart(relaySignal, index);
           const eventsPromise = nostr.relay(relay).query(filtersForRelay(relay), {
             signal: AbortSignal.any([relaySignal, AbortSignal.timeout(8000)]),
           });
