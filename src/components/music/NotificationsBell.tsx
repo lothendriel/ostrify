@@ -7,6 +7,7 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
+import { getUserRelayUrls } from '@/lib/appRelays';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { Button } from '@/components/ui/button';
@@ -75,7 +76,10 @@ function useNotificationsModel() {
   const [accountStore, setAccountStore] = useState<{ pubkey: string; store: NotificationStore } | null>(() =>
     user ? { pubkey: user.pubkey, store: readStore(user.pubkey) } : null,
   );
-  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const readRelays = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+  ])].sort();
   const relayKey = readRelays.join('|');
   const followQuery = useQuery({
     queryKey: ['ostrify-notifications-follow-events', user?.pubkey ?? '', relayKey],

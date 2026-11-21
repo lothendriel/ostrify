@@ -4,6 +4,7 @@ import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { isOstrifyMusicPlaylist } from '@/lib/musicPlaylists';
+import { getUserRelayUrls } from '@/lib/appRelays';
 import { clearPlaylistVisibilityOverride, parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, type PublicMusicPlaylist, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
 
 function isNewerPlaylistEvent(candidate: NostrEvent, current: NostrEvent): boolean {
@@ -26,7 +27,10 @@ export function usePublicMusicPlaylists(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const relays = [...new Set(config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url))].sort();
+  const relays = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+  ])].sort();
   const relayKey = relays.join('|');
 
   return useQuery({

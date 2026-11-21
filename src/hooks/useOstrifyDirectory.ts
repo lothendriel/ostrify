@@ -5,6 +5,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAppContext } from '@/hooks/useAppContext';
 import { sanitizeUrl } from '@/lib/sanitize';
+import { getUserDataReadRelays } from '@/lib/appRelays';
 
 const DIRECTORY_ID = 'ostrify-directory-v1';
 const DIRECTORY_TOPIC = 'ostrify-directory-v1';
@@ -40,7 +41,7 @@ export function useDirectoryEnrollment() {
   const { mutateAsync: publish } = useNostrPublish();
   const client = useQueryClient();
   const { config } = useAppContext();
-  const relayKey = config.relayMetadata.relays.filter(r => r.read).map(r => r.url).sort().join('|');
+  const relayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join('|');
   const key = ['ostrify-directory-enrollment', user?.pubkey ?? '', relayKey];
   const query = useQuery({
     queryKey: key,
@@ -48,7 +49,7 @@ export function useDirectoryEnrollment() {
     retry: false,
     queryFn: async ({ signal }) => {
       if (!user) return undefined;
-      const events = await nostr.query([{ kinds: [KIND], authors: [user.pubkey], '#d': [DIRECTORY_ID], limit: 20 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      const events = await nostr.query([{ kinds: [KIND], authors: [user.pubkey], '#d': [DIRECTORY_ID], limit: 20 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]), relays: relayKey.split('|') });
       return latestByAuthor(events.filter(event => event.pubkey === user.pubkey))[0] ?? null;
     },
   });
@@ -58,7 +59,7 @@ export function useDirectoryEnrollment() {
       if (!relayKey) throw new Error('Enable a read relay before changing directory visibility.');
       // Check the author's latest listing before replacing it. Never infer absence
       // from a failed query or overwrite a different user's addressable event.
-      const events = await nostr.query([{ kinds: [KIND], authors: [user.pubkey], '#d': [DIRECTORY_ID], limit: 20 }], { signal: AbortSignal.timeout(8000) });
+      const events = await nostr.query([{ kinds: [KIND], authors: [user.pubkey], '#d': [DIRECTORY_ID], limit: 20 }], { signal: AbortSignal.timeout(8000), relays: relayKey.split('|') });
       const previous = latestByAuthor(events.filter(event => event.pubkey === user.pubkey))[0];
       const now = Math.floor(Date.now() / 1000);
       if (previous && previous.created_at >= now) throw new Error('Please wait a moment before changing visibility again.');

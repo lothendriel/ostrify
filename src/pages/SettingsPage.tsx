@@ -1,8 +1,11 @@
 import { useSeoMeta } from "@unhead/react";
 import { useEffect, useState } from "react";
+import { useNostr } from "@nostrify/react";
 import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users, Mic, HardDriveUpload, Disc3 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { X, RotateCcw } from "lucide-react";
+import { getUserRelayUrls, normalizeRelayAddress } from "@/lib/appRelays";
 import { RelayListManager } from "@/components/RelayListManager";
 import { useTheme } from "@/hooks/useTheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -13,11 +16,95 @@ import { useDirectoryEnrollment } from "@/hooks/useOstrifyDirectory";
 import { useToast } from "@/hooks/useToast";
 import { useProfilePrivacy } from "@/hooks/useProfilePrivacy";
 import { BlossomServerManager } from "@/components/BlossomServerManager";
+import type { NPool } from "@nostrify/nostrify";
+
+interface UserRelayStatusListProps {
+  relays: { url: string; read: boolean; write: boolean }[];
+  excludedRelayUrls: string[];
+  nostr: NPool;
+  onRemove: (url: string) => void;
+  onRestore: (url: string) => void;
+}
+
+type RelayHealth = 'checking' | 'reachable' | 'unreachable';
+
+function UserRelayStatusList({ relays, excludedRelayUrls, nostr, onRemove, onRestore }: UserRelayStatusListProps) {
+  const excluded = new Set(excludedRelayUrls.map(normalizeRelayAddress));
+  const [health, setHealth] = useState<Record<string, RelayHealth>>({});
+  const relayKey = relays.map(relay => relay.url).join('|');
+
+  useEffect(() => {
+    let active = true;
+    const urls = relayKey ? relayKey.split('|') : [];
+    setHealth(current => Object.fromEntries(urls.map(url => [url, current[url] ?? 'checking'])));
+
+    const check = async (url: string) => {
+      try {
+        let receivedEose = false;
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 7000);
+        try {
+          for await (const message of nostr.relay(url).req([{ kinds: [0], limit: 1 }], { signal: controller.signal })) {
+            if (message[0] === 'EOSE') {
+              receivedEose = true;
+              break;
+            }
+          }
+        } finally {
+          window.clearTimeout(timeout);
+        }
+        if (active) setHealth(current => ({ ...current, [url]: receivedEose ? 'reachable' : 'unreachable' }));
+      } catch {
+        if (active) setHealth(current => ({ ...current, [url]: 'unreachable' }));
+      }
+    };
+
+    for (const url of urls) void check(url);
+    const interval = window.setInterval(() => { for (const url of urls) void check(url); }, 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [nostr, relayKey]);
+
+  if (relays.length === 0) {
+    return <p className="pt-2 text-xs text-muted-foreground">All NIP-65 relays are currently removed from Ostrify. Their published NIP-65 list is unchanged.</p>;
+  }
+
+  return (
+    <>
+      <ul aria-label="Your NIP-65 read and write relays" className="space-y-2 pt-2">
+      {relays.map(relay => {
+        const status = health[relay.url] ?? 'checking';
+        const isExcluded = excluded.has(normalizeRelayAddress(relay.url));
+        const label = status === 'reachable' ? 'Read connection reachable' : status === 'unreachable' ? 'Read connection unavailable' : 'Checking read connection';
+        return (
+          <li key={relay.url} className="flex min-w-0 items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
+            <span role="status" aria-label={`${relay.url}: ${label}`} title={`${label}; publishing is not tested`} className="inline-flex size-3 shrink-0 items-center justify-center rounded-full">
+              <span className={`size-2.5 rounded-full shadow-[0_0_8px_currentColor] ${status === 'reachable' ? 'bg-emerald-500 text-emerald-500' : status === 'unreachable' ? 'bg-red-500 text-red-500' : 'animate-pulse bg-amber-400 text-amber-400'}`} />
+            </span>
+            <span className="min-w-0 flex-1 truncate font-mono text-xs" title={relay.url}>{relay.url}</span>
+            <span className="flex shrink-0 gap-2 text-[11px] text-muted-foreground">
+              {relay.read && <span>{isExcluded ? 'Read off' : 'Read'}</span>}
+              {relay.write && <span>{isExcluded ? 'Write off' : 'Write'}</span>}
+            </span>
+            <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0 text-muted-foreground hover:text-primary" onClick={() => isExcluded ? onRestore(relay.url) : onRemove(relay.url)} aria-label={isExcluded ? `Restore ${relay.url} in Ostrify` : `Remove ${relay.url} from Ostrify`} title={isExcluded ? 'Restore in Ostrify' : 'Remove from Ostrify only'}>
+              {isExcluded ? <RotateCcw className="size-4" /> : <X className="size-4" />}
+            </Button>
+          </li>
+        );
+      })}
+      </ul>
+      <p className="text-xs text-muted-foreground">Remove only disables a relay in Ostrify. It does not alter your published NIP-65 relay list. Restore brings it back for Ostrify.</p>
+    </>
+  );
+}
 
 const SettingsPage = () => {
   useSeoMeta({ title: "Settings — Ostrify" });
   const { theme, setTheme } = useTheme();
   const { user } = useCurrentUser();
+  const { nostr } = useNostr();
   const { config, updateConfig } = useAppContext();
   const sharing = useListeningSharing();
   const [clearResult, setClearResult] = useState<ListeningStatusClearResult | null>(null);
@@ -58,31 +145,38 @@ const SettingsPage = () => {
               <Switch
                 id="include-user-relays"
                 checked={config.includeUserRelays}
-                disabled={!user || config.userRelayPubkey !== user.pubkey || config.userRelayMetadata.relays.length === 0}
+                disabled={!user || config.userRelayPubkey !== user.pubkey || getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).length === 0}
                 onCheckedChange={(enabled) => updateConfig(current => ({ ...current, includeUserRelays: enabled }))}
               />
               <div className="space-y-1">
-                <label htmlFor="include-user-relays" className="text-sm font-medium">Also use my NIP-65 read/write relays in Ostrify</label>
+                <label htmlFor="include-user-relays" className="text-sm font-medium">Also use my NIP-65 read relays for broader discovery</label>
                 <p className="text-xs text-muted-foreground">
-                  When enabled, Ostrify adds your profile’s NIP-65 read relays for fetching and write relays for publishing. This is separate from your Blossom server list, which remains available for media uploads.
+                  Ostrify uses your NIP-65 write relays for your own settings, libraries, and music. This optional setting also uses your read relays for broader discovery. Blossom servers remain separate for media uploads.
                 </p>
               </div>
             </div>
             {!user && <p className="text-xs text-muted-foreground">Log in to use your NIP-65 relays.</p>}
             {user && config.userRelayPubkey !== user.pubkey && <p role="status" className="text-xs text-muted-foreground">Loading your NIP-65 relay list…</p>}
-            {user && config.userRelayPubkey === user.pubkey && config.userRelayMetadata.relays.length === 0 && <p className="text-xs text-muted-foreground">No NIP-65 relay list was found for this account. Your Blossom server list is managed separately below.</p>}
+            {user && config.userRelayPubkey === user.pubkey && !config.userRelayMetadata.relays.some(relay => relay.read || relay.write) && <p className="text-xs text-muted-foreground">No NIP-65 relay list was found for this account. Your Blossom server list is managed separately below.</p>}
             {user && config.userRelayPubkey === user.pubkey && config.userRelayMetadata.relays.length > 0 && (
-              <ul aria-label="Your NIP-65 read and write relays" className="space-y-2 pt-2">
-                {config.userRelayMetadata.relays.map(relay => (
-                  <li key={relay.url} className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
-                    <span className="min-w-0 truncate font-mono text-xs" title={relay.url}>{relay.url}</span>
-                    <span className="flex shrink-0 gap-2 text-[11px] text-muted-foreground">
-                      {relay.read && <span>Read</span>}
-                      {relay.write && <span>Write</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <UserRelayStatusList
+                relays={config.userRelayMetadata.relays}
+                excludedRelayUrls={config.excludedUserRelayPubkey === user.pubkey ? config.excludedUserRelayUrls : []}
+                nostr={nostr}
+                onRemove={(url) => updateConfig(current => ({
+                  ...current,
+                  excludedUserRelayPubkey: user.pubkey,
+                  excludedUserRelayUrls: [...new Set([
+                    ...(current.excludedUserRelayPubkey === user.pubkey ? current.excludedUserRelayUrls ?? [] : []),
+                    url,
+                  ])],
+                }))}
+                onRestore={(url) => updateConfig(current => ({
+                  ...current,
+                  excludedUserRelayPubkey: user.pubkey,
+                  excludedUserRelayUrls: (current.excludedUserRelayPubkey === user.pubkey ? current.excludedUserRelayUrls ?? [] : []).filter(excluded => normalizeRelayAddress(excluded) !== normalizeRelayAddress(url)),
+                }))}
+              />
             )}
           </div>
         </CardContent>

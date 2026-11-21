@@ -14,6 +14,37 @@ export function isRequiredAppRelay(url: string): boolean {
   return normalizeRelayAddress(url) === normalizeRelayAddress(OSTRIFY_RELAY_URL);
 }
 
+/** Get current-account relay URLs for one NIP-65 permission, omitting local Ostrify exclusions. */
+export function getUserRelayUrls(
+  userRelays: RelayMetadata,
+  relayListPubkey: string,
+  userPubkey: string,
+  permission: 'read' | 'write',
+  excludedRelayUrls: string[] = [],
+  exclusionPubkey = relayListPubkey,
+): string[] {
+  if (!userPubkey || relayListPubkey !== userPubkey) return [];
+  const excluded = new Set(exclusionPubkey === userPubkey ? excludedRelayUrls.map(normalizeRelayAddress) : []);
+  return userRelays.relays
+    .filter(relay => relay[permission] && !excluded.has(normalizeRelayAddress(relay.url)))
+    .map(relay => relay.url);
+}
+
+/** Read locations for the current user's authored data: app-readable relays plus their NIP-65 write relays. */
+export function getUserDataReadRelays(
+  appRelays: RelayMetadata,
+  userRelays: RelayMetadata,
+  relayListPubkey: string,
+  userPubkey: string,
+  excludedRelayUrls: string[] = [],
+  exclusionPubkey = relayListPubkey,
+): string[] {
+  return [...new Set([
+    ...appRelays.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(userRelays, relayListPubkey, userPubkey, 'write', excludedRelayUrls, exclusionPubkey),
+  ])].sort();
+}
+
 export const APP_RELAYS: RelayMetadata = {
   relays: [
     // Ostrify's own catalog and user-library relay; always available to read and publish.

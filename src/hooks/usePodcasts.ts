@@ -9,7 +9,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
-import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { getUserDataReadRelays, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 export interface PodcastShow {
   id: string;
@@ -1241,7 +1241,7 @@ export function usePodcastFavorites() {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
-  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+  const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
   const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey];
   const query = useQuery({
     queryKey,
@@ -1319,7 +1319,7 @@ export function usePodcastFavoriteActions() {
   const { config } = useAppContext();
   const { mutateAsync: publish } = useNostrPublish();
   const queryClient = useQueryClient();
-  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+  const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
   const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey];
 
   const toggleFavorite = useMutation({
@@ -1327,7 +1327,7 @@ export function usePodcastFavoriteActions() {
       if (!user) throw new Error("Log in to save podcasts");
       if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
       if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
-      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], '#d': ['favorite-podcasts'], limit: 10 }], { signal: AbortSignal.timeout(15000) });
+      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], '#d': ['favorite-podcasts'], limit: 10 }], { signal: AbortSignal.timeout(15000), relays: readRelayKey.split('|') });
       const existing = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND && item.tags.some(([name, value]) => name === "d" && value === "favorite-podcasts")).sort((a, b) => b.created_at - a.created_at)[0];
       const current = parsePodcastFavorites(existing);
       const has = current.some(item => item.id === input.favorite.id);

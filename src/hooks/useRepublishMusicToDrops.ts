@@ -5,13 +5,14 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
+import { getUserDataReadRelays } from "@/lib/appRelays";
 
 export function useRepublishMusicToDrops() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
-  const readRelays = [...new Set(config.relayMetadata.relays.filter(relay => relay.read && relay.url !== DROPS_MUSIC_RELAY).map(relay => relay.url))].sort();
+  const readRelays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).filter(url => url !== DROPS_MUSIC_RELAY);
 
   const tracks = useQuery({
     queryKey: ["republish-music-to-drops", user?.pubkey ?? "", readRelays.join("|"), DROPS_MUSIC_RELAY],

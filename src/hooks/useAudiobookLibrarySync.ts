@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAudiobookLibrary, getAudiobookLibrarySnapshot, parseAudiobookLibrary, replaceAudiobookLibrary, type AudiobookLibraryState } from '@/hooks/useAudiobookLibrary';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { getUserDataReadRelays, getUserRelayUrls } from '@/lib/appRelays';
 import { useToast } from '@/hooks/useToast';
 
 const LIBRARY_KIND = 30078;
@@ -93,9 +94,12 @@ export function useAudiobookLibrarySync(enabled = true) {
   const queryRequestedByLibrary = useRef(false);
   const previousIdentity = useRef<string | null>(null);
   const previousEnabled = useRef(enabled);
-  const relays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const relays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
   const relayKey = relays.join('|');
-  const writeRelayKey = config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url).sort().join('|');
+  const writeRelayKey = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.write && !config.excludedUserRelayUrls.some(url => url.trim().replace(/\/+$/, '').toLowerCase() === relay.url.trim().replace(/\/+$/, '').toLowerCase())).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'write', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+  ])].sort().join('|');
   const query = useQuery({
     queryKey: ['audiobook-library-remote', user?.pubkey ?? '', relayKey],
     enabled: enabled && !!user && !!relayKey && syncRequested,

@@ -7,7 +7,7 @@ import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
-import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { getUserRelayUrls, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 const PER_KIND_LIMIT = 100;
 
@@ -17,7 +17,8 @@ export function useFreshNostrTracks(enabled = true) {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const relays = [...new Set([
-    ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url),
+    ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
     DROPS_MUSIC_RELAY,
     OSTRIFY_RELAY_URL,
   ])].sort();

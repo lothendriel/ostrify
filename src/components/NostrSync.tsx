@@ -25,6 +25,8 @@ export function NostrSync() {
           userRelayMetadata: { relays: [], updatedAt: 0 },
           userRelayPubkey: '',
           includeUserRelays: false,
+          excludedUserRelayUrls: [],
+          excludedUserRelayPubkey: '',
         }));
       }
       return;
@@ -37,6 +39,8 @@ export function NostrSync() {
         userRelayMetadata: { relays: [], updatedAt: 0 },
         userRelayPubkey: user.pubkey,
         includeUserRelays: false,
+        excludedUserRelayUrls: [],
+        excludedUserRelayPubkey: user.pubkey,
       }));
     }
 
@@ -60,6 +64,9 @@ export function NostrSync() {
                 ...current,
                 userRelayMetadata: { relays: [], updatedAt: 0 },
                 userRelayPubkey: user.pubkey,
+                includeUserRelays: false,
+                excludedUserRelayUrls: [],
+                excludedUserRelayPubkey: user.pubkey,
               });
         }
         if (!event) {
@@ -69,6 +76,9 @@ export function NostrSync() {
                 ...current,
                 userRelayMetadata: { relays: [], updatedAt: 0 },
                 userRelayPubkey: user.pubkey,
+                includeUserRelays: false,
+                excludedUserRelayUrls: [],
+                excludedUserRelayPubkey: user.pubkey,
               });
           return;
         }
@@ -97,6 +107,9 @@ export function NostrSync() {
           ...current,
           userRelayMetadata: { relays: deduplicated, updatedAt: event.created_at },
           userRelayPubkey: user.pubkey,
+          includeUserRelays: current.userRelayPubkey === user.pubkey && current.includeUserRelays,
+          excludedUserRelayUrls: current.excludedUserRelayPubkey === user.pubkey ? current.excludedUserRelayUrls : [],
+          excludedUserRelayPubkey: user.pubkey,
         }));
       } catch (error) {
         console.error('Failed to sync NIP-65 relays from Nostr:', error);
@@ -105,7 +118,7 @@ export function NostrSync() {
 
     syncUserRelaysFromNostr();
     return () => { active = false; };
-  }, [user, config.userRelayMetadata.updatedAt, config.userRelayPubkey, config.userRelayMetadata.relays.length, nostr, updateConfig]);
+  }, [user, config.userRelayMetadata.updatedAt, config.userRelayPubkey, config.userRelayMetadata.relays.length, config.excludedUserRelayPubkey, config.includeUserRelays, nostr, updateConfig]);
 
   useEffect(() => {
     if (!user) return;

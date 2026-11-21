@@ -29,6 +29,7 @@ import { useProfilePrivacy } from '@/hooks/useProfilePrivacy';
 import { savedAlbumPath } from '@/lib/savedAlbums';
 import { useAppContext } from '@/hooks/useAppContext';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { getUserRelayUrls } from '@/lib/appRelays';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
   const { data } = useAuthor(pubkey);
@@ -62,8 +63,12 @@ function ProfilePersonCard({ pubkey }: { pubkey: string }) {
 
 function ProfileFollowers({ pubkey }: { pubkey: string }) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
   const { config } = useAppContext();
-  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const readRelays = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+  ])].sort();
   const followers = useQuery({
     queryKey: ['public-ostrify-followers', pubkey, readRelays.join('|')],
     enabled: readRelays.length > 0,
@@ -105,7 +110,10 @@ function ProfileFriendAction({ pubkey, compact = false }: { pubkey: string; comp
   const { config } = useAppContext();
   const follows = useFollowedPeople();
   const { toast } = useToast();
-  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const readRelays = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+  ])].sort();
   const hasReadRelays = readRelays.length > 0;
   const reciprocalFollow = useQuery({
     queryKey: ['public-ostrify-follow-back', pubkey, user?.pubkey ?? '', readRelays.join('|')],

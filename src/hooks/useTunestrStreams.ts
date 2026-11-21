@@ -6,7 +6,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
-import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { getUserRelayUrls, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 import { isOriginalSoundTitle, type Track } from '@/lib/music';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
@@ -165,6 +165,7 @@ export function useTunestrStreams(enabled = true) {
   const { user } = useCurrentUser();
   const relays = [...new Set([
     ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
     ...TUNESTR_RELAYS,
   ])].sort();
   const relayKey = relays.join('|');

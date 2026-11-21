@@ -4,7 +4,7 @@ import type { NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
-import { OSTRIFY_RELAY_URL } from "@/lib/appRelays";
+import { getUserRelayUrls, OSTRIFY_RELAY_URL } from "@/lib/appRelays";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
@@ -18,7 +18,11 @@ export function useArtistTracks(pubkey: string | undefined) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
+  const readRelays = [...new Set([
+    ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+    DROPS_MUSIC_RELAY,
+  ])].sort();
 
   return useQuery({
     queryKey: ["artist-tracks", pubkey ?? "", readRelays.join("|"), user?.pubkey ?? "public"],

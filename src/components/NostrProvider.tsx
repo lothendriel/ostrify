@@ -21,6 +21,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // recreating the pool. The refs are written from effects (never during
   // render) to satisfy React's purity rules.
   const relayMetadataRef = useRef(config.relayMetadata);
+  const excludedUserRelayKeysRef = useRef(new Set(config.excludedUserRelayUrls.map(url => url.trim().replace(/\/+$/, '').toLowerCase())));
 
   // Stable ref to the current user's signer for NIP-42 AUTH.
   // The `open()` callback reads from this ref when a relay sends an AUTH
@@ -71,7 +72,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
       // Route to all read relays
       const readRelays = relayMetadataRef.current.relays
-        .filter(r => r.read)
+        .filter(r => r.read && !excludedUserRelayKeysRef.current.has(r.url.trim().replace(/\/+$/, '').toLowerCase()))
         .map(r => r.url);
 
       for (const url of readRelays) {
@@ -83,7 +84,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
     eventRouter(_event: NostrEvent) {
       // Get write relays from metadata
       const writeRelays = relayMetadataRef.current.relays
-        .filter(r => r.write)
+        .filter(r => r.write && !excludedUserRelayKeysRef.current.has(r.url.trim().replace(/\/+$/, '').toLowerCase()))
         .map(r => r.url);
 
       const allRelays = new Set<string>(writeRelays);
@@ -135,8 +136,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // Invalidate Nostr queries when relay metadata changes.
   useEffect(() => {
     relayMetadataRef.current = config.relayMetadata;
+    excludedUserRelayKeysRef.current = new Set(config.excludedUserRelayUrls.map(url => url.trim().replace(/\/+$/, '').toLowerCase()));
     queryClient.invalidateQueries({ queryKey: ['nostr'] });
-  }, [config.relayMetadata, queryClient]);
+  }, [config.relayMetadata, config.excludedUserRelayUrls, queryClient]);
 
   const contextValue = useMemo(() => ({ nostr: pool }), [pool]);
 

@@ -37,6 +37,8 @@ export function TestApp({ children }: TestAppProps) {
     userRelayMetadata: { relays: [], updatedAt: 0 },
     userRelayPubkey: '',
     includeUserRelays: false,
+    excludedUserRelayUrls: [],
+    excludedUserRelayPubkey: '',
     blossomServerMetadata: {
       servers: ['https://blossom.primal.net/'],
       updatedAt: 0,

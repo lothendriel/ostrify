@@ -41,6 +41,8 @@ const defaultConfig: AppConfig = {
   userRelayMetadata: { relays: [], updatedAt: 0 },
   userRelayPubkey: '',
   includeUserRelays: false,
+  excludedUserRelayUrls: [],
+  excludedUserRelayPubkey: '',
   blossomServerMetadata: {
     servers: [],
     updatedAt: 0,

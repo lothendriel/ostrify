@@ -10,6 +10,7 @@ import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, 
 import { useToast } from './useToast';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, rememberPlaylistVisibility, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
+import { getUserDataReadRelays } from '@/lib/appRelays';
 
 export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
@@ -86,7 +87,7 @@ export function usePlaylists(enabled = true) {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
-  const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+  const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
   const queryKey = ["playlists", user?.pubkey ?? "", readRelayKey];
 
   return useQuery<Playlist[]>({
@@ -243,7 +244,7 @@ export function usePlaylistActions() {
 
   const publishPlaylist = async (template: { kind: number; content: string; tags: string[][] }, previousCreatedAt = 0) => {
     if (!user) throw new Error('User is not logged in');
-    const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join('|');
+    const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join('|');
     const cacheKey = ['playlists', user.pubkey, readRelayKey];
     const cachedPlaylists = queryClient.getQueryData<Playlist[]>(cacheKey);
     const id = template.tags.find(([name]) => name === 'd')?.[1];
@@ -275,7 +276,7 @@ export function usePlaylistActions() {
   async function fetchExisting(id: string): Promise<Playlist | undefined> {
     if (!user) return undefined;
     // Prefer cache, fall back to network.
-    const readRelayKey = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|");
+    const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
     const cached = queryClient.getQueryData<Playlist[]>(["playlists", user.pubkey, readRelayKey]);
     const fromCache = cached?.find((p) => p.id === id);
     if (fromCache) return fromCache;

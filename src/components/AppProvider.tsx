@@ -36,6 +36,8 @@ const AppConfigSchema = z.object({
   userRelayMetadata: RelayMetadataSchema,
   userRelayPubkey: z.string(),
   includeUserRelays: z.boolean(),
+  excludedUserRelayUrls: z.array(z.url()),
+  excludedUserRelayPubkey: z.string(),
   blossomServerMetadata: BlossomServerMetadataSchema,
   useAppBlossomServers: z.boolean(),
 }) satisfies z.ZodType<AppConfig>;
@@ -114,23 +116,33 @@ export function AppProvider(props: AppProviderProps) {
   const userRelayMetadata = rawConfig.userRelayMetadata ?? defaultConfig.userRelayMetadata;
   const userRelayPubkey = rawConfig.userRelayPubkey ?? defaultConfig.userRelayPubkey;
   const includeUserRelays = rawConfig.includeUserRelays ?? defaultConfig.includeUserRelays;
+  const excludedUserRelayPubkey = rawConfig.excludedUserRelayPubkey ?? defaultConfig.excludedUserRelayPubkey;
+  const excludedUserRelayUrls = excludedUserRelayPubkey === userRelayPubkey && userRelayPubkey
+    ? rawConfig.excludedUserRelayUrls ?? defaultConfig.excludedUserRelayUrls
+    : defaultConfig.excludedUserRelayUrls;
+  const effectiveIncludeUserRelays = includeUserRelays && !!userRelayPubkey && userRelayPubkey === excludedUserRelayPubkey;
   const requiredRelay = APP_RELAYS.relays.find(relay => isRequiredAppRelay(relay.url));
   const appRelays = appRelayMetadata.relays;
   const normalizedAppRelays = [
     ...(requiredRelay && !appRelays.some(relay => isRequiredAppRelay(relay.url)) ? [requiredRelay] : []),
     ...appRelays.map(relay => isRequiredAppRelay(relay.url) && requiredRelay ? { ...relay, url: requiredRelay.url, read: true, write: true } : relay),
   ];
-  const relayMap = new Map<string, { url: string; read: boolean; write: boolean }>();
-  for (const relay of [...normalizedAppRelays, ...(includeUserRelays ? userRelayMetadata.relays : [])]) {
+  const excludedForUser = excludedUserRelayPubkey === userRelayPubkey && userRelayPubkey
+    ? new Set(excludedUserRelayUrls.map(normalizeRelayUrl))
+    : new Set<string>();
+  const appRelayMap = new Map(normalizedAppRelays.map(relay => [normalizeRelayUrl(relay.url), { ...relay }]));
+  for (const relay of userRelayMetadata.relays) {
+    if (!userRelayPubkey || excludedForUser.has(normalizeRelayUrl(relay.url))) continue;
+    if (!relay.write && !(effectiveIncludeUserRelays && relay.read)) continue;
     const key = normalizeRelayUrl(relay.url);
-    const existing = relayMap.get(key);
-    relayMap.set(key, {
+    const existing = appRelayMap.get(key);
+    appRelayMap.set(key, {
       url: existing?.url ?? relay.url,
-      read: (existing?.read ?? false) || relay.read,
+      read: (existing?.read ?? false) || (effectiveIncludeUserRelays && relay.read),
       write: (existing?.write ?? false) || relay.write,
     });
   }
-  const relays = [...relayMap.values()];
+  const relays = [...appRelayMap.values()];
   const config: AppConfig = {
     ...defaultConfig,
     ...rawConfig,
@@ -138,8 +150,11 @@ export function AppProvider(props: AppProviderProps) {
     userRelayMetadata,
     userRelayPubkey,
     includeUserRelays,
+    excludedUserRelayUrls,
+    excludedUserRelayPubkey,
     relayMetadata: {
-      updatedAt: Math.max(appRelayMetadata.updatedAt, includeUserRelays ? userRelayMetadata.updatedAt : 0),
+      ...defaultConfig.relayMetadata,
+      updatedAt: Math.max(appRelayMetadata.updatedAt, effectiveIncludeUserRelays ? userRelayMetadata.updatedAt : 0),
       relays,
     },
   };

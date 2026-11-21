@@ -5,6 +5,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAppContext } from '@/hooks/useAppContext';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { getUserDataReadRelays } from '@/lib/appRelays';
 
 const ID = 'ostrify-people';
 const MIGRATION_TAG = 'ostrify-migration';
@@ -35,7 +36,7 @@ export function useFollowedPeople() {
   const { config } = useAppContext();
   const { mutateAsync: publish } = useNostrPublish();
   const client = useQueryClient();
-  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const readRelays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
   const relayKey = readRelays.join('|');
   const key = ['ostrify-followed-people', user?.pubkey ?? '', relayKey];
   const query = useQuery({
@@ -59,7 +60,7 @@ export function useFollowedPeople() {
     mutationFn: async ({ section, visible }: { section: ProfileSection; visible: boolean }) => {
       if (!user) throw new Error('Log in to update profile privacy.');
       if (!relayKey) throw new Error('Enable a read relay to update profile privacy.');
-      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000) });
+      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000), relays: readRelays });
       const fromRelays = newest(events, user.pubkey);
       const cached = client.getQueryData<NostrEvent | null>(key);
       const existing = preferNewest(fromRelays, cached ?? null, user.pubkey);
@@ -85,7 +86,7 @@ export function useFollowedPeople() {
       if (!user) throw new Error('Log in to follow people.');
       if (!relayKey) throw new Error('Enable a read relay to check your followed people.');
       const additions = [...new Set(pubkeys.filter(pubkey => HEX.test(pubkey) && pubkey !== user.pubkey))];
-      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000) });
+      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000), relays: readRelays });
       const fromRelays = newest(events, user.pubkey);
       const cached = client.getQueryData<NostrEvent | null>(key);
       const existing = preferNewest(fromRelays, cached ?? null, user.pubkey);
@@ -111,7 +112,7 @@ export function useFollowedPeople() {
       if (!user) throw new Error('Log in to follow people.');
       if (!HEX.test(pubkey) || pubkey === user.pubkey) throw new Error('Choose another valid Nostr profile.');
       if (!relayKey) throw new Error('Enable a read relay to check your followed people.');
-      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000) });
+      const events = await nostr.query([{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], { signal: AbortSignal.timeout(8000), relays: readRelays });
       const fromRelays = newest(events, user.pubkey);
       const cached = client.getQueryData<NostrEvent | null>(key);
       const existing = preferNewest(fromRelays, cached ?? null, user.pubkey);

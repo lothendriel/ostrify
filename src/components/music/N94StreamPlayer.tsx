@@ -3,6 +3,8 @@ import mpegts from 'mpegts.js';
 import type { NPool, NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { getUserRelayUrls } from '@/lib/appRelays';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_RELAYS } from '@/hooks/useTunestrStreams';
 
@@ -145,6 +147,7 @@ class N94SegmentLoader implements mpegts.BaseLoader {
 export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant: string }) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
   const eventRelays = event.tags.flatMap(([name, ...values]) => {
     if (name !== 'relays') return [];
     return values.filter(value => {
@@ -153,6 +156,7 @@ export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant
   });
   const relays = [...new Set([
     ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
+    ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
     ...TUNESTR_RELAYS,
     ...eventRelays,
   ])].sort();

@@ -28,8 +28,12 @@ export interface AppConfig {
   userRelayMetadata: RelayMetadata;
   /** Public key owning the cached user relay list. */
   userRelayPubkey: string;
-  /** Whether to include the user's NIP-65 relays in Ostrify's effective relay set. */
+  /** Whether to include the user's NIP-65 read relays for broader Ostrify discovery. */
   includeUserRelays: boolean;
+  /** NIP-65 relays locally excluded from Ostrify; this never edits the published NIP-65 list. */
+  excludedUserRelayUrls: string[];
+  /** Public key whose relay URLs are locally excluded. */
+  excludedUserRelayPubkey: string;
   /** User's kind 10063 Blossom server list. */
   blossomServerMetadata: BlossomServerMetadata;
   /**

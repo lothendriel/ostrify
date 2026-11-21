@@ -15,6 +15,7 @@ import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { captureDiscoveredAudioEvents } from "@/lib/audioCatalogCapture";
+import { getUserDataReadRelays } from "@/lib/appRelays";
 
 export function MyUploadsManager() {
   const { user, metadata } = useCurrentUser();
@@ -24,8 +25,9 @@ export function MyUploadsManager() {
   const publish = usePublishMusicEvent();
   const [message, setMessage] = useState<string>();
   const authorTracks = useArtistTracks(user?.pubkey);
+  const ownReadRelays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
   const identifiedTracks = useQuery({
-    queryKey: ["my-upload-identified-tracks", user?.pubkey ?? "", config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|")],
+    queryKey: ["my-upload-identified-tracks", user?.pubkey ?? "", ownReadRelays.join("|")],
     enabled: !!user,
     queryFn: async ({ signal }): Promise<Track[]> => {
       if (!user) return [];
@@ -34,7 +36,7 @@ export function MyUploadsManager() {
         { kinds: [...MUSIC_TRACK_KINDS], "#artist_pubkey": [user.pubkey], limit: 500 },
         { kinds: [...MUSIC_TRACK_KINDS], "#artist_npub": [user.pubkey], limit: 500 },
       ];
-      const events = await nostr.query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      const events = await nostr.query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]), relays: ownReadRelays });
       captureDiscoveredAudioEvents(nostr, events, user.pubkey);
       return [...new Map(events.map(eventToTrack).filter((track): track is Track => !!track && track.kind === "music" && isTrackVisibleInOstrify(track, user.pubkey, user.pubkey)).map(track => [track.id, track])).values()];
     },

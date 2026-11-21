@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { buildSavedAlbumsEvent, parseSavedAlbums, SAVED_ALBUMS_ID, type SavedAlbum } from '@/lib/savedAlbums';
+import { getUserDataReadRelays } from '@/lib/appRelays';
 
 const KIND = 30003;
 
@@ -21,7 +22,7 @@ export function useSavedAlbums() {
   const { config } = useAppContext();
   const client = useQueryClient();
   const { mutateAsync: publish } = useNostrPublish();
-  const readRelays = config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort();
+  const readRelays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
   const relayKey = readRelays.join('|');
   const queryKey = ['saved-wavlake-albums', user?.pubkey ?? '', relayKey];
 
