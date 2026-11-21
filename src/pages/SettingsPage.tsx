@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/useToast";
 import { useProfilePrivacy } from "@/hooks/useProfilePrivacy";
 import { BlossomServerManager } from "@/components/BlossomServerManager";
 import type { NPool } from "@nostrify/nostrify";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface UserRelayStatusListProps {
   relays: { url: string; read: boolean; write: boolean }[];
@@ -127,7 +128,12 @@ const SettingsPage = () => {
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-
+      <Tabs defaultValue="privacy" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="privacy">Privacy</TabsTrigger>
+          <TabsTrigger value="relays">Relays</TabsTrigger>
+        </TabsList>
+        <TabsContent value="relays" className="mt-0 space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -197,6 +203,8 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
+        </TabsContent>
+        <TabsContent value="privacy" className="mt-0 space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>Ostrify directory</CardTitle>
@@ -289,6 +297,8 @@ const SettingsPage = () => {
           </div>
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
