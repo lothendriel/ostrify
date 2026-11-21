@@ -2,6 +2,11 @@
 
 All notable user-facing changes to Ostrify are recorded here, newest first.
 
+## Updates — 2026-11-21
+
+- Home genre shelves with tracks now appear before empty shelves, allowing populated categories such as General to use open grid positions instead of leaving gaps between shelves.
+- Refreshed the README feature list to describe current discovery, playback, library, sharing, privacy, relay, and analytics features and recent improvements.
+
 ## Ver. 1
 
 Initial documented release of Ostrify as an open-protocol audio discovery and listening app.
