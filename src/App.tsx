@@ -26,7 +26,7 @@ const head = createHead({
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       staleTime: 60000,
       gcTime: Infinity,
       retry: 2,
@@ -68,34 +68,6 @@ function PublicPageCacheSync({ children }: { children: ReactNode }) {
   return children;
 }
 
-function LibraryRefreshSync() {
-  useEffect(() => {
-    const client = queryClient;
-    const handleFocus = () => {
-      void Promise.all([
-        client.invalidateQueries({ queryKey: ['playlists'] }),
-        client.invalidateQueries({ queryKey: ['followed-artists'] }),
-        client.invalidateQueries({ queryKey: ['podcast-favorites'] }),
-        client.invalidateQueries({ queryKey: ['ostrify-followed-people'] }),
-        client.invalidateQueries({ queryKey: ['ostrify-friends'] }),
-        client.invalidateQueries({ queryKey: ['friend-invite-follows'] }),
-        client.invalidateQueries({ queryKey: ['friend-statuses'] }),
-      ]);
-      window.dispatchEvent(new Event('ostrify-library-refresh'));
-    };
-    const handleVisible = () => {
-      if (document.visibilityState === 'visible') handleFocus();
-    };
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisible);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisible);
-    };
-  }, []);
-  return null;
-}
-
 export function App() {
   return (
     <UnheadProvider head={head}>
@@ -103,7 +75,6 @@ export function App() {
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
-              <LibraryRefreshSync />
               <NostrSync />
               <TooltipProvider>
                 <Toaster />

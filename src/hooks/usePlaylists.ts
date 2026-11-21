@@ -103,7 +103,7 @@ export function usePlaylists(enabled = true) {
     },
     staleTime: 0,
     refetchOnMount: "always",
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     placeholderData: (previousData: Playlist[] | undefined, previousQuery) => {
       if (previousQuery?.queryKey[1] !== user?.pubkey || !user) return undefined;
       const tombstones = readPlaylistDeletionTombstones(user.pubkey);

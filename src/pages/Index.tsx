@@ -57,7 +57,7 @@ const Index = () => {
   const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog]);
   const genreCatalogVersion = genreCatalogQueries.map((query, index) => `${HOME_WAVLAKE_GENRES[index]}:${query.dataUpdatedAt}:${query.isLoading}`).join('|');
   const genreCatalogTracks = useMemo(() => genreCatalogQueries.flatMap(query => query.data ?? []), [genreCatalogVersion]);
-  const genreCatalogTracksByGenre = new Map(HOME_WAVLAKE_GENRES.map((genre, index) => [genre, genreCatalogQueries[index]?.data ?? []] as const));
+  const genreCatalogTracksByGenre = useMemo(() => new Map(HOME_WAVLAKE_GENRES.map((genre, index) => [genre, genreCatalogQueries[index]?.data ?? []] as const)), [genreCatalogVersion]);
   const player = usePlayer();
   const followedArtists = useFollowedArtists(discoveryEnabled);
   const [pageSeed] = useState(() => crypto.randomUUID());
@@ -101,10 +101,28 @@ const Index = () => {
       return { category, tracks: selected };
     });
   }, [allMusic, genreCatalogTracksByGenre, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
+  const [displayShelves, setDisplayShelves] = useState<typeof categoryShelves | null>(null);
+  const previousShelfVariation = useRef(shelfVariation);
+  const visibleCategoryShelves = displayShelves ?? categoryShelves;
+  const personalizedInputsLoading = playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading;
+  const neededCatalogStillLoading = [...categoriesNeedingCatalog].some(genre => {
+    const index = HOME_WAVLAKE_GENRES.indexOf(genre);
+    return index >= 0 && genreCatalogQueries[index]?.isFetching;
+  });
+
+  useEffect(() => {
+    if (previousShelfVariation.current !== shelfVariation) {
+      previousShelfVariation.current = shelfVariation;
+      if (!baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading) setDisplayShelves(categoryShelves);
+      return;
+    }
+    if (displayShelves || baseSourcesLoading || personalizedInputsLoading || neededCatalogStillLoading) return;
+    setDisplayShelves(categoryShelves);
+  }, [displayShelves, categoryShelves, shelfVariation, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading]);
 
   useEffect(() => {
     if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
-    currentShelves.current = categoryShelves.map(({ category, tracks: shelfTracks }) => ({ categoryId: category.id, tracks: shelfTracks }));
+    currentShelves.current = visibleCategoryShelves.map(({ category, tracks: shelfTracks }) => ({ categoryId: category.id, tracks: shelfTracks }));
     const nextHistory = { ...recentShelfHistory.current };
     for (const { categoryId, tracks: shelfTracks } of currentShelves.current) {
       if (!shelfTracks.length) continue;
@@ -112,7 +130,7 @@ const Index = () => {
     }
     recentShelfHistory.current = nextHistory;
     writeHomeShelfHistory(nextHistory);
-  }, [categoryShelves]);
+  }, [visibleCategoryShelves]);
 
   const refreshGenreShelves = () => {
     const nextHistory = { ...recentShelfHistory.current };
@@ -162,7 +180,7 @@ const Index = () => {
       {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}
       {wavlake.isError && <p role="status" className="text-xs text-muted-foreground">Wavlake catalog results aren’t available right now; genre shelves use music from responding relays.</p>}
       <section aria-label="Browse music by genre" className="grid grid-cols-1 gap-6 sm:grid-cols-2 2xl:grid-cols-3">
-        {categoryShelves.map(({ category, tracks: categoryTracks }) => (
+        {visibleCategoryShelves.map(({ category, tracks: categoryTracks }) => (
           <DeferredHomeSection key={category.id} title={category.label} rootMargin="600px 0px">
             <Shelf title={category.label} tracks={categoryTracks} dense compactCards carouselRows={2} seeAllHref={`/category/${category.id}`} carouselClassName="grid-rows-2" onRefresh={refreshGenreShelves} />
           </DeferredHomeSection>
