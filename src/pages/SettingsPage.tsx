@@ -71,6 +71,19 @@ const SettingsPage = () => {
             {!user && <p className="text-xs text-muted-foreground">Log in to use your NIP-65 relays.</p>}
             {user && config.userRelayPubkey !== user.pubkey && <p role="status" className="text-xs text-muted-foreground">Loading your NIP-65 relay list…</p>}
             {user && config.userRelayPubkey === user.pubkey && config.userRelayMetadata.relays.length === 0 && <p className="text-xs text-muted-foreground">No NIP-65 relay list was found for this account. Your Blossom server list is managed separately below.</p>}
+            {user && config.userRelayPubkey === user.pubkey && config.userRelayMetadata.relays.length > 0 && (
+              <ul aria-label="Your NIP-65 read and write relays" className="space-y-2 pt-2">
+                {config.userRelayMetadata.relays.map(relay => (
+                  <li key={relay.url} className="flex min-w-0 items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
+                    <span className="min-w-0 truncate font-mono text-xs" title={relay.url}>{relay.url}</span>
+                    <span className="flex shrink-0 gap-2 text-[11px] text-muted-foreground">
+                      {relay.read && <span>Read</span>}
+                      {relay.write && <span>Write</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </CardContent>
       </Card>
