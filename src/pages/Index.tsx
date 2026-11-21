@@ -8,6 +8,8 @@ import { useFreshNostrTracks } from "@/hooks/useFreshNostrTracks";
 import { useNearViewport } from "@/hooks/useNearViewport";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useAppContext } from "@/hooks/useAppContext";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { Shelf } from "@/components/music/Shelf";
@@ -23,6 +25,8 @@ import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHist
 import type { Track } from "@/lib/music";
 
 const HOME_WAVLAKE_GENRES = [...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
+type HomeCategoryShelves = { category: typeof CATEGORIES[number]; tracks: Track[] }[];
+let homeShelfSessionSnapshot: { scope: string; shelves: HomeCategoryShelves } | null = null;
 
 function HomeFreshTracks({ candidates, enabled }: { candidates: Track[]; enabled: boolean }) {
   const query = useFreshNostrTracks(enabled);
@@ -44,6 +48,9 @@ const Index = () => {
   });
 
   const { ref: discoveryTriggerRef, isNearViewport: discoveryEnabled } = useNearViewport<HTMLDivElement>("100px 0px");
+  const { user } = useCurrentUser();
+  const { config } = useAppContext();
+  const shelfSessionScope = `${user?.pubkey ?? "public"}:${config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|")}`;
   const homeTracksQuery = useHomeTracks(discoveryEnabled);
   const tracks = homeTracksQuery.data?.tracks ?? [];
   const tracksLoading = homeTracksQuery.isLoading;
@@ -101,9 +108,9 @@ const Index = () => {
       return { category, tracks: selected };
     });
   }, [allMusic, genreCatalogTracksByGenre, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
-  const [displayShelves, setDisplayShelves] = useState<typeof categoryShelves | null>(null);
+  const [displayShelves, setDisplayShelves] = useState<{ scope: string; shelves: HomeCategoryShelves } | null>(() => homeShelfSessionSnapshot);
+  const visibleCategoryShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : categoryShelves;
   const previousShelfVariation = useRef(shelfVariation);
-  const visibleCategoryShelves = displayShelves ?? categoryShelves;
   const personalizedInputsLoading = playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading;
   const neededCatalogStillLoading = [...categoriesNeedingCatalog].some(genre => {
     const index = HOME_WAVLAKE_GENRES.indexOf(genre);
@@ -111,14 +118,13 @@ const Index = () => {
   });
 
   useEffect(() => {
-    if (previousShelfVariation.current !== shelfVariation) {
+    if (!baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading && (previousShelfVariation.current !== shelfVariation || !displayShelves)) {
       previousShelfVariation.current = shelfVariation;
-      if (!baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading) setDisplayShelves(categoryShelves);
-      return;
+      const snapshot = { scope: shelfSessionScope, shelves: categoryShelves };
+      homeShelfSessionSnapshot = snapshot;
+      setDisplayShelves(snapshot);
     }
-    if (displayShelves || baseSourcesLoading || personalizedInputsLoading || neededCatalogStillLoading) return;
-    setDisplayShelves(categoryShelves);
-  }, [displayShelves, categoryShelves, shelfVariation, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading]);
+  }, [displayShelves, categoryShelves, shelfVariation, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope]);
 
   useEffect(() => {
     if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
@@ -140,6 +146,9 @@ const Index = () => {
     }
     recentShelfHistory.current = nextHistory;
     writeHomeShelfHistory(nextHistory);
+    homeShelfSessionSnapshot = null;
+    setDisplayShelves(null);
+    previousShelfVariation.current = -1;
     setShelfVariation(value => value + 1);
   };
 
