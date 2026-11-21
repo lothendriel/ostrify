@@ -253,15 +253,18 @@ function boundedEntries(entries: PersistedQuery[], now: number): PersistedQuery[
   return output;
 }
 
-/** Restore approved public discovery and detail results; all restored entries are stale so active queries refresh in the background. */
+/** Restore approved public discovery and detail results without racing active queries. */
 export async function restorePublicPageCache(queryClient: QueryClient, shouldRestore: () => boolean = () => true): Promise<void> {
   const entries = boundedEntries(await readPersistedQueries(), Date.now());
-  // A startup timeout may already have released the app to its live query path.
-  // Never let a late IndexedDB result replace data fetched after that fallback.
   if (!shouldRestore()) return;
   for (const entry of entries) {
-    // Mark restored data stale: it renders immediately, while the page's normal
-    // query lifecycle refreshes it from its relay or catalog source.
+    const current = queryClient.getQueryState(entry.queryKey);
+    // Routes mount while IndexedDB is being read. If a live request is in flight
+    // or the query already has data, its result takes precedence over this cache.
+    if (current && (current.fetchStatus !== "idle" || current.data !== undefined)) continue;
+
+    // Mark restored data stale so queries can refresh normally after rendering
+    // the cached result.
     queryClient.setQueryData(entry.queryKey, entry.data, { updatedAt: 0 });
   }
   // Prune old or invalid records without making router startup wait on a write.

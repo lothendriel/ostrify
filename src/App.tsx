@@ -4,7 +4,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { InferSeoMetaPlugin } from 'unhead/plugins';
-import { Suspense, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
@@ -34,8 +34,6 @@ const queryClient = new QueryClient({
   },
 });
 
-const PUBLIC_CACHE_RESTORE_TIMEOUT_MS = 1500;
-
 const defaultConfig: AppConfig = {
   theme: "dark",
   relayMetadata: APP_RELAYS,
@@ -46,55 +44,22 @@ const defaultConfig: AppConfig = {
   useAppBlossomServers: true,
 };
 
-function StartupLoadingShell() {
-  return (
-    <main className="flex min-h-dvh items-center justify-center bg-background px-6 text-foreground" role="status" aria-live="polite">
-      <div className="flex flex-col items-center gap-4 text-center">
-        <img src="/ostrify-logo.png?v=ostrich-note" alt="" className="size-14 rounded-xl object-contain" />
-        <div className="space-y-2">
-          <p className="text-lg font-semibold">Opening Ostrify</p>
-          <p className="text-sm text-muted-foreground">Getting your audio space ready…</p>
-        </div>
-        <div className="h-1 w-32 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
-          <div className="h-full w-1/2 animate-pulse rounded-full bg-primary" />
-        </div>
-      </div>
-    </main>
-  );
-}
-
 function PublicPageCacheSync({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
-
   useEffect(() => {
     let active = true;
-    let restoreTimedOut = false;
-    let stopWatching: (() => void) | undefined;
-    const timeout = window.setTimeout(() => {
-      restoreTimedOut = true;
-      if (!active) return;
-      stopWatching = watchPublicPageCache(queryClient);
-      setReady(true);
-    }, PUBLIC_CACHE_RESTORE_TIMEOUT_MS);
+    const stopWatching = watchPublicPageCache(queryClient);
 
-    void restorePublicPageCache(queryClient, () => active && !restoreTimedOut).catch(() => undefined).finally(() => {
-      window.clearTimeout(timeout);
-      if (!active) return;
-      if (!restoreTimedOut) {
-        stopWatching = watchPublicPageCache(queryClient);
-        setReady(true);
-      }
-    });
+    // Let routes and their live queries mount immediately. Cache restoration is
+    // best-effort and skips queries that have already started or resolved.
+    void restorePublicPageCache(queryClient, () => active).catch(() => undefined);
+
     return () => {
       active = false;
-      window.clearTimeout(timeout);
-      stopWatching?.();
+      stopWatching();
     };
   }, []);
 
-  // Restored data is available before normal page queries mount. If IndexedDB
-  // stalls, show a shell briefly and then proceed without waiting for the cache.
-  return ready ? children : <StartupLoadingShell />;
+  return children;
 }
 
 function LibraryRefreshSync() {
