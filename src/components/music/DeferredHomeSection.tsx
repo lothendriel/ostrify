@@ -29,7 +29,7 @@ export function DeferredHomeSection({ title, children, rootMargin = "200px 0px" 
 
   return (
     <section ref={ref} aria-label={title} className="w-full min-w-0 space-y-3">
-      {typeof children === "function" ? children(isNearViewport) : isNearViewport ? children : (
+      {isNearViewport ? (typeof children === "function" ? children(true) : children) : (
         <div aria-hidden="true" className="space-y-3">
           <div className="space-y-2">
             <Skeleton className="h-7 w-48" />
