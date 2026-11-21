@@ -13,11 +13,10 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
   const sync = useAudiobookLibrarySync(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [collectionTitle, setCollectionTitle] = useState('');
-  const favorite = library.isFavorite(book.id);
   const savedBook: SavedAudiobook = {
     id: book.id,
     source: book.source ?? 'librivox',
-    catalogId: book.catalogId ?? book.id,
+    catalogId: book.catalogId ?? book.id.replace(/^(librivox|gutenberg):/, ''),
     title: book.title,
     author: book.author,
     covers: book.covers,
@@ -25,6 +24,10 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
     duration: book.duration,
     sectionCount: book.sectionCount,
   };
+  const savedBookKey = `${savedBook.source}:${savedBook.catalogId}`;
+  const favorite = library.isFavorite(savedBook.catalogId ?? savedBook.id, savedBook.source ?? 'librivox');
+  const inCollection = library.collections.some(collection => library.isInCollection(collection.id, savedBookKey));
+  const saved = library.isSaved(savedBook.catalogId ?? savedBook.id, savedBook.source ?? 'librivox');
 
   const createCollection = () => {
     const title = collectionTitle.trim();
@@ -39,8 +42,8 @@ export function AudiobookActions({ book, compact = false }: { book: SavedAudiobo
   return <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant={compact ? 'secondary' : 'outline'} size={compact ? 'icon' : 'default'} aria-label={`Save ${book.title}`} title="Save audiobook">
-          {compact ? <ListPlus className="size-4" /> : <><ListPlus className="size-4" /> Save audiobook</>}
+        <Button type="button" variant={compact ? 'secondary' : 'outline'} size={compact ? 'icon' : 'default'} aria-label={saved ? `Manage saved audiobook ${book.title}` : `Save ${book.title}`} title={saved ? 'Manage saved audiobook' : 'Save audiobook'}>
+          {compact ? <ListPlus className="size-4" /> : <>{saved ? <Check className="size-4" /> : <ListPlus className="size-4" />}{saved ? favorite ? ' Favorited' : inCollection ? ' In collection' : ' Saved audiobook' : ' Save audiobook'}</>}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">

@@ -1292,6 +1292,27 @@ export function fountainShowFavorite(show: PodcastShow): PodcastFavorite {
   };
 }
 
+function podcastShowIdentities(show: PodcastShow | PodcastFavorite): string[] {
+  if (show.source === "nostr") return show.pubkey ? [`nostr:${show.pubkey}`] : [];
+  if (show.source === "fountain") {
+    const feedGuid = show.feedGuid ?? fountainShowGuid(show.id);
+    return feedGuid ? [`fountain:${feedGuid}`] : [];
+  }
+  return show.feedUrl ? [show.feedUrl] : [];
+}
+
+export function findPodcastShowFavorite(show: PodcastShow, favorites: PodcastFavorite[]): PodcastFavorite | undefined {
+  const identities = podcastShowIdentities(show);
+  return favorites.find(favorite => !favorite.episode && (
+    favorite.id === show.id ||
+    identities.some(identity => podcastShowIdentities(favorite).includes(identity)) ||
+    (!!show.pubkey && favorite.pubkey === show.pubkey) ||
+    (!!show.feedGuid && favorite.feedGuid === show.feedGuid) ||
+    (show.feedId !== undefined && favorite.feedId === show.feedId) ||
+    (!!show.feedUrl && favorite.feedUrl === show.feedUrl)
+  ));
+}
+
 export function usePodcastFavoriteActions() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();

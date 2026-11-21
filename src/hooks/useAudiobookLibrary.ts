@@ -243,7 +243,11 @@ export function useAudiobookLibrary() {
     savedBooks: Object.values(library.books).length ? Object.values(library.books) : EMPTY_SAVED_BOOKS,
     collections: library.collections,
     getBook: (id: string) => library.books[id.includes(':') ? id : `librivox:${id}`],
-    isFavorite: (id: string) => library.favoriteIds.includes(id.includes(':') ? id : `librivox:${id}`),
+    isFavorite: (id: string, source: AudiobookSource = 'librivox') => library.favoriteIds.includes(id.includes(':') ? id : `${source}:${id}`),
+    isSaved: (id: string, source: AudiobookSource = 'librivox') => {
+      const key = id.includes(':') ? id : `${source}:${id}`;
+      return library.favoriteIds.includes(key) || library.collections.some(collection => collection.audiobookIds.includes(key));
+    },
     isInCollection: (collectionId: string, bookId: string) => !!library.collections.find(collection => collection.id === collectionId)?.audiobookIds.includes(bookId.includes(':') ? bookId : `librivox:${bookId}`),
     booksInCollection: (collectionId: string) => {
       const collection = library.collections.find(item => item.id === collectionId);

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { Mic, Radio, Globe2, ChevronLeft, ChevronRight, Play, Search, Heart, ListPlus } from "lucide-react";
-import { usePodcastEpisodes, useNostrPodcastEpisodeFeed, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
+import { usePodcastEpisodes, useNostrPodcastEpisodeFeed, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, findPodcastShowFavorite, fountainShowFavorite, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
 import { TrackList } from "@/components/music/TrackList";
 import { QueueActionsMenu } from "@/components/music/QueueActionsMenu";
@@ -437,6 +437,9 @@ function ShowCard({ show, tracks, onPlay, favorites, onToggleFavorite, userLogge
   const name = show.title || show.publisher || author.data?.metadata?.display_name || author.data?.metadata?.name || "Podcast show";
   const playTracks = tracks;
   const favorite = podcastFavoriteFromShow(show);
+  const existingFavorite = findPodcastShowFavorite(show, favorites);
+  const savedFavorite = existingFavorite ?? favorite;
+  const isSaved = !!existingFavorite;
   return (
     <article className="group rounded-xl bg-secondary/40 p-3 hover:bg-secondary transition-colors">
       <div className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">
@@ -447,7 +450,7 @@ function ShowCard({ show, tracks, onPlay, favorites, onToggleFavorite, userLogge
         {playTracks.length > 0 && onPlay && <button type="button" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label={`Play ${name}`} onClick={() => onPlay(playTracks)}><Play className="size-4 fill-current" /></button>}
       </div>
       {show.pubkey && <Link to={`/${nip19.npubEncode(show.pubkey)}`} className="mt-2 inline-block text-xs text-primary hover:underline">Open Nostr show</Link>}
-      {show.source !== "fountain" && <PodcastFavoriteButton favorite={favorite} saved={false} onToggle={saved => onToggleFavorite(favorite, saved)} userLoggedIn={userLoggedIn} />}
+      <PodcastFavoriteButton favorite={savedFavorite} saved={isSaved} onToggle={saved => onToggleFavorite(savedFavorite, saved)} userLoggedIn={userLoggedIn} />
     </article>
   );
 }
@@ -466,7 +469,8 @@ function favoriteSelectionToShow(favorite: PodcastFavorite): PodcastShow {
 }
 
 function podcastFavoriteFromShow(show: PodcastShow): PodcastFavorite {
-  return { id: show.id, source: show.source === "nostr" ? "nostr" : "podcast-index", title: show.title, publisher: show.publisher, image: show.image, feedId: show.feedId, feedUrl: show.feedUrl, pubkey: show.pubkey };
+  if (show.source === "fountain") return fountainShowFavorite(show);
+  return { id: show.id, source: show.source, title: show.title, publisher: show.publisher, image: show.image, feedId: show.feedId, feedUrl: show.feedUrl, pubkey: show.pubkey };
 }
 
 function PodcastFavoriteButton({ favorite, saved, onToggle, pending = false, userLoggedIn, showLoginHint = false }: { favorite: PodcastFavorite; saved: boolean; onToggle: (saved: boolean) => void; pending?: boolean; userLoggedIn: boolean; showLoginHint?: boolean }) {
@@ -476,11 +480,14 @@ function PodcastFavoriteButton({ favorite, saved, onToggle, pending = false, use
 
 function PodcastIndexShow({ show, tracks, isLoading, isError, onRetry, onPlay, onPlayTrack, favorites, onToggleFavorite, saving, userLoggedIn }: { show: PodcastShow; tracks: Track[]; isLoading: boolean; isError: boolean; onRetry: () => void; onPlay: () => void; onPlayTrack: (track: Track) => void; favorites: PodcastFavorite[]; onToggleFavorite: (favorite: PodcastFavorite, saved: boolean) => void; saving: boolean; userLoggedIn: boolean }) {
   const favorite = podcastFavoriteFromShow(show);
+  const existingFavorite = findPodcastShowFavorite(show, favorites);
+  const savedFavorite = existingFavorite ?? favorite;
+  const isSaved = !!existingFavorite;
   return <section className="space-y-5">
 
     <header className="flex flex-col gap-5 rounded-xl bg-gradient-to-br from-fuchsia-900/70 via-purple-950 to-card p-6 sm:flex-row sm:items-center">
       <div className="size-32 shrink-0 overflow-hidden rounded-xl bg-secondary">{show.image ? <img src={show.image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-muted-foreground" /></div>}</div>
-      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">{show.source === "nostr" ? "Nostr podcast" : "Podcast Index show"}</p><h2 className="mt-2 break-words text-3xl font-bold">{show.title}</h2>{show.publisher && <p className="mt-1 text-muted-foreground">{show.publisher}</p>}{show.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.description}</p>}<div className="mt-3 flex flex-wrap items-center gap-2"><SharePageButton title={show.title} pagePath={show.source === "nostr" && show.pubkey ? `/${nip19.npubEncode(show.pubkey)}` : `/podcasts?source=directory&show=${encodeURIComponent(show.id)}`} pageType="podcast show" referenceTags={show.event ? [["q", show.event.id, "", show.event.pubkey]] : show.pubkey ? [["p", show.pubkey]] : show.feedUrl && sanitizeUrl(show.feedUrl) ? [["r", sanitizeUrl(show.feedUrl)!]] : []} /><PodcastFavoriteButton favorite={favorite} saved={false} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /></div></div>
+      <div className="min-w-0"><p className="text-sm font-semibold uppercase tracking-wider text-fuchsia-200">{show.source === "nostr" ? "Nostr podcast" : "Podcast Index show"}</p><h2 className="mt-2 break-words text-3xl font-bold">{show.title}</h2>{show.publisher && <p className="mt-1 text-muted-foreground">{show.publisher}</p>}{show.description && <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{show.description}</p>}<div className="mt-3 flex flex-wrap items-center gap-2"><SharePageButton title={show.title} pagePath={show.source === "nostr" && show.pubkey ? `/${nip19.npubEncode(show.pubkey)}` : `/podcasts?source=directory&show=${encodeURIComponent(show.id)}`} pageType="podcast show" referenceTags={show.event ? [["q", show.event.id, "", show.event.pubkey]] : show.pubkey ? [["p", show.pubkey]] : show.feedUrl && sanitizeUrl(show.feedUrl) ? [["r", sanitizeUrl(show.feedUrl)!]] : []} /><PodcastFavoriteButton favorite={savedFavorite} saved={isSaved} onToggle={saved => onToggleFavorite(savedFavorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /></div></div>
     </header>
     <div className="flex items-center justify-between gap-3"><div><h3 className="text-2xl font-bold">Episodes</h3><p className="text-sm text-muted-foreground">Latest episodes from this show’s RSS feed.</p></div>{show.source !== "nostr" && <Button type="button" onClick={onPlay} disabled={!tracks.length || isLoading}><Play className="size-4 fill-current" /> Play latest</Button>}</div>
     {isLoading && !tracks.length ? <TrackSkeletonGrid /> : isError && !tracks.length ? <p role="alert" className="text-sm text-destructive">Couldn’t load episodes. <button type="button" className="underline" onClick={onRetry}>Try again</button></p> : tracks.length ? <PodcastEpisodeList tracks={tracks} show={show} favorites={favorites} onToggleFavorite={onToggleFavorite} onPlayTrack={onPlayTrack} saving={saving} userLoggedIn={userLoggedIn} /> : <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground">No playable episodes were found for this show.</div>}
@@ -538,7 +545,7 @@ function PodcastEpisodeList({ tracks, show, favorites, onToggleFavorite, onPlayT
   return <div>{tracks.length > 20 && pagination("top")}<div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-card/50 px-3 py-2"><Checkbox checked={allSelected ? true : selectedTracks.length ? "indeterminate" : false} aria-label="Select all podcast episodes" onCheckedChange={checked => setSelectedIds(checked === true ? tracks.map(track => track.id) : [])} /><span className="min-w-0 flex-1 text-sm">{selectedTracks.length ? `${selectedTracks.length} of ${tracks.length} episodes selected` : `Select all ${tracks.length} episodes`}</span>{selectedTracks.length > 0 && <Button type="button" size="sm" variant="outline" onClick={() => { player.addToQueue(selectedTracks); setSelectedIds([]); }}><ListPlus className="size-4" /> Add selected to queue</Button>}</div><div className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span aria-hidden="true" /><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Show</span><span className="pr-14">Actions</span></div>{visibleTracks.map((track, index) => {
     const episodeId = track.podcastIndexEpisodeId;
     const favorite: PodcastFavorite | undefined = episodeId ? { id: `podcast-index:episode:id:${episodeId}`, source: "podcast-index", title: track.title, publisher: show.title, image: track.image ?? show.image, feedId: show.feedId, episode: true, episodeId } : undefined;
-    const isSaved = false;
+    const isSaved = favorite ? favorites.some(item => item.id === favorite.id) : false;
     return <div key={track.id} className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/10"><Checkbox checked={selectedIds.includes(track.id)} aria-label={`${selectedIds.includes(track.id) ? "Deselect" : "Select"} ${track.title}`} onCheckedChange={checked => setSelectedIds(ids => checked === true ? [...new Set([...ids, track.id])] : ids.filter(id => id !== track.id))} /><span className="text-center text-sm text-muted-foreground">{pageStart + index + 1}</span><Link to={audioDetailPath(track)} aria-label={`View details for ${track.title}`} title={`View details for ${track.title}`} className="min-w-0 truncate text-left font-medium hover:text-primary hover:underline">{track.title}</Link><span className="hidden truncate text-sm text-muted-foreground md:block">{show.title}</span><div className="flex items-center gap-1">{favorite ? <PodcastFavoriteButton favorite={favorite} saved={isSaved} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /> : null}<LikeButton trackId={track.id} /><AddToPlaylistMenu trackId={track.id} /><QueueActionsMenu track={track} /></div></div>;
   })}{tracks.length > 20 && pagination("bottom")}</div>;
 }
