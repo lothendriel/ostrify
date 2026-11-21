@@ -8,6 +8,7 @@ import { isTrackVisibleInOstrify } from '@/lib/musicVisibility';
 import { DROPS_MUSIC_RELAY } from '@/lib/sources';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { queryRelaysWithGrace } from '@/lib/progressiveRelayQuery';
 
 const KINDS = [...MUSIC_TRACK_KINDS, 1063, 1];
 const PAGE_SIZE = 100;
@@ -34,10 +35,10 @@ export function useMusicDiscovery(enabled = true) {
     retry: false,
     queryFn: async ({ pageParam, signal }): Promise<Page> => {
       const next: Cursor = { ...pageParam };
-      const queryRelay = async (url: string) => {
+      const queryRelay = async (url: string, relaySignal: AbortSignal): Promise<NostrEvent[]> => {
         const relayKinds = url === DROPS_MUSIC_RELAY ? [36787] : url === OSTRIFY_RELAY_URL ? [...KINDS, 54] : KINDS;
         const activeKinds = relayKinds.filter(kind => next[cursorKey(url, kind)] !== null);
-        if (!activeKinds.length) return { url, events: [], ok: false, skipped: true };
+        if (!activeKinds.length) return [];
         const filters: NostrFilter[] = activeKinds.map(kind => {
           const until = next[cursorKey(url, kind)];
           return {
@@ -46,43 +47,42 @@ export function useMusicDiscovery(enabled = true) {
             ...(typeof until === 'number' ? { until } : {}),
           };
         });
-        try {
-          const eventsPromise = nostr.relay(url).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
-          const events = url === OSTRIFY_RELAY_URL
-            ? await Promise.race([eventsPromise, new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 1000))])
-            : await eventsPromise;
-          for (const kind of activeKinds) {
-            const matching = events.filter(event => event.kind === kind);
-            // Keep a one-second overlap so events with equal timestamps aren't skipped
-            // when they straddle a page. If the relay repeats a full timestamp boundary,
-            // step past it to avoid an infinite loop (some events may still be omitted).
-            const oldest = matching.length ? Math.min(...matching.map(e => e.created_at)) : null;
-            const current = next[cursorKey(url, kind)];
-            next[cursorKey(url, kind)] = oldest === null ? null : oldest === current ? oldest - 1 : oldest;
-          }
-          return { url, events, ok: true, skipped: false };
-        } catch (error) {
-          if (signal.aborted) throw error;
-          return { url, events: [], ok: false, skipped: false };
-        }
+        return nostr.relay(url).query(filters, {
+          signal: AbortSignal.any([relaySignal, AbortSignal.timeout(url === OSTRIFY_RELAY_URL ? 1500 : 8000)]),
+        });
       };
-      let results = await Promise.all(relays.map(queryRelay));
-      // Keep partial results responsive. Retry the failed relays once only when
-      // none responded, so a slow/broken relay cannot hold back a usable feed.
-      if (!results.some(result => result.ok)) {
-        const retryable = results.filter(result => !result.ok && !result.skipped);
-        const retried = await Promise.all(retryable.map(result => queryRelay(result.url)));
-        const retryByUrl = new Map(retried.map(result => [result.url, result]));
-        results = results.map(result => retryByUrl.get(result.url) ?? result);
+      const batch = await queryRelaysWithGrace(relays, queryRelay, signal, 700);
+      for (const { relay, value: events } of batch.results) {
+        const relayKinds = relay === DROPS_MUSIC_RELAY ? [36787] : relay === OSTRIFY_RELAY_URL ? [...KINDS, 54] : KINDS;
+        for (const kind of relayKinds) {
+          const matching = events.filter(event => event.kind === kind);
+          // Keep a one-second overlap so events with equal timestamps aren't skipped
+          // when they straddle a page. If the relay repeats a full timestamp boundary,
+          // step past it to avoid an infinite loop (some events may still be omitted).
+          const oldest = matching.length ? Math.min(...matching.map(e => e.created_at)) : null;
+          const current = next[cursorKey(relay, kind)];
+          next[cursorKey(relay, kind)] = oldest === null ? null : oldest === current ? oldest - 1 : oldest;
+        }
       }
-      const discoveredEvents = [...new Map(results.flatMap(result => result.events).map(event => [event.id, event])).values()];
+      for (const url of [...batch.failedRelays, ...batch.pendingRelays]) {
+        const relayKinds = url === DROPS_MUSIC_RELAY ? [36787] : url === OSTRIFY_RELAY_URL ? [...KINDS, 54] : KINDS;
+        for (const kind of relayKinds) {
+          const key = cursorKey(url, kind);
+          const previous = pageParam[key];
+          if (previous === null || typeof previous === 'number') next[key] = previous;
+          else delete next[key];
+        }
+      }
+      const eventsByRelay = new Map(batch.results.map(result => [result.relay, result.value]));
+      const successfulRelayCount = batch.results.filter(result => result.relay !== OSTRIFY_RELAY_URL).length;
+      const failed = [...new Set([...batch.failedRelays, ...batch.pendingRelays])].filter(url => url !== DROPS_MUSIC_RELAY && url !== OSTRIFY_RELAY_URL);
+      if (!batch.results.length) throw new Error('Could not reach any configured read relays or DROPS.');
+      const allEvents = [...eventsByRelay.values()].flat();
+      const discoveredEvents = [...new Map(allEvents.map(event => [event.id, event])).values()];
       captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
-      const failed = results.filter(result => !result.ok && !result.skipped && result.url !== DROPS_MUSIC_RELAY && result.url !== OSTRIFY_RELAY_URL).map(result => result.url);
-      const succeeded = results.filter(result => result.ok && result.url !== OSTRIFY_RELAY_URL).length;
-      if (!results.some(result => result.ok) && !succeeded && failed.length) throw new Error('Could not reach any configured read relays or DROPS.');
-      const tracks = [...new Map(results.flatMap(result => result.events).map(event => [event.id, event])).values()].map(eventToTrack).filter((t): t is Track => !!t && t.kind === 'music' && isTrackVisibleInOstrify(t, user?.pubkey));
+      const tracks = discoveredEvents.map(eventToTrack).filter((t): t is Track => !!t && t.kind === 'music' && isTrackVisibleInOstrify(t, user?.pubkey));
       tracks.sort((a, b) => b.createdAt - a.createdAt);
-      return { tracks, next, failed, succeeded };
+      return { tracks, next, failed, succeeded: successfulRelayCount };
     },
     getNextPageParam: (page) => relays.some(url => (url === DROPS_MUSIC_RELAY ? [36787] : url === OSTRIFY_RELAY_URL ? [...KINDS, 54] : KINDS).some(kind => page.next[cursorKey(url, kind)] !== null)) ? page.next : undefined,
   });
