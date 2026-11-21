@@ -61,7 +61,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         aria-label="Ostrify home"
         className="mx-2 flex items-center gap-2 rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <img src="/ostrify-logo.png?v=ostrich-note" alt="" className="size-10 rounded-md object-contain" />
+        <img src="/ostrify-logo-512.webp?v=opt-1" alt="" className="size-10 rounded-md object-contain" />
         <span className="font-bold text-xl tracking-tight">Ostrify</span>
       </NavLink>
 

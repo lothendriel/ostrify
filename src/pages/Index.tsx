@@ -85,9 +85,9 @@ const Index = () => {
 
   const { greeting, greetingImage } = (() => {
     const hour = new Date().getHours();
-    if (hour < 12) return { greeting: "Good morning", greetingImage: "/greeting-morning.png" };
-    if (hour < 18) return { greeting: "Good afternoon", greetingImage: "/greeting-afternoon.png" };
-    return { greeting: "Good evening", greetingImage: "/greeting-evening.png" };
+    if (hour < 12) return { greeting: "Good morning", greetingImage: "/greeting-morning.webp" };
+    if (hour < 18) return { greeting: "Good afternoon", greetingImage: "/greeting-afternoon.webp" };
+    return { greeting: "Good evening", greetingImage: "/greeting-evening.webp" };
   })();
 
   return (
