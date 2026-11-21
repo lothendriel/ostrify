@@ -149,6 +149,10 @@ const Index = () => {
   }, [allMusic, genreCatalogTracksByGenre, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
   const [displayShelves, setDisplayShelves] = useState<{ scope: string; shelves: HomeCategoryShelves } | null>(() => homeShelfSessionSnapshot);
   const visibleCategoryShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : categoryShelves;
+  const orderedCategoryShelves = useMemo(() => [
+    ...visibleCategoryShelves.filter(shelf => shelf.tracks.length > 0),
+    ...visibleCategoryShelves.filter(shelf => shelf.tracks.length === 0),
+  ], [visibleCategoryShelves]);
   const previousShelfVariation = useRef(shelfVariation);
   const personalizedInputsLoading = playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading;
   const neededCatalogStillLoading = [...categoriesNeedingCatalog].some(genre => {
@@ -238,7 +242,7 @@ const Index = () => {
       {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}
       {wavlake.isError && <p role="status" className="text-xs text-muted-foreground">Wavlake catalog results aren’t available right now; genre shelves use music from responding relays.</p>}
       <section aria-label="Browse music by genre" className="grid grid-cols-1 gap-6 sm:grid-cols-2 2xl:grid-cols-3">
-        {visibleCategoryShelves.map(({ category, tracks: categoryTracks }) => (
+        {orderedCategoryShelves.map(({ category, tracks: categoryTracks }) => (
           <DeferredHomeSection key={category.id} title={category.label} rootMargin="600px 0px">
             <Shelf title={category.label} tracks={categoryTracks} dense compactCards carouselRows={2} seeAllHref={`/category/${category.id}`} carouselClassName="grid-rows-2" onRefresh={refreshGenreShelves} />
           </DeferredHomeSection>
