@@ -151,7 +151,7 @@ const SettingsPage = () => {
               <div className="space-y-1">
                 <label htmlFor="include-user-relays" className="text-sm font-medium">Also use my NIP-65 read relays for broader discovery</label>
                 <p className="text-xs text-muted-foreground">
-                  Ostrify uses your NIP-65 write relays for your own settings, libraries, and music. This optional setting also uses your read relays for broader discovery. Blossom servers remain separate for media uploads.
+                  Ostrify uses your NIP-65 write relays to publish and retrieve your own settings, libraries, and music. Enabling this adds your read relays to broader discovery. Relays are independently operated: publishing sends event data to those operators, and public events remain public. Removing a relay here only stops Ostrify from using it; your published NIP-65 list is unchanged. These are NIP-65 read/write relays, not your NIP-17 private-message inbox. Blossom servers are separate and host media uploads.
                 </p>
               </div>
             </div>
