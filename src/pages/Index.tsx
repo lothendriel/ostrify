@@ -22,6 +22,8 @@ import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
 import type { Track } from "@/lib/music";
 
+const HOME_WAVLAKE_GENRES = [...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
+
 function HomeFreshTracks({ candidates, enabled }: { candidates: Track[]; enabled: boolean }) {
   const query = useFreshNostrTracks(enabled);
   const tracks = useMemo(() => {
@@ -47,9 +49,15 @@ const Index = () => {
   const tracksLoading = homeTracksQuery.isLoading;
   const wavlake = useWavlakeCatalog(undefined, discoveryEnabled);
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
-  const genreCatalogQueries = useWavlakeGenreCatalog([...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))], discoveryEnabled);
-  const genreCatalogVersion = genreCatalogQueries.map(query => query.dataUpdatedAt).join('|');
+  const baseMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
+  const baseSourcesLoading = homeTracksQuery.isLoading || wavlake.isLoading;
+  const categoriesNeedingCatalog = useMemo(() => new Set(baseSourcesLoading ? [] : CATEGORIES
+    .filter(category => category.wavlakeGenres?.length && new Set(tracksInCategory(baseMusic, category.id).map(track => track.url)).size < 8)
+    .flatMap(category => category.wavlakeGenres ?? [])), [baseMusic, baseSourcesLoading]);
+  const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog]);
+  const genreCatalogVersion = genreCatalogQueries.map((query, index) => `${HOME_WAVLAKE_GENRES[index]}:${query.dataUpdatedAt}:${query.isLoading}`).join('|');
   const genreCatalogTracks = useMemo(() => genreCatalogQueries.flatMap(query => query.data ?? []), [genreCatalogVersion]);
+  const genreCatalogTracksByGenre = new Map(HOME_WAVLAKE_GENRES.map((genre, index) => [genre, genreCatalogQueries[index]?.data ?? []] as const));
   const player = usePlayer();
   const followedArtists = useFollowedArtists(discoveryEnabled);
   const [pageSeed] = useState(() => crypto.randomUUID());
@@ -64,7 +72,7 @@ const Index = () => {
   const categoryShelves = useMemo(() => {
     const shownOnPage = new Set<string>();
     return CATEGORIES.map(category => {
-      const genreTracks = genreCatalogTracks.filter(track => category.wavlakeGenres?.some(genre => track.topics.includes(genre.toLowerCase())));
+      const genreTracks = (category.wavlakeGenres ?? []).flatMap(genre => genreCatalogTracksByGenre.get(genre) ?? []);
       const categoryPool = category.wavlakeGenres?.length
         ? [...allMusic, ...genreTracks].map(track => genreTracks.includes(track) && category.match.length ? { ...track, topics: [...track.topics, category.match[0]] } : track)
         : allMusic;
@@ -92,7 +100,7 @@ const Index = () => {
       }
       return { category, tracks: selected };
     });
-  }, [allMusic, genreCatalogVersion, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
+  }, [allMusic, genreCatalogTracksByGenre, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
 
   useEffect(() => {
     if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
