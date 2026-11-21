@@ -28,6 +28,15 @@ export function TestApp({ children }: TestAppProps) {
       ],
       updatedAt: 0,
     },
+    appRelayMetadata: {
+      relays: [
+        { url: 'wss://relay.primal.net', read: true, write: true },
+      ],
+      updatedAt: 0,
+    },
+    userRelayMetadata: { relays: [], updatedAt: 0 },
+    userRelayPubkey: '',
+    includeUserRelays: false,
     blossomServerMetadata: {
       servers: ['https://blossom.primal.net/'],
       updatedAt: 0,

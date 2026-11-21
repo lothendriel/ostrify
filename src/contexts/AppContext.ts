@@ -20,8 +20,16 @@ export interface BlossomServerMetadata {
 export interface AppConfig {
   /** Current theme */
   theme: Theme;
-  /** Ostrify-specific relay choices, stored locally and never synced to NIP-65. */
+  /** Effective relay set used by Ostrify's relay pool and features. */
   relayMetadata: RelayMetadata;
+  /** Relay choices managed in Ostrify settings, stored locally and never synced to NIP-65. */
+  appRelayMetadata: RelayMetadata;
+  /** User's NIP-65 relay list, cached locally after being fetched from Nostr. */
+  userRelayMetadata: RelayMetadata;
+  /** Public key owning the cached user relay list. */
+  userRelayPubkey: string;
+  /** Whether to include the user's NIP-65 relays in Ostrify's effective relay set. */
+  includeUserRelays: boolean;
   /** User's kind 10063 Blossom server list. */
   blossomServerMetadata: BlossomServerMetadata;
   /**

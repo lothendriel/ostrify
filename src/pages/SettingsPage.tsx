@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { RelayListManager } from "@/components/RelayListManager";
 import { useTheme } from "@/hooks/useTheme";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useAppContext } from "@/hooks/useAppContext";
 import { LISTENING_STATUS_CLEAR_RESULT_EVENT, useListeningSharing, type ListeningStatusClearResult } from "@/hooks/useListeningSharing";
 import { Switch } from "@/components/ui/switch";
 import { useDirectoryEnrollment } from "@/hooks/useOstrifyDirectory";
@@ -17,6 +18,7 @@ const SettingsPage = () => {
   useSeoMeta({ title: "Settings — Ostrify" });
   const { theme, setTheme } = useTheme();
   const { user } = useCurrentUser();
+  const { config, updateConfig } = useAppContext();
   const sharing = useListeningSharing();
   const [clearResult, setClearResult] = useState<ListeningStatusClearResult | null>(null);
   const directory = useDirectoryEnrollment();
@@ -46,14 +48,30 @@ const SettingsPage = () => {
             Relays
           </CardTitle>
           <CardDescription>
-            Ostrify loads music and podcasts from these relays. Add more sources to discover
-            more audio, and toggle read (fetch music) or write (publish your likes &amp; playlists)
-            for each. These choices apply only to Ostrify and never overwrite your NIP-65 relay
-            list or change relay settings in other Nostr clients.
+            Ostrify uses these recommended music, podcast, and community relays for discovery and app data. You can add or remove app relays and toggle read or write access. Your NIP-65 relays are separate and can optionally be included below.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <RelayListManager />
+          <div className="space-y-2 border-t pt-4">
+            <div className="flex items-start gap-3">
+              <Switch
+                id="include-user-relays"
+                checked={config.includeUserRelays}
+                disabled={!user || config.userRelayPubkey !== user.pubkey || config.userRelayMetadata.relays.length === 0}
+                onCheckedChange={(enabled) => updateConfig(current => ({ ...current, includeUserRelays: enabled }))}
+              />
+              <div className="space-y-1">
+                <label htmlFor="include-user-relays" className="text-sm font-medium">Also use my NIP-65 read/write relays in Ostrify</label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, Ostrify adds your profile’s NIP-65 read relays for fetching and write relays for publishing. This is separate from your Blossom server list, which remains available for media uploads.
+                </p>
+              </div>
+            </div>
+            {!user && <p className="text-xs text-muted-foreground">Log in to use your NIP-65 relays.</p>}
+            {user && config.userRelayPubkey !== user.pubkey && <p role="status" className="text-xs text-muted-foreground">Loading your NIP-65 relay list…</p>}
+            {user && config.userRelayPubkey === user.pubkey && config.userRelayMetadata.relays.length === 0 && <p className="text-xs text-muted-foreground">No NIP-65 relay list was found for this account. Your Blossom server list is managed separately below.</p>}
+          </div>
         </CardContent>
       </Card>
 

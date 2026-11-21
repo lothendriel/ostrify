@@ -32,6 +32,10 @@ const BlossomServerMetadataSchema = z.object({
 const AppConfigSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']),
   relayMetadata: RelayMetadataSchema,
+  appRelayMetadata: RelayMetadataSchema,
+  userRelayMetadata: RelayMetadataSchema,
+  userRelayPubkey: z.string(),
+  includeUserRelays: z.boolean(),
   blossomServerMetadata: BlossomServerMetadataSchema,
   useAppBlossomServers: z.boolean(),
 }) satisfies z.ZodType<AppConfig>;
@@ -50,7 +54,7 @@ export function AppProvider(props: AppProviderProps) {
     {
       serialize: JSON.stringify,
       deserialize: (value: string) => {
-        const parsed = JSON.parse(value);
+        const parsed: unknown = JSON.parse(value);
         return AppConfigSchema.partial().parse(parsed);
       }
     }
@@ -61,18 +65,81 @@ export function AppProvider(props: AppProviderProps) {
     setConfig(updater);
   };
 
-  const savedRelays = rawConfig.relayMetadata?.relays ?? defaultConfig.relayMetadata.relays;
+  // Migrate old app-only relay settings: preserve the user's read/write choices
+  // for defaults that remain, add the newly recommended defaults, drop relays
+  // that were removed from the recommended set, and retain explicitly custom relays.
+  const legacyRelayMetadata = rawConfig.relayMetadata;
+  const normalizeRelayUrl = (url: string): string => url.trim().replace(/\/+$/, '').toLowerCase();
+  const legacyRecommendedRelayUrls = new Set([
+    'wss://relay.studio314.us/nostrrelay/ostrify',
+    'wss://drops.basspistol.org',
+    'wss://relay.lightning.fm',
+    'wss://relay.wavlake.com',
+    'wss://relay.fountain.fm',
+    'wss://lightningrelay.com',
+    'wss://nostr.land',
+    'wss://relay.nostr.band',
+    'wss://purplepag.es',
+    'wss://nos.lol',
+    'wss://relay.nostr.net',
+    'wss://relay.noswhere.com',
+    'wss://relay.primal.net',
+    'wss://relay.damus.io',
+    'wss://nostr.wine',
+    'wss://relay.snort.social',
+    'wss://relay.ditto.pub',
+    'wss://relay.dreamith.to',
+  ]);
+  const migratedLegacyRelays = legacyRelayMetadata
+    ? legacyRelayMetadata.updatedAt === 0
+      ? defaultConfig.appRelayMetadata.relays
+      : [
+          ...defaultConfig.appRelayMetadata.relays.map(relay => {
+            const previous = legacyRelayMetadata.relays.find(saved => normalizeRelayUrl(saved.url) === normalizeRelayUrl(relay.url));
+            return previous
+              ? { ...relay, read: previous.read, write: previous.write }
+              : legacyRelayMetadata.relays.some(saved => legacyRecommendedRelayUrls.has(normalizeRelayUrl(saved.url)))
+                ? relay
+                : { ...relay, read: false, write: false };
+          }),
+          ...legacyRelayMetadata.relays
+            .filter(relay => !legacyRecommendedRelayUrls.has(normalizeRelayUrl(relay.url)))
+            .map(relay => ({ ...relay })),
+        ]
+    : defaultConfig.appRelayMetadata.relays;
+  const appRelayMetadata = rawConfig.appRelayMetadata ?? {
+    relays: migratedLegacyRelays,
+    updatedAt: legacyRelayMetadata?.updatedAt ?? 0,
+  };
+  const userRelayMetadata = rawConfig.userRelayMetadata ?? defaultConfig.userRelayMetadata;
+  const userRelayPubkey = rawConfig.userRelayPubkey ?? defaultConfig.userRelayPubkey;
+  const includeUserRelays = rawConfig.includeUserRelays ?? defaultConfig.includeUserRelays;
   const requiredRelay = APP_RELAYS.relays.find(relay => isRequiredAppRelay(relay.url));
-  const relays = [
-    ...(requiredRelay && !savedRelays.some(relay => isRequiredAppRelay(relay.url)) ? [requiredRelay] : []),
-    ...savedRelays.map(relay => isRequiredAppRelay(relay.url) && requiredRelay ? { ...relay, url: requiredRelay.url, read: true, write: true } : relay),
+  const appRelays = appRelayMetadata.relays;
+  const normalizedAppRelays = [
+    ...(requiredRelay && !appRelays.some(relay => isRequiredAppRelay(relay.url)) ? [requiredRelay] : []),
+    ...appRelays.map(relay => isRequiredAppRelay(relay.url) && requiredRelay ? { ...relay, url: requiredRelay.url, read: true, write: true } : relay),
   ];
-  const config = {
+  const relayMap = new Map<string, { url: string; read: boolean; write: boolean }>();
+  for (const relay of [...normalizedAppRelays, ...(includeUserRelays ? userRelayMetadata.relays : [])]) {
+    const key = normalizeRelayUrl(relay.url);
+    const existing = relayMap.get(key);
+    relayMap.set(key, {
+      url: existing?.url ?? relay.url,
+      read: (existing?.read ?? false) || relay.read,
+      write: (existing?.write ?? false) || relay.write,
+    });
+  }
+  const relays = [...relayMap.values()];
+  const config: AppConfig = {
     ...defaultConfig,
     ...rawConfig,
+    appRelayMetadata: { ...appRelayMetadata, relays: normalizedAppRelays },
+    userRelayMetadata,
+    userRelayPubkey,
+    includeUserRelays,
     relayMetadata: {
-      ...defaultConfig.relayMetadata,
-      ...rawConfig.relayMetadata,
+      updatedAt: Math.max(appRelayMetadata.updatedAt, includeUserRelays ? userRelayMetadata.updatedAt : 0),
       relays,
     },
   };

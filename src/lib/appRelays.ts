@@ -18,7 +18,7 @@ export const APP_RELAYS: RelayMetadata = {
   relays: [
     // Ostrify's own catalog and user-library relay; always available to read and publish.
     { url: OSTRIFY_RELAY_URL, read: true, write: true },
-    // --- Music-focused sources (read) ---
+    // --- Music and podcast sources (read) ---
     // DROPS is dedicated to Nostr kind 36787 music tracks.
     { url: 'wss://drops.basspistol.org/', read: true, write: false },
     // Lightning FM's artist catalog uses kind 31337; reads are public.
@@ -30,19 +30,14 @@ export const APP_RELAYS: RelayMetadata = {
     // TuneStr's community uses Lightning Relay and nostr.land for live music events.
     { url: 'wss://lightningrelay.com/', read: true, write: false },
     { url: 'wss://nostr.land/', read: true, write: false },
-    // Aggregating/indexing relay — great for discovery across the network.
-    { url: 'wss://relay.nostr.band/', read: true, write: false },
+
+    // --- Additional community and discovery relays ---
+    { url: 'wss://nos.lol/', read: true, write: true },
+    { url: 'wss://relay.nostr.net/', read: true, write: true },
+    { url: 'wss://nostr.wine/', read: true, write: false },
+    { url: 'wss://relay.noswhere.com/', read: true, write: false },
     // Specializes in profiles/metadata — resolves artist names & avatars.
     { url: 'wss://purplepag.es/', read: true, write: false },
-
-    // --- Broad, high-volume general relays (lots of audio notes & reposts) ---
-    { url: 'wss://nos.lol/', read: true, write: true },
-    { url: 'wss://relay.primal.net/', read: true, write: true },
-    { url: 'wss://relay.damus.io/', read: true, write: true },
-    { url: 'wss://nostr.wine/', read: true, write: false },
-    { url: 'wss://relay.snort.social/', read: true, write: false },
-    { url: 'wss://relay.ditto.pub/', read: true, write: true },
-    { url: 'wss://relay.dreamith.to/', read: true, write: true },
   ],
   updatedAt: 0,
 };

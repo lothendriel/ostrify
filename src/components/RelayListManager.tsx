@@ -45,7 +45,7 @@ export function RelayListManager() {
   const { nostr } = useNostr();
   const { toast } = useToast();
 
-  const [relays, setRelays] = useState<Relay[]>(config.relayMetadata.relays);
+  const [relays, setRelays] = useState<Relay[]>(config.appRelayMetadata.relays);
   const [newRelayUrl, setNewRelayUrl] = useState('');
   const [health, setHealth] = useState<Record<string, RelayHealth>>({});
 
@@ -89,8 +89,8 @@ export function RelayListManager() {
   // Sync the editable relay list with its persisted app-specific configuration.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRelays(config.relayMetadata.relays);
-  }, [config.relayMetadata.relays]);
+    setRelays(config.appRelayMetadata.relays);
+  }, [config.appRelayMetadata.relays]);
 
   const normalizeRelayUrl = (url: string): string => {
     url = url.trim();
@@ -187,7 +187,7 @@ export function RelayListManager() {
     // Persist relay choices only in Ostrify's local app configuration.
     updateConfig((current) => ({
       ...current,
-      relayMetadata: {
+      appRelayMetadata: {
         relays: newRelays,
         updatedAt: now,
       },
@@ -344,7 +344,7 @@ export function RelayListManager() {
       {/* Reset to defaults */}
       <div className="flex items-center justify-between gap-2 pt-1">
         <p className="text-xs text-muted-foreground">
-          These relay choices are saved in Ostrify only and won’t change your NIP-65 relay list.
+          These app relay choices are saved in Ostrify only and won’t change your NIP-65 relay list.
         </p>
         <AlertDialog>
           <AlertDialogTrigger asChild>
