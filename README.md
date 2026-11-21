@@ -27,40 +27,42 @@ There is no Ostrify account server. Sign in with a Nostr-compatible signer to pu
 
 ### Discover music and audio
 
-- **Home:** browse genre shelves, fresh Nostr tracks, personalized recommendations, daily discoveries, music news, and podcasts. Sections and their data load as you approach them while scrolling.
-- **Music:** find tracks on your enabled Nostr relays and the shared DROPS music relay, browse the Wavlake catalog, discover TuneStr live streams and recordings, and explore artists, publishers, albums, and public Ostrify playlists.
-- **Genres:** browse Rock, Electronic, Hip-Hop, Jazz & Blues, Classical, Folk & Acoustic, Pop, Ambient & Chill, and Bitcoin & Nostr; open a category’s full catalog with **See all**.
-- **Podcasts:** browse Nostr episodes and shows, Fountain-linked shows and RSS episodes, or search the Podcast Index directory. Save shows and episodes to your library.
-- **Audiobooks:** search and browse LibriVox and the Project Gutenberg Open Audiobook Collection, play available recordings in sequence, and save favorites or organize collections.
+- **Home:** jump back into recent listening, browse a personalized mix and daily discoveries, and explore fresh Nostr tracks, music news, podcasts, and genre shelves. Distant sections and their queries load as you scroll toward them. Home discovery keeps useful cached results visible while refreshing, tolerates relays that fail or respond slowly, and requests Wavlake genre catalogs where they can fill sparse shelves.
+- **Personalized genre shelves:** explore Rock, Electronic, Hip-Hop, Jazz & Blues, Classical, Folk & Acoustic, Pop, Ambient & Chill, Bitcoin & Nostr, and General. Shelves favor tracks not shown recently, avoid repeating a track across the current selection where possible, and can be refreshed. Shelves with tracks are placed before empty shelves; use **See all** for a category’s full catalog.
+- **Music:** discover playable tracks from enabled read relays and the shared DROPS relay; browse the Wavlake catalog; explore artists, publishers, albums, releases, and public Ostrify playlists; and find TuneStr live streams and recordings. Catalog and relay results may be partial and depend on source availability.
+- **Podcasts:** browse Nostr shows and episodes, Fountain-linked shows and RSS episodes, or Podcast Index directory results. Search Nostr and Fountain catalogs, open show pages, select episodes for the queue, and save shows or episodes to your library. Cached lookups and progressive results help surface available matches without waiting for every source.
+- **Audiobooks:** search and browse volunteer-read LibriVox books and AI-narrated selections from the Project Gutenberg Open Audiobook Collection. Play available recordings in sequence, save favorites, and organize collections.
 - **Search:** search loaded music, podcasts, Wavlake tracks and artists, audiobooks, and Ostrify profiles that opted into the public directory.
 - **Music news:** read recent music updates, reviews, releases, and articles shared on your relays.
 
 ### Listen and manage playback
 
 - **Persistent player:** audio continues as you navigate. Use play/pause, previous/next, seek, volume, shuffle, repeat, and queue controls.
-- **Queue and history:** manage upcoming tracks, revisit recent listening, and resume playback from this browser.
-- **Track actions:** like tracks, add supported audio to playlists, or use queue actions while browsing.
-- **TuneStr video:** play supported live streams and recordings in a docked or full-screen player.
-- **Daily Discovery:** give local recommendations feedback with **More like this**, **Not for me**, and artist-blocking controls.
-- **Analytics:** review local listening time, sessions, top tracks, and a seven-day overview, alongside a sampled view of audio events returned by your read relays.
+- **Queue and history:** manage upcoming tracks, revisit recent listening, and resume playback from this browser. The queue is scoped to the active Nostr account.
+- **Track actions and sharing:** like tracks, add supported audio to playlists, use queue actions while browsing, and share audio or pages to Nostr. Audio shares use compact links and can resolve back to a playable track.
+- **TuneStr video:** play supported live streams and recordings in a docked or full-screen player, and save recordings to your library.
+- **Daily Discovery:** get a locally personalized selection and give feedback with **More like this**, **Not for me**, and artist-blocking controls.
+- **Analytics:** review private, browser-local listening time, sessions, format breakdowns, top tracks, and a seven-day overview. The Nostr network pulse shows a sampled view of playable audio events and publishers returned by enabled read relays; these are not global counts.
 
 ### Build a library and publish music
 
-- **Liked Songs and playlists:** create, organize, and reorder playlists; publish supported lists as Nostr events; and browse public Ostrify playlists.
+- **Liked Songs and playlists:** create, edit, organize, and reorder playlists; publish supported lists as Nostr events; and browse public Ostrify playlists.
 - **Saved albums:** bookmark Wavlake and Nostr publisher albums in a Nostr-synced library, with per-album visibility controls for Ostrify profiles.
-- **Follow artists and people:** keep a separate artist list, follow Ostrify accounts, and find people who opted into the directory.
-- **Saved podcasts:** keep shows and episodes together in a Nostr-synced library.
+- **Follow artists and people:** keep artist follows separate from Ostrify follows, view followed artists, follow Ostrify accounts, and find people who opted into the directory.
+- **Saved podcasts:** keep shows and episodes together in a Nostr-synced library; saved state is shown on podcast show and episode pages.
 - **Audiobook library:** organize favorites and collections on this device, and optionally sync them privately across devices.
 - **Public music profile:** choose which supported library sections Ostrify displays on your profile.
-- **Publish music:** upload a track or a multi-track album through a configured Blossom server, or publish an HTTPS audio URL. Add artwork and genre metadata, reuse and reorder previously published tracks, and choose whether each track is shown in Ostrify.
-- **My Uploads:** review your published tracks, paginate through them, and change Ostrify visibility individually or for albums. A visibility change is not a deletion or a way to make a public Nostr event private.
-- **DROPS sharing:** public music uploads are also sent to the shared DROPS relay for Ostrify discovery. The publishing interface reports outcomes and can help share eligible existing public tracks.
+- **Publish music:** upload a track or multi-track album through a configured Blossom server, or publish an HTTPS audio URL. Add artwork and genre metadata, reuse and reorder previously published tracks, and choose whether each track is shown in Ostrify.
+- **My Uploads:** review and paginate through your published tracks, then change Ostrify visibility for individual tracks or albums. A visibility change is not a deletion or a way to make a public Nostr event private.
+- **DROPS sharing:** public music uploads are also sent to the shared DROPS relay for Ostrify discovery. Publishing reports sharing outcomes and can help share eligible existing public tracks.
 
-### Friends and activity
+### Friends, privacy, and settings
 
-- **Friends on Ostrify:** follow accounts, browse public profile sections they choose to display, and discover opt-in directory listings.
+- **Friends on Ostrify:** follow accounts, browse the public profile sections they choose to display, and discover opt-in directory listings. Friend listening activity can be viewed from the Friends page or activity panel.
 - **Private invites:** send NIP-17 encrypted friend invites to a Nostr public key; the recipient chooses whether to follow you back.
-- **Listening status:** optionally share the current track as a public NIP-38 status. Sharing is off by default.
+- **Listening status:** optionally share the current track as a public NIP-38 status. Sharing is off by default, and Ostrify reports whether it could publish a clearing update when you turn sharing off.
+- **Relay controls:** manage Ostrify’s recommended read/write relays and Blossom upload servers separately. Optionally include your NIP-65 read relays for broader discovery; Ostrify-specific exclusions do not change your published NIP-65 list.
+- **Privacy and appearance:** opt into or withdraw from the public Ostrify directory, choose which library sections appear on your profile, and select light or dark appearance.
 
 ## A look around
 
