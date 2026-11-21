@@ -25,13 +25,14 @@ import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHist
 import type { Track } from "@/lib/music";
 import { useHomeSessionScope } from '@/contexts/HomeSessionContext';
 
-const HOME_WAVLAKE_GENRES = [...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
+const HOME_SHELF_CATEGORIES = CATEGORIES.filter(category => category.id !== "bitcoin");
+const HOME_WAVLAKE_GENRES = [...new Set(HOME_SHELF_CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
 type HomeCategoryShelves = { category: typeof CATEGORIES[number]; tracks: Track[] }[];
 let homeShelfSessionSnapshot: { scope: string; shelves: HomeCategoryShelves } | null = null;
 
 function groupHomeTracksByCategory(allMusic: Track[], genreCatalogTracksByGenre: Map<string, Track[]>): Map<string, Track[]> {
-  const groups = new Map(CATEGORIES.map(category => [category.id, [] as Track[]]));
-  const genreTracksByCategory = new Map(CATEGORIES.map(category => [
+  const groups = new Map(HOME_SHELF_CATEGORIES.map(category => [category.id, [] as Track[]]));
+  const genreTracksByCategory = new Map(HOME_SHELF_CATEGORIES.map(category => [
     category.id,
     (category.wavlakeGenres ?? []).flatMap(genre => genreCatalogTracksByGenre.get(genre) ?? []),
   ]));
@@ -49,7 +50,7 @@ function groupHomeTracksByCategory(allMusic: Track[], genreCatalogTracksByGenre:
     const catalogCategories = catalogCategoriesByTrack.get(track) ?? new Set<string>();
     const matchedCategories = new Set(categoriesForTrack(track).filter(categoryId => categoryId !== "general" || catalogCategories.size === 0));
     for (const categoryId of catalogCategories) matchedCategories.add(categoryId);
-    for (const category of CATEGORIES) {
+    for (const category of HOME_SHELF_CATEGORIES) {
       if (!matchedCategories.has(category.id)) continue;
       const groupedTrack = catalogCategories.has(category.id) && category.match.length
         ? { ...track, topics: [...track.topics, category.match[0]] }
@@ -58,7 +59,7 @@ function groupHomeTracksByCategory(allMusic: Track[], genreCatalogTracksByGenre:
     }
   }
 
-  for (const category of CATEGORIES) {
+  for (const category of HOME_SHELF_CATEGORIES) {
     if (!category.match.length) continue;
     const categoryTracks = groups.get(category.id);
     for (const track of genreTracksByCategory.get(category.id) ?? []) {
@@ -100,7 +101,7 @@ const Index = () => {
   const baseMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const baseSourcesLoading = homeTracksQuery.isLoading || wavlake.isLoading;
   const baseTracksByCategory = useMemo(() => groupTracksByCategory(baseMusic), [baseMusic]);
-  const categoriesNeedingCatalog = useMemo(() => new Set(baseSourcesLoading ? [] : CATEGORIES
+  const categoriesNeedingCatalog = useMemo(() => new Set(baseSourcesLoading ? [] : HOME_SHELF_CATEGORIES
     .filter(category => category.wavlakeGenres?.length && new Set((baseTracksByCategory.get(category.id) ?? []).map(track => track.url)).size < 8)
     .flatMap(category => category.wavlakeGenres ?? [])), [baseTracksByCategory, baseSourcesLoading]);
   const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog], homeAccountScope, true);
@@ -121,7 +122,7 @@ const Index = () => {
   const categoryShelves = useMemo(() => {
     const shownOnPage = new Set<string>();
     const tracksByCategory = groupHomeTracksByCategory(allMusic, genreCatalogTracksByGenre);
-    return CATEGORIES.map(category => {
+    return HOME_SHELF_CATEGORIES.map(category => {
       const categoryTracks = [...(tracksByCategory.get(category.id) ?? [])];
       const recentlyShown = new Set(recentShelfHistory.current[category.id] ?? []);
       const freshCandidates = categoryTracks.filter(track => !recentlyShown.has(track.id) && !recentlyShown.has(track.url));
