@@ -23,13 +23,14 @@ import { CATEGORIES, tracksInCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
 import type { Track } from "@/lib/music";
+import { useHomeSessionScope } from '@/contexts/HomeSessionContext';
 
 const HOME_WAVLAKE_GENRES = [...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
 type HomeCategoryShelves = { category: typeof CATEGORIES[number]; tracks: Track[] }[];
 let homeShelfSessionSnapshot: { scope: string; shelves: HomeCategoryShelves } | null = null;
 
-function HomeFreshTracks({ candidates, enabled }: { candidates: Track[]; enabled: boolean }) {
-  const query = useFreshNostrTracks(enabled);
+function HomeFreshTracks({ candidates, enabled, sessionScope }: { candidates: Track[]; enabled: boolean; sessionScope?: string }) {
+  const query = useFreshNostrTracks(enabled, sessionScope);
   const tracks = useMemo(() => {
     const byUrl = new Map<string, Track>();
     for (const track of [...(query.data ?? []), ...candidates.filter(candidate => candidate.kind === "music" && !!candidate.event)]) {
@@ -50,31 +51,32 @@ const Index = () => {
   const { ref: discoveryTriggerRef, isNearViewport: discoveryEnabled } = useNearViewport<HTMLDivElement>("100px 0px");
   const { user } = useCurrentUser();
   const { config } = useAppContext();
-  const shelfSessionScope = `${user?.pubkey ?? "public"}:${config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|")}`;
-  const homeTracksQuery = useHomeTracks(discoveryEnabled);
+  const homeAccountScope = useHomeSessionScope();
+  const shelfSessionScope = `${homeAccountScope ?? user?.pubkey ?? "public"}:${config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|")}`;
+  const homeTracksQuery = useHomeTracks(discoveryEnabled, homeAccountScope);
   const tracks = homeTracksQuery.data?.tracks ?? [];
   const tracksLoading = homeTracksQuery.isLoading;
-  const wavlake = useWavlakeCatalog(undefined, discoveryEnabled);
+  const wavlake = useWavlakeCatalog(undefined, discoveryEnabled, homeAccountScope);
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const baseMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const baseSourcesLoading = homeTracksQuery.isLoading || wavlake.isLoading;
   const categoriesNeedingCatalog = useMemo(() => new Set(baseSourcesLoading ? [] : CATEGORIES
     .filter(category => category.wavlakeGenres?.length && new Set(tracksInCategory(baseMusic, category.id).map(track => track.url)).size < 8)
     .flatMap(category => category.wavlakeGenres ?? [])), [baseMusic, baseSourcesLoading]);
-  const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog]);
+  const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog], homeAccountScope);
   const genreCatalogVersion = genreCatalogQueries.map((query, index) => `${HOME_WAVLAKE_GENRES[index]}:${query.dataUpdatedAt}:${query.isLoading}`).join('|');
   const genreCatalogTracks = useMemo(() => genreCatalogQueries.flatMap(query => query.data ?? []), [genreCatalogVersion]);
   const genreCatalogTracksByGenre = useMemo(() => new Map(HOME_WAVLAKE_GENRES.map((genre, index) => [genre, genreCatalogQueries[index]?.data ?? []] as const)), [genreCatalogVersion]);
   const player = usePlayer();
-  const followedArtists = useFollowedArtists(discoveryEnabled);
+  const followedArtists = useFollowedArtists(discoveryEnabled, homeAccountScope);
   const [pageSeed] = useState(() => crypto.randomUUID());
   const [shelfVariation, setShelfVariation] = useState(0);
   const recentShelfHistory = useRef(readHomeShelfHistory());
   const currentShelves = useRef<{ categoryId: string; tracks: Track[] }[]>([]);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks, ...genreCatalogTracks], [tracks, wavlakeTracks, genreCatalogTracks]);
-  const playlists = usePlaylists(discoveryEnabled);
+  const playlists = usePlaylists(discoveryEnabled, homeAccountScope);
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
-  const likedQuery = useTracksByIds(likedPlaylist?.trackIds, discoveryEnabled);
+  const likedQuery = useTracksByIds(likedPlaylist?.trackIds, discoveryEnabled, [], homeAccountScope);
   const likedTracks = likedQuery.data?.tracks ?? [];
   const categoryShelves = useMemo(() => {
     const shownOnPage = new Set<string>();
@@ -178,12 +180,12 @@ const Index = () => {
 
       <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
       <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
-      <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} />}</DeferredHomeSection>
-      <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} sessionScope={homeAccountScope} />}</DeferredHomeSection>
 
-      <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home />}</DeferredHomeSection>
-      <DeferredHomeSection title="Fresh on Nostr">{near => <HomeFreshTracks candidates={tracks} enabled={near} />}</DeferredHomeSection>
-      <DeferredHomeSection title="Podcasts">{near => <HomePodcastsSection enabled={near} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home sessionScope={homeAccountScope} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Fresh on Nostr">{near => <HomeFreshTracks candidates={tracks} enabled={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Podcasts">{near => <HomePodcastsSection enabled={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
 
       {homeTracksQuery.isError && <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">Couldn’t load music from your read relays. Genre shelves may be unavailable. <button type="button" className="font-semibold text-primary underline" onClick={() => void homeTracksQuery.refetch()}>Try again</button></div>}
       {homeTracksQuery.data?.failedRelays.length ? <p role="status" className="text-xs text-muted-foreground">Some read relays didn’t respond; showing available music while they’re unavailable.</p> : null}

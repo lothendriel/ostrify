@@ -7,6 +7,7 @@ import type { NostrEvent } from "@nostrify/nostrify";
 import { wavlakeArtistId, wavlakeArtistUrl } from "./useWavlake";
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { getUserDataReadRelays } from '@/lib/appRelays';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 
 function artistRefs(event: NostrEvent | undefined): string[] {
   return event?.tags.flatMap(([name, value]) => {
@@ -21,17 +22,20 @@ export const FOLLOWED_ARTISTS_ID = "ostrify-artists";
 const FOLLOW_SET_KIND = 30000;
 
 /** Fetch the pubkeys of artists the current user follows in Ostrify. */
-export function useFollowedArtists(enabled = true) {
+export function useFollowedArtists(enabled = true, sessionScope?: string) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
-  const queryKey = ["followed-artists", user?.pubkey ?? "", readRelayKey];
+  const queryKey = homeSessionQueryKey(
+    sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined,
+    ["followed-artists", user?.pubkey ?? "", readRelayKey],
+  );
 
   return useQuery({
     queryKey,
-    staleTime: 60_000,
+    staleTime: sessionScope ? Infinity : 60_000,
     placeholderData: (previousData: string[] | undefined, previousQuery) =>
       previousQuery?.queryKey[1] === user?.pubkey ? previousData : undefined,
     queryFn: async (c) => {
@@ -71,7 +75,7 @@ export function useFollowArtistActions() {
   const queryClient = useQueryClient();
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["followed-artists", user?.pubkey ?? ""] });
+    queryClient.invalidateQueries({ queryKey: ["followed-artists", user?.pubkey ?? ""], refetchType: 'all' });
 
   async function fetchCurrent(): Promise<NostrEvent | undefined> {
     if (!user) throw new Error('Log in to follow artists');
@@ -96,7 +100,10 @@ export function useFollowArtistActions() {
       else if (/^[0-9a-f]{64}$/i.test(ref)) tags.push(['p', ref]);
     }
     const event = await publish({ kind: FOLLOW_SET_KIND, content: existing?.content ?? '', tags });
-    if (user) queryClient.setQueryData(['followed-artists', user.pubkey], artistRefs(event));
+    if (user) {
+      queryClient.setQueriesData<string[]>({ queryKey: ['followed-artists', user.pubkey] }, artistRefs(event));
+      queryClient.invalidateQueries({ queryKey: ['followed-artists', user.pubkey] });
+    }
   }
 
   const toggleFollow = useMutation({

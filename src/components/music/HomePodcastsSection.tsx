@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { usePodcastEpisodes } from "@/hooks/usePodcasts";
 import { Shelf } from "@/components/music/Shelf";
 
-function PodcastContent({ enabled }: { enabled: boolean }) {
-  const podcasts = usePodcastEpisodes(40, 10, enabled);
+function PodcastContent({ enabled, sessionScope }: { enabled: boolean; sessionScope?: string }) {
+  const podcasts = usePodcastEpisodes(40, 10, enabled, sessionScope);
   const tracks = useMemo(() => {
     const seen = new Set<string>();
     return (podcasts.data ?? []).filter(track => {
@@ -15,6 +15,6 @@ function PodcastContent({ enabled }: { enabled: boolean }) {
   return <Shelf title="Podcasts" subtitle="Episodes from Nostr and Fountain.fm" tracks={tracks} isLoading={podcasts.isLoading && tracks.length === 0} dense seeAllHref="/podcasts/episodes" />;
 }
 
-export function HomePodcastsSection({ enabled }: { enabled: boolean }) {
-  return <PodcastContent enabled={enabled} />;
+export function HomePodcastsSection({ enabled, sessionScope }: { enabled: boolean; sessionScope?: string }) {
+  return <PodcastContent enabled={enabled} sessionScope={sessionScope} />;
 }

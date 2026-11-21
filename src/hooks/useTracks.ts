@@ -7,6 +7,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 interface UseTracksOptions {
@@ -19,6 +20,8 @@ interface UseTracksOptions {
   authors?: string[];
   /** Defer discovery until a feature explicitly needs the track pool. */
   enabled?: boolean;
+  /** Keep results fixed for one Home app session. */
+  sessionScope?: string;
 }
 
 /**
@@ -32,12 +35,17 @@ export function useTracks(options: UseTracksOptions = {}) {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY, OSTRIFY_RELAY_URL])].sort();
-  const { limit = 200, topic, author, authors, enabled = true } = options;
+  const { limit = 200, topic, author, authors, enabled = true, sessionScope } = options;
   const authorKey = authors?.slice().sort().join('|') ?? '';
 
   return useQuery({
-    queryKey: ["tracks", limit, topic ?? "", author ?? "", authorKey, readRelays.join("|"), user?.pubkey ?? "public"],
-    staleTime: author || authors?.length ? 60_000 : 0,
+    queryKey: homeSessionQueryKey(
+      sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined,
+      ["tracks", limit, topic ?? "", author ?? "", authorKey, readRelays.join("|"), user?.pubkey ?? "public"],
+    ),
+    staleTime: sessionScope ? Infinity : author || authors?.length ? 60_000 : 0,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
     enabled,
     queryFn: async (c) => {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);

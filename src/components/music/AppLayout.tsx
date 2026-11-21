@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Home, Menu } from "lucide-react";
 import { usePreviousLocation } from "@/components/NavigationHistory";
@@ -17,12 +17,26 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollowedPeople } from '@/hooks/useFollowedPeople';
 import { useFriendStatuses } from '@/hooks/useFriendLibrary';
+import { useQueryClient } from '@tanstack/react-query';
+import { HomeSessionProvider } from '@/contexts/HomeSessionContext';
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const [homeSessionScope] = useState(() => crypto.randomUUID());
+  const previousHomeAccount = useRef<string | undefined>(undefined);
   const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | null>(null);
   const { pathname } = useLocation();
   const friendsPageOpen = pathname === '/friends';
   const { user } = useCurrentUser();
+  const accountScope = `${homeSessionScope}:${user?.pubkey ?? 'public'}`;
+  useEffect(() => {
+    const previousScope = previousHomeAccount.current;
+    previousHomeAccount.current = accountScope;
+    if (previousScope && previousScope !== accountScope) {
+      void queryClient.removeQueries({ queryKey: ['home-session', previousScope] });
+    }
+  }, [accountScope, queryClient]);
   const followedPeople = useFollowedPeople();
   const friendKey = followedPeople.people.join('|');
   const statuses = useFriendStatuses(followedPeople.people, friendsPageOpen ? 30_000 : activePanel === 'friends' ? 30_000 : 60_000);
@@ -95,7 +109,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Scrollable page content */}
           <ScrollArea type="always" className="app-content-scroll relative z-10 min-w-0 max-w-full flex-1 min-h-0 bg-transparent">
-            <div className="min-w-0 max-w-full overflow-x-hidden pb-6">{children}</div>
+            <div className="min-w-0 max-w-full overflow-x-hidden pb-6">
+              <HomeSessionProvider value={accountScope}>{children}</HomeSessionProvider>
+            </div>
           </ScrollArea>
         </div>
         {!isMobile && <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue' && activePanel !== 'notifications'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : activePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : activePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>

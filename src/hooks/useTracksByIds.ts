@@ -9,9 +9,10 @@ import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } f
 import { useAppContext } from '@/hooks/useAppContext';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
-export function useTracksByIds(ids: string[] | undefined, enabled = true, additionalRelays: string[] = []) {
+export function useTracksByIds(ids: string[] | undefined, enabled = true, additionalRelays: string[] = [], sessionScope?: string) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
@@ -19,7 +20,10 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true, additi
   const relayKey = [...new Set(additionalRelays)].sort().join("|");
 
   return useQuery({
-    queryKey: ["tracks-by-ids", key, relayKey, user?.pubkey ?? "public"],
+    queryKey: homeSessionQueryKey(
+      sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined,
+      ["tracks-by-ids", key, relayKey, user?.pubkey ?? "public"],
+    ),
     queryFn: async (c) => {
       if (!ids?.length) return { tracks: [] as Track[], unavailable: 0 };
       const addressRefs = ids.flatMap((id) => {
@@ -114,5 +118,8 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true, additi
       return { tracks, unavailable: ids.length - tracks.length };
     },
     enabled: enabled && !!ids?.length,
+    staleTime: sessionScope ? Infinity : 0,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
   });
 }

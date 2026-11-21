@@ -67,8 +67,8 @@ export function MusicNewsCard({ event }: { event: NostrEvent }) {
   );
 }
 
-export function MusicNewsSection({ enabled = true, home = false }: { enabled?: boolean; home?: boolean } = {}) {
-  const news = useMusicNews(enabled, home);
+export function MusicNewsSection({ enabled = true, home = false, sessionScope }: { enabled?: boolean; home?: boolean; sessionScope?: string } = {}) {
+  const news = useMusicNews(enabled, home, sessionScope);
   const events = news.events.slice(0, 4);
 
   return (

@@ -9,6 +9,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 
 const RELAY_LIMIT = 150;
 const FEATURED_LIMIT = 250;
@@ -23,7 +24,7 @@ interface HomeTracksResult {
 }
 
 /** Gather Home music independently from every read relay and retain partial results. */
-export function useHomeTracks(enabled = true) {
+export function useHomeTracks(enabled = true, sessionScope?: string) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -31,9 +32,14 @@ export function useHomeTracks(enabled = true) {
   const relayKey = relays.join("|");
 
   return useQuery({
-    queryKey: ["home-tracks", relayKey, user?.pubkey ?? "public"],
+    queryKey: homeSessionQueryKey(
+      sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined,
+      ["home-tracks", relayKey, user?.pubkey ?? "public"],
+    ),
     enabled,
-    staleTime: 60_000,
+    staleTime: sessionScope ? Infinity : 60_000,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
     retry: false,
     queryFn: async ({ signal }): Promise<HomeTracksResult> => {
       const filtersForRelay = (relay: string): NostrFilter[] => {

@@ -8,11 +8,12 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { getUserRelayUrls, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 
 const PER_KIND_LIMIT = 100;
 
 /** Query each configured read/write relay directly for the newest addressable music tracks. */
-export function useFreshNostrTracks(enabled = true) {
+export function useFreshNostrTracks(enabled = true, sessionScope?: string) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -25,10 +26,15 @@ export function useFreshNostrTracks(enabled = true) {
   const relayKey = relays.join("|");
 
   return useQuery({
-    queryKey: ["fresh-nostr-tracks", relayKey, user?.pubkey ?? "public"],
+    queryKey: homeSessionQueryKey(
+      sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined,
+      ["fresh-nostr-tracks", relayKey, user?.pubkey ?? "public"],
+    ),
     enabled,
-    staleTime: 30_000,
+    staleTime: sessionScope ? Infinity : 30_000,
     retry: false,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
     queryFn: async ({ signal }) => {
       const filtersForRelay = (relay: string): NostrFilter[] => relay === DROPS_MUSIC_RELAY
         ? [{ kinds: [36787], limit: PER_KIND_LIMIT }]

@@ -1,6 +1,8 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNostr } from "@nostrify/react";
 import type { NostrEvent } from "@nostrify/nostrify";
+import { homeSessionQueryKey } from '@/lib/homeSession';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 export const MUSIC_NEWS_TAGS = [
   "music",
@@ -31,13 +33,17 @@ export function isMusicNewsEvent(event: NostrEvent): boolean {
   return focusedTopic || (broadMusicTag && editorialCue);
 }
 
-export function useMusicNews(enabled = true, home = false) {
+export function useMusicNews(enabled = true, home = false, sessionScope?: string) {
   const { nostr } = useNostr();
+  const { user } = useCurrentUser();
+  const scopedSession = sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined;
   const query = useInfiniteQuery({
-    queryKey: ["music-news", MUSIC_NEWS_TAGS, home ? "home" : "full"],
+    queryKey: homeSessionQueryKey(scopedSession, ["music-news", MUSIC_NEWS_TAGS, home ? "home" : "full"]),
     initialPageParam: undefined as number | undefined,
-    staleTime: 5 * 60 * 1000,
+    staleTime: sessionScope ? Infinity : 5 * 60 * 1000,
     enabled,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
     queryFn: async ({ pageParam, signal }): Promise<NostrEvent[]> => {
       const events = await nostr.query(
         [{ kinds: [1, 30023], "#t": MUSIC_NEWS_TAGS, limit: home ? HOME_PAGE_SIZE : PAGE_SIZE, ...(pageParam !== undefined ? { until: pageParam } : {}) }],

@@ -10,6 +10,7 @@ import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { getUserDataReadRelays, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 
 export interface PodcastShow {
   id: string;
@@ -462,14 +463,15 @@ function normalizeFountainShowLookupFailure(value: unknown): FountainShowLookupF
   return { guid: value.guid, failure };
 }
 
-export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = true) {
+export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = true, sessionScope?: string) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const [isRetryingLookups, setIsRetryingLookups] = useState(false);
-  const queryKey = ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API] as const;
-  const progressKey = ["podcast-episode-fountain-progress", limit, fountainLimit, FOUNTAIN_API] as const;
+  const sessionUserScope = sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined;
+  const queryKey = homeSessionQueryKey(sessionUserScope, ["podcast-episodes", limit, fountainLimit, FOUNTAIN_API]);
+  const progressKey = homeSessionQueryKey(sessionUserScope, ["podcast-episode-fountain-progress", limit, fountainLimit, FOUNTAIN_API]);
   const progressQuery = useQuery<FountainEpisodeProgress>({ queryKey: progressKey, enabled: false, initialData: { tracks: [], failures: [], isResolving: false } });
   const progressTracks = (Array.isArray(progressQuery.data.tracks) ? progressQuery.data.tracks : []).filter((track): track is Track => !!track && typeof track === "object" && "url" in track);
   const fountainFailures = (Array.isArray(progressQuery.data.failures) ? progressQuery.data.failures : []).map(normalizeFountainEpisodeLookupFailure).filter((item): item is FountainEpisodeLookupFailure => !!item);
@@ -479,7 +481,9 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
     enabled,
     placeholderData: (previousData) => previousData,
     retry: 1,
-    staleTime: 5 * 60 * 1000,
+    staleTime: sessionScope ? Infinity : 5 * 60 * 1000,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
     queryFn: async (c) => {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(30000)]);
       const filters = [

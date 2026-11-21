@@ -11,6 +11,7 @@ import { useToast } from './useToast';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, rememberPlaylistVisibility, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
 import { getUserDataReadRelays } from '@/lib/appRelays';
+import { homeSessionQueryKey } from '@/lib/homeSession';
 
 export const LIKED_SONGS_ID = LIKED_TRACKS_IDENTIFIER;
 const PLAYLIST_KIND = 30003; // NIP-51 bookmark set
@@ -82,13 +83,16 @@ function parsePlaylist(event: NostrEvent): Playlist | null {
 }
 
 /** Fetch all of the current user's playlists (kind 30003 bookmark sets). */
-export function usePlaylists(enabled = true) {
+export function usePlaylists(enabled = true, sessionScope?: string) {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const queryClient = useQueryClient();
   const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
-  const queryKey = ["playlists", user?.pubkey ?? "", readRelayKey];
+  const queryKey = homeSessionQueryKey(
+    sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined,
+    ["playlists", user?.pubkey ?? "", readRelayKey],
+  );
 
   return useQuery<Playlist[]>({
     queryKey,
@@ -101,11 +105,12 @@ export function usePlaylists(enabled = true) {
         return deletedAt === undefined || playlist.event.created_at > deletedAt;
       });
     },
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: sessionScope ? Infinity : 0,
+    refetchOnMount: sessionScope ? false : "always",
     refetchOnWindowFocus: false,
     placeholderData: (previousData: Playlist[] | undefined, previousQuery) => {
-      if (previousQuery?.queryKey[1] !== user?.pubkey || !user) return undefined;
+      const playlistKeyIndex = previousQuery?.queryKey.findIndex(key => key === 'playlists') ?? -1;
+      if (playlistKeyIndex < 0 || previousQuery?.queryKey[playlistKeyIndex + 1] !== (user?.pubkey ?? '') || !user) return undefined;
       const tombstones = readPlaylistDeletionTombstones(user.pubkey);
       return previousData?.filter(playlist => {
         const deletedAt = tombstones[playlistCoordinate(user.pubkey, playlist.id)];
@@ -239,8 +244,9 @@ export function usePlaylistActions() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ["playlists"] });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+  };
 
   const publishPlaylist = async (template: { kind: number; content: string; tags: string[][] }, previousCreatedAt = 0) => {
     if (!user) throw new Error('User is not logged in');
@@ -256,7 +262,7 @@ export function usePlaylistActions() {
     const playlist = parsePlaylist(event);
     if (playlist) {
       queryClient.setQueriesData<Playlist[]>(
-        { queryKey: ['playlists'] },
+        { queryKey: ['playlists'], predicate: query => query.queryKey[0] === 'playlists' && query.queryKey[1] === user.pubkey },
         current => current ? [playlist, ...current.filter(item => item.id !== playlist.id)] : current,
       );
       if (!playlist.isLiked) rememberPlaylistVisibility(user.pubkey, playlist.id, { isListed: playlist.isListed, event });
@@ -454,11 +460,10 @@ export function usePlaylistActions() {
     createPlaylist,
     updatePlaylist,
     addToPlaylist,
-    addTracksToPlaylist,
     removeFromPlaylist,
-    reorderPlaylist,
     toggleLike,
-    isReady: !!user,
+    addTracksToPlaylist,
+    reorderPlaylist,
   };
 }
 

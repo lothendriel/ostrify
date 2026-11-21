@@ -1,4 +1,6 @@
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query';
+import { homeSessionQueryKey } from '@/lib/homeSession';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { nip19 } from 'nostr-tools';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { isOriginalSoundTitle, type Track } from '@/lib/music';
@@ -181,9 +183,11 @@ function parseItem(value: unknown): CatalogItem | null {
   return { id: itemId, type, title, artist: text(item.artist), image: sanitizeUrl(text(item.albumArtUrl) || text(item.artistArtUrl)), track: type === 'track' ? parseTrack(item) ?? undefined : undefined };
 }
 
-export function useWavlakeCatalog(artistId?: string, enabled = true) {
+export function useWavlakeCatalog(artistId?: string, enabled = true, sessionScope?: string) {
+  const { user } = useCurrentUser();
+  const scopedSession = sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined;
   return useInfiniteQuery({
-    queryKey: ['wavlake', 'catalog', artistId ?? ''],
+    queryKey: homeSessionQueryKey(scopedSession, ['wavlake', 'catalog', artistId ?? '']),
     initialPageParam: '',
     queryFn: async ({ pageParam, signal }) => {
       const params: Record<string, string> = { limit: '50' };
@@ -196,20 +200,27 @@ export function useWavlakeCatalog(artistId?: string, enabled = true) {
     getNextPageParam: (page) => page.next,
     enabled: enabled && (!artistId || UUID.test(artistId)),
     retry: 1,
+    staleTime: sessionScope ? Infinity : 5 * 60 * 1000,
+    refetchOnMount: sessionScope ? false : true,
+    refetchOnWindowFocus: sessionScope ? false : undefined,
   });
 }
 
-export function useWavlakeGenreCatalog(genres: string[], enabled = true, enabledGenres?: string[]) {
+export function useWavlakeGenreCatalog(genres: string[], enabled = true, enabledGenres?: string[], sessionScope?: string) {
+  const { user } = useCurrentUser();
+  const scopedSession = sessionScope ? `${sessionScope}:${user?.pubkey ?? 'public'}` : undefined;
   const enabledSet = enabledGenres ? new Set(enabledGenres) : undefined;
   return useQueries({
     queries: genres.map((genre) => ({
-      queryKey: ['wavlake', 'genre-catalog', genre],
+      queryKey: homeSessionQueryKey(scopedSession, ['wavlake', 'genre-catalog', genre]),
       queryFn: async ({ signal }) => {
         const data = object(await fetchApi('tracks', { limit: '50', genre }, signal));
         if (!data || !Array.isArray(data.tracks)) throw new Error('Invalid Wavlake catalog response');
         return data.tracks.map(parseTrack).filter((track): track is Track => !!track);
       },
-      staleTime: 5 * 60 * 1000,
+      staleTime: sessionScope ? Infinity : 5 * 60 * 1000,
+      refetchOnMount: sessionScope ? false : true,
+      refetchOnWindowFocus: sessionScope ? false : undefined,
       retry: 1,
       enabled: enabled && (!enabledSet || enabledSet.has(genre)),
     })),

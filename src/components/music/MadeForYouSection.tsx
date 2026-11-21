@@ -16,16 +16,16 @@ import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 
-export function MadeForYouSection({ candidates, isLoading, active = true }: { candidates: Track[]; isLoading: boolean; active?: boolean }) {
+export function MadeForYouSection({ candidates, isLoading, active = true, sessionScope }: { candidates: Track[]; isLoading: boolean; active?: boolean; sessionScope?: string }) {
   const player = usePlayer();
   const [mixVariation, setMixVariation] = useState(0);
-  const playlists = usePlaylists(active);
-  const followedArtists = useFollowedArtists(active);
+  const playlists = usePlaylists(active, sessionScope);
+  const followedArtists = useFollowedArtists(active, sessionScope);
   const followedAuthorPubkeys = useMemo(() => (followedArtists.data ?? []).filter(reference => /^[0-9a-f]{64}$/i.test(reference)).slice(0, 25), [followedArtists.data]);
-  const followedTracks = useTracks({ limit: 20, authors: followedAuthorPubkeys, enabled: active && followedAuthorPubkeys.length > 0 });
-  const wavlake = useWavlakeCatalog(undefined, active);
+  const followedTracks = useTracks({ limit: 20, authors: followedAuthorPubkeys, enabled: active && followedAuthorPubkeys.length > 0, sessionScope });
+  const wavlake = useWavlakeCatalog(undefined, active, sessionScope);
   const likedPlaylist = playlists.data?.find(playlist => playlist.isLiked);
-  const likedTracks = useTracksByIds(likedPlaylist?.trackIds, active);
+  const likedTracks = useTracksByIds(likedPlaylist?.trackIds, active, [], sessionScope);
   const liked = likedTracks.data?.tracks ?? [];
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const mixCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
