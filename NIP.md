@@ -168,6 +168,7 @@ coordinate `30003:<pubkey>:<d>` and the latest event id.
 
 ## Discovery notes
 
+- **Shared audio catalog forwarding.** During normal browsing, Ostrify may forward eligible playable public audio Nostr events unchanged to `wss://relay.studio314.us/nostrrelay/ostrify`. The original signature, event data, and author are preserved: forwarding creates no signature, user-authored event, or separate index record, and goes only to this relay. Explicitly hidden Ostrify tracks and external-catalog-only items are excluded. Relay rejection or connection failure does not block browsing; acceptance does not guarantee retention. The controls and session status are shown only to allowlisted accounts; forwarding is automatic for other visitors as they browse.
 - **Wavlake catalog.** Ostrify offers browser-based search and paginated browsing
   using Wavlake's public catalog API. Catalog tracks are not Nostr events and
   are saved in Nostr playlists using external URL references. The Nostr feed separately queries

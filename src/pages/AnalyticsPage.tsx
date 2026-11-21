@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
-import { useNostr } from "@nostrify/react";
-import { Activity, BookOpen, Clock3, Database, HardDrive, Headphones, Heart, Library, Mic2, Music2, Radio, RotateCcw, Users } from "lucide-react";
+import { Activity, BookOpen, Clock3, Headphones, Heart, Library, Mic2, Music2, Radio, RotateCcw, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -15,39 +13,6 @@ import { useNetworkPulse } from "@/hooks/useNetworkPulse";
 import { clearListeningRecords, readListeningRecords, type ListeningRecord } from "@/lib/listeningAnalytics";
 import { AudioCatalogCapturePanel } from "@/components/AudioCatalogCapturePanel";
 import { isAllowedAudioCatalogCaptureUser } from "@/lib/audioCatalogCapture";
-import { countAudioCatalogEvents } from "@/lib/audioCatalogStats";
-import { OSTRIFY_RELAY_URL } from "@/lib/appRelays";
-
-function formatEventBytes(bytes: number): string {
-  if (bytes < 1_000_000) return `${(bytes / 1_000).toFixed(1)} KB`;
-  if (bytes < 1_000_000_000) return `${(bytes / 1_000_000).toFixed(2)} MB`;
-  return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
-}
-
-function CatalogStatsSection({ nostr }: { nostr: ReturnType<typeof useNostr>["nostr"] }) {
-  const [requested, setRequested] = useState(false);
-  const stats = useQuery({
-    queryKey: ["audio-catalog-relay-count", OSTRIFY_RELAY_URL],
-    queryFn: ({ signal }) => countAudioCatalogEvents(nostr, signal),
-    enabled: requested,
-    staleTime: 60_000,
-    retry: false,
-  });
-
-  return <section aria-labelledby="ostrify-relay-catalog-heading" className="space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h3 id="ostrify-relay-catalog-heading" className="text-xl font-bold">Ostrify relay catalog</h3><p className="mt-1 text-sm text-muted-foreground">Current queryable audio events on {OSTRIFY_RELAY_URL}.</p></div>
-      <Button type="button" variant="outline" size="sm" onClick={() => { setRequested(true); void stats.refetch(); }} disabled={stats.isFetching}><RotateCcw className={`mr-2 size-4 ${stats.isFetching ? "animate-spin" : ""}`} />{stats.data ? "Refresh relay stats" : "Count relay data"}</Button>
-    </div>
-    {!requested ? <div className="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">Run a relay scan to count matching events and estimate their event-data size.</div> : stats.isLoading ? <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 2 }, (_, index) => <Skeleton key={index} className="h-28 rounded-xl" />)}</div> : stats.isError ? <div className="rounded-xl border border-destructive/40 p-5 text-sm" role="alert"><p>Could not scan the Ostrify relay.</p><Button type="button" variant="link" className="px-0" onClick={() => void stats.refetch()}>Try again</Button></div> : stats.data && <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icon={Database} label="Catalog events" value={`${stats.data.total.toLocaleString()}${stats.data.complete ? "" : "+"}`} detail={stats.data.complete ? "Distinct playable audio / show events on the Ostrify relay" : "Lower bound; scan reached its safety cap"} />
-        <StatCard icon={HardDrive} label="Estimated event data" value={`${formatEventBytes(stats.data.estimatedBytes)}${stats.data.complete ? "" : "+"}`} detail="Returned JSON size; excludes database/index overhead" />
-      </div>
-      {!stats.data.complete && <p className="text-xs text-muted-foreground">The scan reached a safety cap of up to 10,000 events per kind, so both values are lower bounds.</p>}
-    </>}
-  </section>;
-}
 
 function formatListeningTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -85,7 +50,6 @@ export default function AnalyticsPage() {
   const podcastFavorites = usePodcastFavorites();
   const audiobookLibrary = useAudiobookLibrary();
   const network = useNetworkPulse();
-  const { nostr } = useNostr();
   const [records, setRecords] = useState(readListeningRecords);
   useEffect(() => {
     const refresh = () => setRecords(readListeningRecords());
@@ -212,10 +176,7 @@ export default function AnalyticsPage() {
         </div>
         {network.data.tracks === 0 && <p className="text-sm text-muted-foreground">No playable audio surfaced in this sample. Results depend on relay coverage and event formats.</p>}
       </>}
-      {canViewCatalogStats && <>
-        <CatalogStatsSection nostr={nostr} />
-        <AudioCatalogCapturePanel />
-      </>}
+      {canViewCatalogStats && <AudioCatalogCapturePanel />}
     </section>
 
     <section aria-labelledby="library-analytics-heading" className="space-y-3">

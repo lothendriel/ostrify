@@ -8,6 +8,7 @@ import { fetchWavlakeTrack, wavlakeTrackUrl } from "./useWavlake";
 import { fetchFountainTrack, fetchPodcastIndexEpisodes, podcastIndexTrackUrl } from "./usePodcasts";
 import { useAppContext } from '@/hooks/useAppContext';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 /** Resolve Nostr event ids and external catalog references, preserving list order. */
 export function useTracksByIds(ids: string[] | undefined, enabled = true, additionalRelays: string[] = []) {
@@ -44,6 +45,10 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true, additi
         const queries = [
           nostr.query(filters, { signal }),
           ...additionalRelays.map(relay => nostr.relay(relay).query(filters, { signal })),
+          nostr.relay(OSTRIFY_RELAY_URL).query(
+            filters.map(filter => ({ ...filter, ...(filter.ids ? {} : { kinds: filter.kinds ? [...filter.kinds, 54] : [54] }) })),
+            { signal },
+          ).catch(() => []),
         ];
         const results = await Promise.allSettled(queries);
         return results.flatMap(result => result.status === "fulfilled" ? result.value : []);
@@ -82,8 +87,8 @@ export function useTracksByIds(ids: string[] | undefined, enabled = true, additi
         const track = await fetchPodcastIndexEpisodes(episodeId, AbortSignal.any([c.signal, AbortSignal.timeout(12000)]));
         if (track) byId.set(track.id.toLowerCase(), track);
       }
-      const nostrEvents = [...await eventsPromise, ...await addressEventsPromise];
-      captureDiscoveredAudioEvents(nostr, nostrEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const nostrEvents = [...new Map([...await eventsPromise, ...await addressEventsPromise].map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, nostrEvents, user?.pubkey);
       for (const event of nostrEvents) {
         const track = event.kind === 1053
           ? parseN94Stream(event)?.track

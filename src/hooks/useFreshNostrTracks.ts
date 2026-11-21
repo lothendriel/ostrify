@@ -7,6 +7,7 @@ import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 const PER_KIND_LIMIT = 100;
 
@@ -18,6 +19,7 @@ export function useFreshNostrTracks(enabled = true) {
   const relays = [...new Set([
     ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url),
     DROPS_MUSIC_RELAY,
+    OSTRIFY_RELAY_URL,
   ])].sort();
   const relayKey = relays.join("|");
 
@@ -29,15 +31,20 @@ export function useFreshNostrTracks(enabled = true) {
     queryFn: async ({ signal }) => {
       const filtersForRelay = (relay: string): NostrFilter[] => relay === DROPS_MUSIC_RELAY
         ? [{ kinds: [36787], limit: PER_KIND_LIMIT }]
-        : MUSIC_TRACK_KINDS.map(kind => ({ kinds: [kind], limit: PER_KIND_LIMIT }));
+        : relay === OSTRIFY_RELAY_URL
+          ? [{ kinds: [...MUSIC_TRACK_KINDS, 1063, 1, 54], limit: PER_KIND_LIMIT }]
+          : MUSIC_TRACK_KINDS.map(kind => ({ kinds: [kind], limit: PER_KIND_LIMIT }));
       const results = await Promise.allSettled(relays.map(async relay => {
-        const events = await nostr.relay(relay).query(filtersForRelay(relay), {
+        const eventsPromise = nostr.relay(relay).query(filtersForRelay(relay), {
           signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
         });
-        return { events, tracks: events.map(eventToTrack).filter((track): track is Track => !!track && track.kind === "music") };
+        const events = relay === OSTRIFY_RELAY_URL
+          ? await Promise.race([eventsPromise, new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 1000))])
+          : await eventsPromise;
+        return { events, tracks: events.map(eventToTrack).filter((track): track is Track => !!track && track.kind === "music" && isTrackVisibleInOstrify(track, user?.pubkey)) };
       }));
-      const discoveredEvents = results.flatMap(result => result.status === 'fulfilled' ? result.value.events : []);
-      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const discoveredEvents = [...new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value.events : []).map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
       const fulfilled = results.filter((result): result is PromiseFulfilledResult<{ tracks: Track[]; events: NostrEvent[] }> => result.status === "fulfilled");
       if (!fulfilled.length && results.length) throw new Error("Could not load recent music from your configured relays.");
 

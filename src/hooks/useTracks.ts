@@ -1,12 +1,13 @@
 import { useNostr } from "@nostrify/react";
 import { useQuery } from "@tanstack/react-query";
-import type { NostrFilter } from "@nostrify/nostrify";
+import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 interface UseTracksOptions {
   limit?: number;
@@ -30,7 +31,7 @@ export function useTracks(options: UseTracksOptions = {}) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
+  const readRelays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY, OSTRIFY_RELAY_URL])].sort();
   const { limit = 200, topic, author, authors, enabled = true } = options;
   const authorKey = authors?.slice().sort().join('|') ?? '';
 
@@ -48,6 +49,7 @@ export function useTracks(options: UseTracksOptions = {}) {
 
       const filtersForRelay = (relay: string): NostrFilter[] => {
         if (relay === DROPS_MUSIC_RELAY) return [{ kinds: [36787], limit, ...base }];
+        if (relay === OSTRIFY_RELAY_URL) return [{ kinds: [...MUSIC_TRACK_KINDS, 1063, 1, 54], limit, ...base }];
         const filters: NostrFilter[] = [
           { kinds: [...MUSIC_TRACK_KINDS], limit, ...base },
           { kinds: [1063], limit, ...base },
@@ -58,10 +60,16 @@ export function useTracks(options: UseTracksOptions = {}) {
         }
         return filters;
       };
-      const results = await Promise.allSettled(readRelays.map(relay => nostr.relay(relay).query(filtersForRelay(relay), { signal })));
-      const events = results.flatMap(result => result.status === "fulfilled" ? result.value : []);
-      if (!results.some(result => result.status === "fulfilled")) throw new Error("Could not load tracks from your read relays or DROPS.");
-      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const results = await Promise.allSettled(readRelays.map(async relay => {
+        const query = nostr.relay(relay).query(filtersForRelay(relay), { signal });
+        const value = relay === OSTRIFY_RELAY_URL
+          ? await Promise.race([query, new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 1000))])
+          : await query;
+        return value;
+      }));
+      const events = [...new Map(results.flatMap(result => result.status === "fulfilled" ? result.value : []).map(event => [event.id, event])).values()];
+      if (!results.some(result => result.status === "fulfilled" && result.value.length > 0)) throw new Error("Could not load tracks from your read relays or DROPS.");
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey);
 
       const tracks: Track[] = [];
       const seen = new Set<string>();

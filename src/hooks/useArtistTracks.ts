@@ -4,6 +4,7 @@ import type { NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
+import { OSTRIFY_RELAY_URL } from "@/lib/appRelays";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
@@ -30,28 +31,31 @@ export function useArtistTracks(pubkey: string | undefined) {
       // `useMusicDiscovery` also finds kind-1 audio notes through music topic tags;
       // query that same discovery path here so publisher pages do not miss them.
       filters.push({ kinds: [1], authors: [pubkey], '#t': MUSIC_TOPICS, limit: ARTIST_TRACK_LIMIT });
-      const relayResults = await Promise.allSettled(readRelays.map(url =>
+      const relayResultsPromise = Promise.allSettled(readRelays.map(url =>
         nostr.relay(url).query(url === DROPS_MUSIC_RELAY ? [{ kinds: [36787], authors: [pubkey], limit: ARTIST_TRACK_LIMIT }] : filters, { signal: timeoutSignal }),
       ));
-      if (relayResults.every(result => result.status === "rejected")) {
+      const catalogResultsPromise = nostr.relay(OSTRIFY_RELAY_URL).query([...ARTIST_TRACK_KINDS, 54, 1063, 1].map(kind => ({ kinds: [kind], authors: [pubkey], limit: ARTIST_TRACK_LIMIT })), { signal: timeoutSignal }).catch(() => null);
+      const [relayResults, catalogResults] = await Promise.all([
+        relayResultsPromise,
+        Promise.race([catalogResultsPromise, new Promise<null>(resolve => setTimeout(() => resolve(null), 1000))]),
+      ]);
+      const relayEvents = relayResults.flatMap(result => result.status === 'fulfilled' ? result.value : []);
+      const discoveredEvents = [...new Map([...relayEvents, ...(catalogResults ?? [])].map(event => [event.id, event])).values()];
+      if (relayResults.every(result => result.status === "rejected") && !catalogResults?.length) {
         throw new Error("Could not load audio published by this account from your read relays or DROPS.");
       }
-      const discoveredEvents = relayResults.flatMap(result => result.status === 'fulfilled' ? result.value : []);
-      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
 
       const byIdentity = new Map<string, Track>();
-      for (const result of relayResults) {
-        if (result.status !== "fulfilled") continue;
-        for (const event of result.value) {
-          if (event.pubkey !== pubkey) continue;
-          const track = eventToTrack(event);
-          if (!track) continue;
-          const identity = track.addressableId && track.event
-            ? `${track.event.kind}:${track.pubkey}:${track.addressableId}`
-            : track.url;
-          const current = byIdentity.get(identity);
-          if (!current || track.createdAt > current.createdAt) byIdentity.set(identity, track);
-        }
+      for (const event of discoveredEvents) {
+        if (event.pubkey !== pubkey) continue;
+        const track = eventToTrack(event);
+        if (!track) continue;
+        const identity = track.addressableId && track.event
+          ? `${track.event.kind}:${track.pubkey}:${track.addressableId}`
+          : track.url;
+        const current = byIdentity.get(identity);
+        if (!current || track.createdAt > current.createdAt) byIdentity.set(identity, track);
       }
       return [...byIdentity.values()].filter(track => track.kind !== "music" || isTrackVisibleInOstrify(track, user?.pubkey, pubkey)).sort((a, b) => b.createdAt - a.createdAt);
     },

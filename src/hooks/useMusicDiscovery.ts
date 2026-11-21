@@ -1,12 +1,13 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import type { NostrFilter } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useAppContext } from '@/hooks/useAppContext';
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from '@/lib/music';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { isTrackVisibleInOstrify } from '@/lib/musicVisibility';
 import { DROPS_MUSIC_RELAY } from '@/lib/sources';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 const KINDS = [...MUSIC_TRACK_KINDS, 1063, 1];
 const PAGE_SIZE = 100;
@@ -22,7 +23,7 @@ export function useMusicDiscovery(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const relays = [...new Set([...config.relayMetadata.relays.filter(r => r.read).map(r => r.url), DROPS_MUSIC_RELAY])].sort();
+  const relays = [...new Set([...config.relayMetadata.relays.filter(r => r.read).map(r => r.url), DROPS_MUSIC_RELAY, OSTRIFY_RELAY_URL])].sort();
   const relayKey = `${relays.join('|')}|viewer:${user?.pubkey ?? 'public'}`;
 
   return useInfiniteQuery({
@@ -34,7 +35,7 @@ export function useMusicDiscovery(enabled = true) {
     queryFn: async ({ pageParam, signal }): Promise<Page> => {
       const next: Cursor = { ...pageParam };
       const queryRelay = async (url: string) => {
-        const relayKinds = url === DROPS_MUSIC_RELAY ? [36787] : KINDS;
+        const relayKinds = url === DROPS_MUSIC_RELAY ? [36787] : url === OSTRIFY_RELAY_URL ? [...KINDS, 54] : KINDS;
         const activeKinds = relayKinds.filter(kind => next[cursorKey(url, kind)] !== null);
         if (!activeKinds.length) return { url, events: [], ok: false, skipped: true };
         const filters: NostrFilter[] = activeKinds.map(kind => {
@@ -46,7 +47,10 @@ export function useMusicDiscovery(enabled = true) {
           };
         });
         try {
-          const events = await nostr.relay(url).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+          const eventsPromise = nostr.relay(url).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+          const events = url === OSTRIFY_RELAY_URL
+            ? await Promise.race([eventsPromise, new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 1000))])
+            : await eventsPromise;
           for (const kind of activeKinds) {
             const matching = events.filter(event => event.kind === kind);
             // Keep a one-second overlap so events with equal timestamps aren't skipped
@@ -71,15 +75,15 @@ export function useMusicDiscovery(enabled = true) {
         const retryByUrl = new Map(retried.map(result => [result.url, result]));
         results = results.map(result => retryByUrl.get(result.url) ?? result);
       }
-      const discoveredEvents = results.flatMap(result => result.events);
-      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
-      const failed = results.filter(result => !result.ok && !result.skipped && result.url !== DROPS_MUSIC_RELAY).map(result => result.url);
-      const succeeded = results.filter(result => result.ok).length;
-      if (!succeeded && failed.length) throw new Error('Could not reach any configured read relays or DROPS.');
-      const tracks = results.flatMap(result => result.events).map(eventToTrack).filter((t): t is Track => !!t && t.kind === 'music' && isTrackVisibleInOstrify(t, user?.pubkey));
+      const discoveredEvents = [...new Map(results.flatMap(result => result.events).map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
+      const failed = results.filter(result => !result.ok && !result.skipped && result.url !== DROPS_MUSIC_RELAY && result.url !== OSTRIFY_RELAY_URL).map(result => result.url);
+      const succeeded = results.filter(result => result.ok && result.url !== OSTRIFY_RELAY_URL).length;
+      if (!results.some(result => result.ok) && !succeeded && failed.length) throw new Error('Could not reach any configured read relays or DROPS.');
+      const tracks = [...new Map(results.flatMap(result => result.events).map(event => [event.id, event])).values()].map(eventToTrack).filter((t): t is Track => !!t && t.kind === 'music' && isTrackVisibleInOstrify(t, user?.pubkey));
       tracks.sort((a, b) => b.createdAt - a.createdAt);
       return { tracks, next, failed, succeeded };
     },
-    getNextPageParam: (page) => relays.some(url => (url === DROPS_MUSIC_RELAY ? [36787] : KINDS).some(kind => page.next[cursorKey(url, kind)] !== null)) ? page.next : undefined,
+    getNextPageParam: (page) => relays.some(url => (url === DROPS_MUSIC_RELAY ? [36787] : url === OSTRIFY_RELAY_URL ? [...KINDS, 54] : KINDS).some(kind => page.next[cursorKey(url, kind)] !== null)) ? page.next : undefined,
   });
 }

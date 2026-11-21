@@ -9,6 +9,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 export interface PodcastShow {
   id: string;
@@ -481,21 +482,26 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
     staleTime: 5 * 60 * 1000,
     queryFn: async (c) => {
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(30000)]);
-      const events = await nostr.query(
-        [
-          { kinds: [54], limit },
-          { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit },
-          // `k` is the NIP-73 kind label for the `i` reference; the GUID itself
-          // lives in an unindexed tag value and must be resolved via Fountain.
-          { kinds: [1], "#k": ["podcast:item:guid"], limit: Math.min(limit, Math.max(30, fountainLimit)) },
-        ],
-        { signal },
-      );
-
-      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const filters = [
+        { kinds: [54], limit },
+        { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit },
+        // `k` is the NIP-73 kind label for the `i` reference; the GUID itself
+        // lives in an unindexed tag value and must be resolved via Fountain.
+        { kinds: [1], "#k": ["podcast:item:guid"], limit: Math.min(limit, Math.max(30, fountainLimit)) },
+      ];
+      const [events, catalogEventsResult] = await Promise.all([
+        nostr.query(filters, { signal }),
+        Promise.race([
+          nostr.relay(OSTRIFY_RELAY_URL).query(filters, { signal }).catch(() => null),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)),
+        ]),
+      ]);
+      const catalogEvents = catalogEventsResult ?? [];
+      const discoveredEvents = [...new Map([...events, ...catalogEvents].map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
       const tracks: Track[] = [];
       const seen = new Set<string>();
-      for (const event of events) {
+      for (const event of discoveredEvents) {
         const isFountainReference = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
         const track = isFountainReference && (event.kind === NOSTR_NOTE_KIND || event.kind === 1063) ? null : event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
         if (!track || seen.has(track.url)) continue;
@@ -505,7 +511,7 @@ export function usePodcastEpisodes(limit = 80, fountainLimit = 10, enabled = tru
 
       const fountainReferences = new Map<string, string | undefined>();
       const relatedEvents = new Map<string, NostrEvent>();
-      for (const event of events) {
+      for (const event of discoveredEvents) {
         if (event.kind !== NOSTR_NOTE_KIND) continue;
         const itemReference = event.tags.find(([name, value]) => name === "i" && value?.startsWith("podcast:item:guid:"))?.[1];
         const itemGuid = itemReference?.slice("podcast:item:guid:".length);
@@ -630,13 +636,23 @@ export function useNostrPodcastEpisodesForShow(pubkey: string | undefined) {
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }): Promise<Track[]> => {
       if (!pubkey || !/^[0-9a-f]{64}$/i.test(pubkey)) return [];
-      const events = await nostr.query([
+      const filters = [
         { kinds: [NOSTR_PODCAST_EPISODE_KIND], authors: [pubkey], limit: 100 },
         { kinds: [1063, NOSTR_NOTE_KIND], authors: [pubkey], "#t": PODCAST_TOPICS, limit: 100 },
-      ], { signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]) });
-      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      ];
+      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(12000)]);
+      const [events, catalogEventsResult] = await Promise.all([
+        nostr.query(filters, { signal: querySignal }),
+        Promise.race([
+          nostr.relay(OSTRIFY_RELAY_URL).query(filters, { signal: querySignal }).catch(() => null),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)),
+        ]),
+      ]);
+      const catalogEvents = catalogEventsResult ?? [];
+      const discoveredEvents = [...new Map([...events, ...catalogEvents].map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
       const seen = new Set<string>();
-      return events.flatMap(event => {
+      return discoveredEvents.flatMap(event => {
         const hasPodcastTopic = event.tags.some(([name, value]) => name === "t" && value && PODCAST_TOPICS.includes(value.toLowerCase()));
         if (event.kind !== NOSTR_PODCAST_EPISODE_KIND && !hasPodcastTopic) return [];
         const track = event.kind === NOSTR_PODCAST_EPISODE_KIND ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
@@ -666,11 +682,19 @@ export function useNostrPodcastEpisodeFeed(enabled = true) {
         { kinds: [1063], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
         { kinds: [NOSTR_NOTE_KIND], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
       ];
-      const events = await nostr.query(filters, { signal });
-      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const [events, catalogEventsResult] = await Promise.all([
+        nostr.query(filters, { signal }),
+        Promise.race([
+          nostr.relay(OSTRIFY_RELAY_URL).query(filters, { signal }).catch(() => null),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)),
+        ]),
+      ]);
+      const catalogEvents = catalogEventsResult ?? [];
+      const podcastEvents = [...new Map([...events, ...catalogEvents].map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, podcastEvents, user?.pubkey);
       const tracks: Track[] = [];
       const seen = new Set<string>();
-      for (const event of events) {
+      for (const event of podcastEvents) {
         const referencesFountain = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
         if (referencesFountain) continue;
         const track = event.kind === NOSTR_PODCAST_EPISODE_KIND ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
@@ -679,7 +703,7 @@ export function useNostrPodcastEpisodeFeed(enabled = true) {
         tracks.push({ ...track, kind: "podcast" });
       }
       tracks.sort((left, right) => right.createdAt - left.createdAt);
-      const nextUntil = events.length >= NOSTR_SHOW_PAGE_SIZE * 3 ? Math.min(...events.map(event => event.created_at)) - 1 : undefined;
+      const nextUntil = podcastEvents.length >= NOSTR_SHOW_PAGE_SIZE * 3 ? Math.min(...podcastEvents.map(event => event.created_at)) - 1 : undefined;
       return { tracks, nextUntil, hasMore: nextUntil !== undefined };
     },
     getNextPageParam: page => page.nextUntil,
@@ -700,16 +724,22 @@ export function useNostrPodcastShows(enabled = true) {
     queryFn: async ({ pageParam, signal: querySignal }) => {
       const signal = AbortSignal.any([querySignal, AbortSignal.timeout(12000)]);
       const until = pageParam;
-      const events = await nostr.query(
-        [
-          { kinds: [NOSTR_PODCAST_SHOW_KIND, NOSTR_PODCAST_EPISODE_KIND], limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
-          { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
-        ],
-        { signal },
-      );
-      captureDiscoveredAudioEvents(nostr, events, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const filters = [
+        { kinds: [NOSTR_PODCAST_SHOW_KIND, NOSTR_PODCAST_EPISODE_KIND], limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+        { kinds: [1063, 1], "#t": PODCAST_TOPICS, limit: NOSTR_SHOW_PAGE_SIZE, ...(until ? { until } : {}) },
+      ];
+      const [events, catalogEventsResult] = await Promise.all([
+        nostr.query(filters, { signal }),
+        Promise.race([
+          nostr.relay(OSTRIFY_RELAY_URL).query(filters, { signal }).catch(() => null),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 1000)),
+        ]),
+      ]);
+      const catalogEvents = catalogEventsResult ?? [];
+      const podcastEvents = [...new Map([...events, ...catalogEvents].map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, podcastEvents, user?.pubkey);
       const episodesByAuthor = new Map<string, NostrEvent[]>();
-      for (const event of events) {
+      for (const event of podcastEvents) {
         const isNativePodcastEpisode = event.kind === NOSTR_PODCAST_EPISODE_KIND && !!parsePodcastEpisodeTrack(event);
         const hasPodcastTopic = event.tags.some(([name, value]) => name === "t" && value && PODCAST_TOPICS.includes(value.toLowerCase()));
         const referencesFountain = event.tags.some(([name, value]) => name === "i" && (value?.startsWith("podcast:guid:") || value?.startsWith("podcast:item:guid:")));
@@ -723,7 +753,7 @@ export function useNostrPodcastShows(enabled = true) {
       }
 
       const shows = new Map<string, PodcastShow>();
-      for (const event of events) {
+      for (const event of podcastEvents) {
         if (event.kind !== NOSTR_PODCAST_SHOW_KIND) continue;
         const title = event.tags.find(([name]) => name === "title")?.[1];
         if (!title) continue;

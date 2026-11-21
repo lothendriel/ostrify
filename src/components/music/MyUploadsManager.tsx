@@ -14,6 +14,7 @@ import { usePublishMusicEvent, type MusicVisibility } from "@/hooks/usePublishMu
 import { eventToTrack, MUSIC_TRACK_KINDS, type Track } from "@/lib/music";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
+import { captureDiscoveredAudioEvents } from "@/lib/audioCatalogCapture";
 
 export function MyUploadsManager() {
   const { user, metadata } = useCurrentUser();
@@ -34,6 +35,7 @@ export function MyUploadsManager() {
         { kinds: [...MUSIC_TRACK_KINDS], "#artist_npub": [user.pubkey], limit: 500 },
       ];
       const events = await nostr.query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      captureDiscoveredAudioEvents(nostr, events, user.pubkey);
       return [...new Map(events.map(eventToTrack).filter((track): track is Track => !!track && track.kind === "music" && isTrackVisibleInOstrify(track, user.pubkey, user.pubkey)).map(track => [track.id, track])).values()];
     },
   });

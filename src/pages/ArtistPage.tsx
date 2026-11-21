@@ -15,6 +15,7 @@ import { PublishMusicPanel } from "@/components/music/PublishMusicPanel";
 import { useQuery } from "@tanstack/react-query";
 import { eventToTrack, type Track } from "@/lib/music";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
+import { captureDiscoveredAudioEvents } from "@/lib/audioCatalogCapture";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
@@ -82,6 +83,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist_pubkey": [pubkey], limit: 200 },
         { kinds: [31337, 36787, 32123, 30440, 1063, 1], "#artist_npub": [nip19.npubEncode(pubkey)], limit: 200 },
       ], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      captureDiscoveredAudioEvents(nostr, events, user?.pubkey);
       const tracks = events.map(eventToTrack).filter((track): track is Track => !!track && track.artistPubkey === pubkey && isTrackVisibleInOstrify(track, user?.pubkey, pubkey));
       return [...new Map(tracks.map((track) => [track.id, track])).values()].sort((a, b) => b.createdAt - a.createdAt);
     },

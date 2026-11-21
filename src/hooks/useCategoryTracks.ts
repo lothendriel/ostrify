@@ -8,6 +8,7 @@ import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 /**
  * Fetch tracks for a single category.
@@ -20,10 +21,16 @@ import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
  *  3. Merge, de-dupe by audio URL, and sort newest first.
  */
 async function queryRelays(nostr: ReturnType<typeof useNostr>["nostr"], relays: string[], filters: NostrFilter[], signal: AbortSignal) {
-  const results = await Promise.allSettled(relays.map(relay => nostr.relay(relay).query(relay === DROPS_MUSIC_RELAY ? [{ kinds: [36787], limit: 250 }] : filters, { signal })));
-  const readRelayResults = results.filter((_result, index) => relays[index] !== DROPS_MUSIC_RELAY);
+  const results = await Promise.allSettled(relays.map(relay => nostr.relay(relay).query(
+    relay === DROPS_MUSIC_RELAY ? [{ kinds: [36787], limit: 250 }]
+      : relay === OSTRIFY_RELAY_URL ? filters.map(filter => ({ ...filter, ...(filter.ids ? {} : { kinds: filter.kinds ? [...filter.kinds, 54] : [54] }) }))
+        : filters,
+    { signal },
+  )));
+  const relayOutcomes = results.map((result, index) => ({ relay: relays[index], result }));
+  const readRelayResults = results.filter((_result, index) => relays[index] !== DROPS_MUSIC_RELAY && relays[index] !== OSTRIFY_RELAY_URL);
   const fulfilled = results.filter((result): result is PromiseFulfilledResult<NostrEvent[]> => result.status === "fulfilled");
-  if (readRelayResults.length > 0 && readRelayResults.every(result => result.status === "rejected")) throw new Error("Could not query category tracks from your configured read relays.");
+  if (readRelayResults.length > 0 && readRelayResults.every(result => result.status === "rejected") && !relayOutcomes.some(({ relay, result }) => relay === OSTRIFY_RELAY_URL && result.status === "fulfilled")) throw new Error("Could not query category tracks from your configured read relays.");
   return fulfilled.flatMap(result => result.value);
 }
 
@@ -32,7 +39,7 @@ export function useCategoryTracks(categoryId: string | undefined) {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const category = CATEGORIES.find((c) => c.id === categoryId);
-  const relays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
+  const relays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY, OSTRIFY_RELAY_URL])].sort();
 
   return useQuery({
     queryKey: ["category-tracks", categoryId ?? "", relays.join("|"), user?.pubkey ?? "public"],
@@ -59,7 +66,8 @@ export function useCategoryTracks(categoryId: string | undefined) {
         { kinds: [...MUSIC_TRACK_KINDS], authors: FEATURED_MUSIC_PUBKEYS, limit: 300 },
       ], signal);
       const [tagged, general] = await Promise.all([taggedQuery, broadQuery]);
-      captureDiscoveredAudioEvents(nostr, [...tagged, ...general], user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const discoveredEvents = [...new Map([...tagged, ...general].map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
 
       const taggedTracks = tagged
         .map(eventToTrack)

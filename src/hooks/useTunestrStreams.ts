@@ -3,9 +3,12 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 import { isOriginalSoundTitle, type Track } from '@/lib/music';
+import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 
 const STREAM_PUBKEYS = [TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY];
 // Match TuneStr's stream page topic filters (tags are case-sensitive at relays).
@@ -159,6 +162,7 @@ export function parseTunestrStreamEvent(event: NostrEvent): TunestrStream | null
 export function useTunestrStreams(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
   const relays = [...new Set([
     ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
     ...TUNESTR_RELAYS,
@@ -191,18 +195,21 @@ export function useTunestrStreams(enabled = true) {
             { kinds: [30311], '#p': STREAM_PUBKEYS, limit: PAGE_SIZE, ...timeFilter },
             { kinds: [1053], '#t': MUSIC_TAGS, limit: PAGE_SIZE, ...timeFilter },
           ];
+          if (relay === OSTRIFY_RELAY_URL) return { relay, events: [], ok: true };
           const events = await nostr.relay(relay).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
-          return { events, ok: true };
+          return { relay, events, ok: true };
         } catch (error) {
           if (signal.aborted) throw error;
           failed.push(relay);
-          return { events: [], ok: false };
+          return { relay, events: [], ok: false };
         }
       }));
-      if (relays.length && !responses.some(response => response.ok)) throw new Error('Could not query TuneStr streams from your read relays.');
+      if (relays.some(relay => relay !== OSTRIFY_RELAY_URL) && !responses.some(response => response.ok && response.relay !== OSTRIFY_RELAY_URL)) throw new Error('Could not query TuneStr streams from your read relays.');
 
+      const discoveredEvents = [...new Map(responses.filter(response => response.relay !== OSTRIFY_RELAY_URL).flatMap(response => response.events).map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
       const byAddress = new Map<string, TunestrStream>();
-      for (const event of responses.flatMap(response => response.events)) {
+      for (const event of discoveredEvents) {
         const stream = event.kind === 1053 ? parseN94Stream(event) : parseTunestrStreamEvent(event);
         if (!stream) continue;
         const address = stream.format === 'n94' ? stream.id : `${stream.track.pubkey}:${tagValue(event, 'd')}`;
@@ -211,7 +218,7 @@ export function useTunestrStreams(enabled = true) {
       }
 
       const streams = [...byAddress.values()].sort((a, b) => Number(b.isLive) - Number(a.isLive) || b.createdAt - a.createdAt);
-      const allEvents = responses.flatMap(response => response.events);
+      const allEvents = responses.filter(response => response.relay !== OSTRIFY_RELAY_URL).flatMap(response => response.events);
       const oldest = allEvents.reduce<number | undefined>((cursor, event) => cursor === undefined || event.created_at < cursor ? event.created_at : cursor, undefined);
       const next = typeof until === 'number'
         ? oldest === undefined ? undefined : Math.max(0, oldest - 1)

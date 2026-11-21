@@ -1,10 +1,10 @@
 import type { NostrEvent, NPool } from '@nostrify/nostrify';
-import { eventToTrack } from '@/lib/music';
+import { eventToTrack, parsePodcastEpisodeTrack } from '@/lib/music';
 import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 const PAGE_SIZE = 500;
 const MAX_EVENTS_PER_KIND = 10_000;
-const CATALOG_EVENT_KINDS = [1, 54, 1063, 31337, 32123, 30440, 36787, 10154];
+const CATALOG_EVENT_KINDS = [1, 54, 1063, 31337, 32123, 30440, 36787];
 
 export interface AudioCatalogCount {
   total: number;
@@ -13,10 +13,7 @@ export interface AudioCatalogCount {
 }
 
 function isAudioCatalogEvent(event: NostrEvent): boolean {
-  if (event.kind === 10154) {
-    return event.tags.some(([name, value]) => name === 'title' && !!value?.trim());
-  }
-  const track = eventToTrack(event);
+  const track = event.kind === 54 ? parsePodcastEpisodeTrack(event) : eventToTrack(event);
   return !!track && track.visibility !== 'hidden';
 }
 

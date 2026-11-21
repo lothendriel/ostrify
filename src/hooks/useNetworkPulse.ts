@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNostr } from "@nostrify/react";
-import type { NostrFilter } from "@nostrify/nostrify";
+import type { NostrEvent, NostrFilter } from "@nostrify/nostrify";
 import { useAppContext } from "@/hooks/useAppContext";
 import { eventToTrack, MUSIC_TRACK_KINDS } from "@/lib/music";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { captureDiscoveredAudioEvents } from "@/lib/audioCatalogCapture";
+import { OSTRIFY_RELAY_URL } from "@/lib/appRelays";
 
 export function useNetworkPulse() {
   const { nostr } = useNostr();
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
   const readRelays = config.relayMetadata.relays.filter(relay => relay.read);
   const relayKey = readRelays.map(relay => relay.url).sort().join("|");
 
@@ -21,10 +25,17 @@ export function useNetworkPulse() {
         { kinds: [54, 1063], since, limit: 300 },
         { kinds: [1], since, limit: 300 },
       ];
-      const events = await nostr.query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
+      const querySignal = AbortSignal.any([signal, AbortSignal.timeout(15000)]);
+      const events = await nostr.query(filters, { signal: querySignal });
+      const catalogPromise = nostr.relay(OSTRIFY_RELAY_URL).query([{ kinds: [...MUSIC_TRACK_KINDS, 54, 1063, 1], since, limit: 300 }], { signal: querySignal }).catch(() => []);
+      void Promise.race([catalogPromise, new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 1000))]).then(catalogEvents => {
+        if (catalogEvents.length) captureDiscoveredAudioEvents(nostr, catalogEvents, user?.pubkey);
+      });
+      const discoveredEvents = events;
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
       const seen = new Set<string>();
       const tracks = [] as ReturnType<typeof eventToTrack>[];
-      for (const event of events) {
+      for (const event of discoveredEvents) {
         if (seen.has(event.id)) continue;
         seen.add(event.id);
         const track = eventToTrack(event);

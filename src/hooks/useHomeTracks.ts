@@ -7,6 +7,7 @@ import { FEATURED_MUSIC_PUBKEYS, DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 
 const RELAY_LIMIT = 60;
 const FEATURED_LIMIT = 100;
@@ -24,7 +25,7 @@ export function useHomeTracks(enabled = true) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
-  const relays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY])].sort();
+  const relays = [...new Set([...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url), DROPS_MUSIC_RELAY, OSTRIFY_RELAY_URL])].sort();
   const relayKey = relays.join("|");
 
   return useQuery({
@@ -36,12 +37,14 @@ export function useHomeTracks(enabled = true) {
       const filtersForRelay = (relay: string): NostrFilter[] => {
         const filters: NostrFilter[] = relay === DROPS_MUSIC_RELAY
           ? [{ kinds: [36787], limit: RELAY_LIMIT }]
-          : [
-            { kinds: [...MUSIC_TRACK_KINDS], limit: RELAY_LIMIT },
-            { kinds: [1063], limit: RELAY_LIMIT },
-            { kinds: [1], limit: RELAY_LIMIT, "#t": MUSIC_TOPICS },
-          ];
-        if (relay !== DROPS_MUSIC_RELAY && FEATURED_MUSIC_PUBKEYS.length) {
+          : relay === OSTRIFY_RELAY_URL
+            ? [{ kinds: [...MUSIC_TRACK_KINDS, 1063, 1, 54], limit: RELAY_LIMIT }]
+            : [
+              { kinds: [...MUSIC_TRACK_KINDS], limit: RELAY_LIMIT },
+              { kinds: [1063], limit: RELAY_LIMIT },
+              { kinds: [1], limit: RELAY_LIMIT, "#t": MUSIC_TOPICS },
+            ];
+        if (relay !== DROPS_MUSIC_RELAY && relay !== OSTRIFY_RELAY_URL && FEATURED_MUSIC_PUBKEYS.length) {
           filters.push({ kinds: [...MUSIC_TRACK_KINDS], authors: FEATURED_MUSIC_PUBKEYS, limit: FEATURED_LIMIT });
         }
         return filters;
@@ -57,9 +60,12 @@ export function useHomeTracks(enabled = true) {
       }));
       const requests = relays.map(async (relay, index) => {
         try {
-          const events = await nostr.relay(relay).query(filtersForRelay(relay), {
+          const eventsPromise = nostr.relay(relay).query(filtersForRelay(relay), {
             signal: AbortSignal.any([relaySignal, AbortSignal.timeout(8000)]),
           });
+          const events = relay === OSTRIFY_RELAY_URL
+            ? await Promise.race([eventsPromise, new Promise<NostrEvent[]>(resolve => setTimeout(() => resolve([]), 1000))])
+            : await eventsPromise;
           results[index] = { relay, ok: true, events, tracks: events.map(eventToTrack).filter((track): track is Track => !!track) };
         } catch (error) {
           if (signal.aborted) throw error;
@@ -85,11 +91,11 @@ export function useHomeTracks(enabled = true) {
       if (signal.aborted) throw signal.reason;
       relayController.abort();
 
-      const discoveredEvents = results.flatMap(result => result.ok ? result.events : []);
-      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey, config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url));
+      const discoveredEvents = [...new Map(results.flatMap(result => result.ok ? result.events : []).map(event => [event.id, event])).values()];
+      captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
       const successful = results.filter(result => result.ok);
-      const failedRelays = results.filter(result => !result.ok && result.relay !== DROPS_MUSIC_RELAY).map(result => result.relay);
-      if (!successful.length) {
+      const failedRelays = results.filter(result => !result.ok && result.relay !== DROPS_MUSIC_RELAY && result.relay !== OSTRIFY_RELAY_URL).map(result => result.relay);
+      if (!successful.some(result => result.relay !== OSTRIFY_RELAY_URL)) {
         throw new Error(relays.length ? "Could not load music from any configured read relay or DROPS." : "Could not load music from DROPS.");
       }
 
@@ -101,7 +107,7 @@ export function useHomeTracks(enabled = true) {
       return {
         tracks: [...byUrl.values()].filter(track => isTrackVisibleInOstrify(track, user?.pubkey)).sort((left, right) => right.createdAt - left.createdAt),
         failedRelays,
-        succeededRelays: successful.length,
+        succeededRelays: successful.filter(result => result.relay !== OSTRIFY_RELAY_URL).length,
       };
     },
   });
