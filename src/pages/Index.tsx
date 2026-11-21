@@ -120,13 +120,23 @@ const Index = () => {
   });
 
   useEffect(() => {
-    if (!baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading && (previousShelfVariation.current !== shelfVariation || !displayShelves)) {
+    const hasTracksToRestore = categoryShelves.some(shelf => shelf.tracks.length > 0);
+    const savedShelvesAreEmpty = displayShelves?.scope === shelfSessionScope && !displayShelves.shelves.some(shelf => shelf.tracks.length > 0);
+    const snapshotIsForAnotherScope = displayShelves?.scope !== shelfSessionScope;
+    const shouldRefreshSnapshot = previousShelfVariation.current !== shelfVariation
+      || !displayShelves
+      || snapshotIsForAnotherScope
+      || (savedShelvesAreEmpty && hasTracksToRestore);
+
+    // Disabled queries report isLoading=false, so don't freeze the initially empty
+    // shelves before the deferred Home discovery queries have even started.
+    if (discoveryEnabled && !baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading && shouldRefreshSnapshot) {
       previousShelfVariation.current = shelfVariation;
       const snapshot = { scope: shelfSessionScope, shelves: categoryShelves };
       homeShelfSessionSnapshot = snapshot;
       setDisplayShelves(snapshot);
     }
-  }, [displayShelves, categoryShelves, shelfVariation, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope]);
+  }, [displayShelves, categoryShelves, shelfVariation, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope, discoveryEnabled]);
 
   useEffect(() => {
     if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
