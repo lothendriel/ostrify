@@ -74,15 +74,39 @@ function normalizeGenreTag(value: string): string {
 
 const GENRE_CATEGORY_IDS = new Set(["rock", "electronic", "hiphop", "jazz", "classical", "folk", "pop", "ambient", "bitcoin"]);
 const CATEGORY_IDS = new Set(CATEGORIES.filter(category => category.id !== "general").map(category => category.id));
+const CATEGORY_MATCHES = CATEGORIES
+  .filter(category => category.id !== "general")
+  .map(category => ({ id: category.id, tags: new Set(category.match.map(normalizeGenreTag).filter(Boolean)) }));
+const CATEGORY_IDS_BY_TAG = new Map<string, string[]>();
+for (const category of CATEGORY_MATCHES) {
+  for (const tag of category.tags) {
+    const categories = CATEGORY_IDS_BY_TAG.get(tag) ?? [];
+    categories.push(category.id);
+    CATEGORY_IDS_BY_TAG.set(tag, categories);
+  }
+}
 
 /** All genre/topic categories assigned by the track's explicit Nostr topic tags. */
 export function categoriesForTrack(track: Track): string[] {
-  const topics = new Set(track.topics.map(normalizeGenreTag).filter(Boolean));
-  const matched = CATEGORIES
-    .filter(category => category.id !== "general" && category.match.some(tag => topics.has(normalizeGenreTag(tag))))
-    .map(category => category.id);
-  if (!matched.some(categoryId => GENRE_CATEGORY_IDS.has(categoryId))) matched.push("general");
-  return matched;
+  const matched = new Set<string>();
+  for (const topic of track.topics) {
+    for (const categoryId of CATEGORY_IDS_BY_TAG.get(normalizeGenreTag(topic)) ?? []) matched.add(categoryId);
+  }
+  const orderedMatches = CATEGORY_MATCHES.filter(category => matched.has(category.id)).map(category => category.id);
+  if (!orderedMatches.some(categoryId => GENRE_CATEGORY_IDS.has(categoryId))) orderedMatches.push("general");
+  return orderedMatches;
+}
+
+/** Categorize a collection in one pass, preserving input order and duplicates. */
+export function groupTracksByCategory(tracks: Track[]): Map<string, Track[]> {
+  const grouped = new Map<string, Track[]>(CATEGORIES.map(category => [category.id, []]));
+  for (const track of tracks) {
+    if (track.kind !== "music") continue;
+    for (const categoryId of categoriesForTrack(track)) {
+      grouped.get(categoryId)?.push(track);
+    }
+  }
+  return grouped;
 }
 
 /** Build searchable text for recommendation heuristics, not genre shelf assignment. */

@@ -19,7 +19,7 @@ import { FreshTracksCarousel } from "@/components/music/FreshTracksCarousel";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { DeferredHomeSection } from "@/components/music/DeferredHomeSection";
 import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
-import { CATEGORIES, tracksInCategory } from "@/lib/categories";
+import { CATEGORIES, categoriesForTrack, groupTracksByCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
 import type { Track } from "@/lib/music";
@@ -28,6 +28,45 @@ import { useHomeSessionScope } from '@/contexts/HomeSessionContext';
 const HOME_WAVLAKE_GENRES = [...new Set(CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
 type HomeCategoryShelves = { category: typeof CATEGORIES[number]; tracks: Track[] }[];
 let homeShelfSessionSnapshot: { scope: string; shelves: HomeCategoryShelves } | null = null;
+
+function groupHomeTracksByCategory(allMusic: Track[], genreCatalogTracksByGenre: Map<string, Track[]>): Map<string, Track[]> {
+  const groups = new Map(CATEGORIES.map(category => [category.id, [] as Track[]]));
+  const genreTracksByCategory = new Map(CATEGORIES.map(category => [
+    category.id,
+    (category.wavlakeGenres ?? []).flatMap(genre => genreCatalogTracksByGenre.get(genre) ?? []),
+  ]));
+  const catalogCategoriesByTrack = new Map<Track, Set<string>>();
+  for (const [categoryId, tracks] of genreTracksByCategory) {
+    for (const track of tracks) {
+      const categories = catalogCategoriesByTrack.get(track) ?? new Set<string>();
+      categories.add(categoryId);
+      catalogCategoriesByTrack.set(track, categories);
+    }
+  }
+
+  for (const track of allMusic) {
+    if (track.kind !== "music") continue;
+    const catalogCategories = catalogCategoriesByTrack.get(track) ?? new Set<string>();
+    const matchedCategories = new Set(categoriesForTrack(track).filter(categoryId => categoryId !== "general" || catalogCategories.size === 0));
+    for (const categoryId of catalogCategories) matchedCategories.add(categoryId);
+    for (const category of CATEGORIES) {
+      if (!matchedCategories.has(category.id)) continue;
+      const groupedTrack = catalogCategories.has(category.id) && category.match.length
+        ? { ...track, topics: [...track.topics, category.match[0]] }
+        : track;
+      groups.get(category.id)?.push(groupedTrack);
+    }
+  }
+
+  for (const category of CATEGORIES) {
+    if (!category.match.length) continue;
+    const categoryTracks = groups.get(category.id);
+    for (const track of genreTracksByCategory.get(category.id) ?? []) {
+      if (track.kind === "music") categoryTracks?.push({ ...track, topics: [...track.topics, category.match[0]] });
+    }
+  }
+  return groups;
+}
 
 function HomeFreshTracks({ candidates, enabled, sessionScope }: { candidates: Track[]; enabled: boolean; sessionScope?: string }) {
   const query = useFreshNostrTracks(enabled, sessionScope);
@@ -60,9 +99,10 @@ const Index = () => {
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const baseMusic = useMemo(() => [...tracks, ...wavlakeTracks], [tracks, wavlakeTracks]);
   const baseSourcesLoading = homeTracksQuery.isLoading || wavlake.isLoading;
+  const baseTracksByCategory = useMemo(() => groupTracksByCategory(baseMusic), [baseMusic]);
   const categoriesNeedingCatalog = useMemo(() => new Set(baseSourcesLoading ? [] : CATEGORIES
-    .filter(category => category.wavlakeGenres?.length && new Set(tracksInCategory(baseMusic, category.id).map(track => track.url)).size < 8)
-    .flatMap(category => category.wavlakeGenres ?? [])), [baseMusic, baseSourcesLoading]);
+    .filter(category => category.wavlakeGenres?.length && new Set((baseTracksByCategory.get(category.id) ?? []).map(track => track.url)).size < 8)
+    .flatMap(category => category.wavlakeGenres ?? [])), [baseTracksByCategory, baseSourcesLoading]);
   const genreCatalogQueries = useWavlakeGenreCatalog(HOME_WAVLAKE_GENRES, discoveryEnabled, [...categoriesNeedingCatalog], homeAccountScope);
   const genreCatalogVersion = genreCatalogQueries.map((query, index) => `${HOME_WAVLAKE_GENRES[index]}:${query.dataUpdatedAt}:${query.isLoading}`).join('|');
   const genreCatalogTracks = useMemo(() => genreCatalogQueries.flatMap(query => query.data ?? []), [genreCatalogVersion]);
@@ -80,12 +120,9 @@ const Index = () => {
   const likedTracks = likedQuery.data?.tracks ?? [];
   const categoryShelves = useMemo(() => {
     const shownOnPage = new Set<string>();
+    const tracksByCategory = groupHomeTracksByCategory(allMusic, genreCatalogTracksByGenre);
     return CATEGORIES.map(category => {
-      const genreTracks = (category.wavlakeGenres ?? []).flatMap(genre => genreCatalogTracksByGenre.get(genre) ?? []);
-      const categoryPool = category.wavlakeGenres?.length
-        ? [...allMusic, ...genreTracks].map(track => genreTracks.includes(track) && category.match.length ? { ...track, topics: [...track.topics, category.match[0]] } : track)
-        : allMusic;
-      const categoryTracks = tracksInCategory(categoryPool, category.id);
+      const categoryTracks = [...(tracksByCategory.get(category.id) ?? [])];
       const recentlyShown = new Set(recentShelfHistory.current[category.id] ?? []);
       const freshCandidates = categoryTracks.filter(track => !recentlyShown.has(track.id) && !recentlyShown.has(track.url));
       const unshownCandidates = freshCandidates.filter(track => !shownOnPage.has(track.id) && !shownOnPage.has(track.url));
