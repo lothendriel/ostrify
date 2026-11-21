@@ -1,10 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import Hls from 'hls.js';
+import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Maximize2, Minimize2, PictureInPicture2, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { N94StreamPlayer } from '@/components/music/N94StreamPlayer';
+
+const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
 
 interface TunestrPlayerContextValue {
   openStream: (stream: TunestrStream) => void;
@@ -50,20 +50,24 @@ function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
       return;
     }
 
-    if (!Hls.isSupported()) {
-      setError('This browser does not support HLS video playback. Open the stream source in a new tab.');
-      return;
-    }
-
-    const player = new Hls({ enableWorker: false, lowLatencyMode: true });
-    player.loadSource(stream.url);
-    player.attachMedia(video);
-    player.on(Hls.Events.ERROR, (_event, data) => {
-      if (!data.fatal) return;
-      setError('The live stream could not be loaded. Please try opening the stream source directly.');
-      player.destroy();
-    });
-    return () => player.destroy();
+    let disposed = false;
+    let player: import('hls.js').default | undefined;
+    void import('hls.js').then(({ default: Hls }) => {
+      if (disposed) return;
+      if (!Hls.isSupported()) {
+        setError('This browser does not support HLS video playback. Open the stream source in a new tab.');
+        return;
+      }
+      player = new Hls({ enableWorker: false, lowLatencyMode: true });
+      player.loadSource(stream.url);
+      player.attachMedia(video);
+      player.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        setError('The live stream could not be loaded. Please try opening the stream source directly.');
+        player?.destroy();
+      });
+    }).catch(() => setError('The HLS player could not be loaded. Open the stream source in a new tab.'));
+    return () => { disposed = true; player?.destroy(); };
   }, [isZapClubHls, stream.id, stream.url]);
 
   if (!isZapClubHls) return <iframe
@@ -149,7 +153,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
           {controls}
         </div>
         {stream.format === 'n94' && stream.event && stream.variant
-          ? <N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} />
+          ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} /></Suspense>
           : <TunestrVideoSurface stream={stream} />}
         {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a><span className="ml-2 text-xs text-muted-foreground">If playback is unavailable here, open the stream on its source site.</span></div>}
       </div>

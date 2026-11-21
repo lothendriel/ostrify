@@ -7,7 +7,7 @@ interface DeferredHomeSectionProps {
   rootMargin?: string;
 }
 
-export function DeferredHomeSection({ title, children, rootMargin = "500px 0px" }: DeferredHomeSectionProps) {
+export function DeferredHomeSection({ title, children, rootMargin = "200px 0px" }: DeferredHomeSectionProps) {
   const ref = useRef<HTMLElement>(null);
   const [isNearViewport, setIsNearViewport] = useState(false);
 
