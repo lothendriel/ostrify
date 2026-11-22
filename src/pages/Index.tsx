@@ -232,9 +232,9 @@ const Index = () => {
         </nav>
       </section>
 
-      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
       <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
       <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
+      <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
       <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} sessionScope={homeAccountScope} />}</DeferredHomeSection>
 
       <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home sessionScope={homeAccountScope} />}</DeferredHomeSection>

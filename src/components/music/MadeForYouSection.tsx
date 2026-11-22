@@ -30,7 +30,7 @@ function MixArtwork({ tracks, title }: { tracks: Track[]; title: string }) {
           </div>;
         })}
       </div>
-      <img src="/ostrify-logo-512.webp?v=opt-1" alt="" aria-hidden="true" className="absolute left-2 top-2 size-7 rounded-full border border-black/40 bg-primary object-cover shadow-md" />
+      <img src="/ostrify-logo-512.webp?v=opt-1" alt="" aria-hidden="true" className="absolute left-1.5 top-1.5 size-4 rounded-full border border-black/40 bg-primary object-cover shadow-md" />
       <span className="sr-only">{title} artwork collage</span>
     </div>
   );
