@@ -90,6 +90,17 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           >
             {player.autoplay ? <Sparkles className="size-4" /> : <Shuffle className="size-4" />}
           </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={player.cycleRepeat}
+            aria-label={`Repeat: ${player.repeat}`}
+            aria-pressed={player.repeat !== "off"}
+            title={player.repeat === "off" ? "Repeat off — click to repeat queue" : player.repeat === "all" ? "Repeat queue — click to repeat current track" : "Repeat current track — click to turn off"}
+            className={cn("size-8 rounded-full", player.repeat !== "off" ? "text-primary" : "text-muted-foreground")}
+          >
+            {player.repeat === "one" ? <Repeat1 className="size-4" /> : <Repeat className="size-4" />}
+          </Button>
           <ShareTrackButton track={current} />
           <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         </div>
