@@ -177,11 +177,9 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
                 <MixArtwork tracks={mix.tracks} title={mix.title} />
                 <span className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-foreground">{mix.title}</span><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Play className="size-4 fill-current" aria-hidden="true" /></span></span>
                 <span className="mt-1 line-clamp-2 block min-h-8 text-xs leading-4 text-muted-foreground">{mix.subtitle}</span>
-                <span className="mt-1 block text-[11px] text-muted-foreground/80">{mix.tracks.length} tracks</span>
               </button>
             </article>)}
           </HorizontalCarousel>
-          <p className="px-4 pb-3 text-[11px] text-muted-foreground sm:px-5">Personalized from listening, likes, and followed artists · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"}{catalogFailure ? " · Wavlake unavailable" : ""} · private to this browser</p>
         </>
       ) : (
         <div className="px-4 pb-4 sm:px-5">
