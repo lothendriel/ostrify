@@ -19,6 +19,20 @@ interface SavedPlayerState {
   queue: Track[];
   index: number;
   progress: number;
+  isPlaying: boolean;
+  muted: boolean;
+  shuffle: boolean;
+  repeat: RepeatMode;
+}
+
+interface LastSavedPlayerState {
+  queue: Track[];
+  index: number;
+  progressBucket: number;
+  isPlaying: boolean;
+  muted: boolean;
+  shuffle: boolean;
+  repeat: RepeatMode;
 }
 
 function historyStorageKey(owner: string): string {
@@ -142,7 +156,16 @@ function readSavedPlayerState(owner: string): SavedPlayerState | undefined {
       (tracks.length > 0 && (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= tracks.length)) ||
       typeof progress !== "number" || !Number.isFinite(progress) || progress < 0
     ) return undefined;
-    return { queue: tracks, index: index as number, progress };
+    const repeat: RepeatMode = parsed.repeat === "all" || parsed.repeat === "one" ? parsed.repeat : "off";
+    return {
+      queue: tracks,
+      index: index as number,
+      progress,
+      isPlaying: parsed.isPlaying === true,
+      muted: parsed.muted === true,
+      shuffle: parsed.shuffle === true,
+      repeat,
+    };
   } catch {
     return undefined;
   }
@@ -229,9 +252,10 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, []);
 
   const [initialPlayerState] = useState(() => readSavedPlayerState(owner));
-  const restoredStateRef = useRef(initialPlayerState !== undefined);
+  const restoredStateRef = useRef(Boolean(initialPlayerState && initialPlayerState.index >= 0 && initialPlayerState.queue[initialPlayerState.index]));
   const pendingSeekRef = useRef(initialPlayerState?.progress ?? 0);
-  const lastSavedStateRef = useRef<{ queue: Track[]; index: number; progressBucket: number } | null>(null);
+  const lastSavedStateRef = useRef<LastSavedPlayerState | null>(null);
+  const pendingAutoplayRef = useRef(initialPlayerState?.isPlaying ?? false);
   const [historyState, setHistoryState] = useState(() => ({ owner, tracks: readSavedHistory(owner) }));
   const history = useMemo(
     () => historyState.owner === owner ? historyState.tracks : readSavedHistory(owner),
@@ -249,10 +273,12 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   const [progress, setProgress] = useState(() => initialPlayerState?.progress ?? 0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(readSavedVolume);
-  const [muted, setMuted] = useState(false);
-  const [shuffle, setShuffle] = useState(false);
-  const [repeat, setRepeat] = useState<RepeatMode>("off");
+  const [muted, setMuted] = useState(() => initialPlayerState?.muted ?? false);
+  const [shuffle, setShuffle] = useState(() => initialPlayerState?.shuffle ?? false);
+  const [repeat, setRepeat] = useState<RepeatMode>(() => initialPlayerState?.repeat ?? "off");
   const [autoplay, setAutoplayState] = useState(readSavedAutoplay);
+  const playerPreferencesRef = useRef({ muted, shuffle, repeat });
+  playerPreferencesRef.current = { muted, shuffle, repeat };
   const autoplayRef = useRef(autoplay);
   const setAutoplay = useCallback((enabled: boolean) => {
     autoplayRef.current = enabled;
@@ -303,9 +329,26 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
         }
         pendingSeekRef.current = 0;
         restoredStateRef.current = false;
-        lastSavedStateRef.current = { queue, index, progressBucket: Math.floor(position) };
-        writeSavedPlayerState(owner, { queue, index, progress: position });
+        const shouldResume = pendingAutoplayRef.current;
+        pendingAutoplayRef.current = false;
+        const preferences = playerPreferencesRef.current;
+        lastSavedStateRef.current = {
+          queue,
+          index,
+          progressBucket: Math.floor(position),
+          isPlaying: shouldResume,
+          ...preferences,
+        };
+        writeSavedPlayerState(owner, {
+          queue,
+          index,
+          progress: position,
+          isPlaying: shouldResume,
+          ...preferences,
+        });
         setProgress(audio.currentTime || position);
+        setIsPlaying(shouldResume);
+        if (shouldResume) audio.play().catch(() => setIsPlaying(false));
       };
       if (audio.readyState >= 1) restorePosition();
       else audio.addEventListener("loadedmetadata", restorePosition, { once: true });
@@ -320,21 +363,46 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     writeSavedHistory(owner, history);
   }, [owner, history]);
 
-  // A restored session remains paused until the user explicitly presses Play.
+  // Capture the latest position and play intent before a browser refresh closes the page.
+  useEffect(() => {
+    const saveBeforePageHide = () => {
+      if (!current || index < 0 || queue.length === 0) return;
+      writeSavedPlayerState(owner, {
+        queue,
+        index,
+        progress: audioRef.current?.currentTime ?? progress,
+        isPlaying,
+        muted,
+        shuffle,
+        repeat,
+      });
+    };
+    window.addEventListener("pagehide", saveBeforePageHide);
+    return () => window.removeEventListener("pagehide", saveBeforePageHide);
+  }, [queue, index, current, progress, owner, isPlaying, muted, shuffle, repeat]);
+
+  // Keep player-bar state in sync with browser storage for refresh recovery.
   useEffect(() => {
     if (restoredStateRef.current) return;
-    if (!current || index < 0 || queue.length === 0) {
-      lastSavedStateRef.current = null;
-      writeSavedPlayerState(owner, undefined);
-      return;
-    }
     const progressBucket = Math.floor(progress);
     const previous = lastSavedStateRef.current;
-    const sameQueue = previous?.queue.length === queue.length && previous.queue.every((track, trackIndex) => track.id === queue[trackIndex]?.id);
-    if (sameQueue && previous?.index === index && previous.progressBucket === progressBucket) return;
-    lastSavedStateRef.current = { queue, index, progressBucket };
-    writeSavedPlayerState(owner, { queue, index, progress });
-  }, [queue, index, current, progress, owner]);
+    if (!current || index < 0 || queue.length === 0) {
+      if (
+        previous?.queue.length === 0 && previous.index === -1 && previous.progressBucket === 0 &&
+        !previous.isPlaying && previous.muted === muted && previous.shuffle === shuffle && previous.repeat === repeat
+      ) return;
+      lastSavedStateRef.current = { queue: [], index: -1, progressBucket: 0, isPlaying: false, muted, shuffle, repeat };
+      writeSavedPlayerState(owner, { queue: [], index: -1, progress: 0, isPlaying: false, muted, shuffle, repeat });
+      return;
+    }
+    const sameQueue = previous !== null && previous.queue.length === queue.length && previous.queue.every((track, trackIndex) => track.id === queue[trackIndex]?.id);
+    if (
+      previous && sameQueue && previous.index === index && previous.progressBucket === progressBucket &&
+      previous.isPlaying === isPlaying && previous.muted === muted && previous.shuffle === shuffle && previous.repeat === repeat
+    ) return;
+    lastSavedStateRef.current = { queue, index, progressBucket, isPlaying, muted, shuffle, repeat };
+    writeSavedPlayerState(owner, { queue, index, progress, isPlaying, muted, shuffle, repeat });
+  }, [queue, index, current, progress, owner, isPlaying, muted, shuffle, repeat]);
 
   // Sync volume / mute.
   useEffect(() => {
