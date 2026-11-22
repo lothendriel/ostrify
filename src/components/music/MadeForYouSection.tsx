@@ -9,12 +9,52 @@ import { buildPersonalizedMix } from "@/lib/personalizedMix";
 import type { Track } from "@/lib/music";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrackCard } from "./TrackCard";
 import { TrackArtwork } from "./TrackArtwork";
 import { HorizontalCarousel } from "@/components/music/HorizontalCarousel";
 import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
+import { sanitizeUrl } from "@/lib/sanitize";
+
+type DailyMix = { id: string; title: string; subtitle: string; tracks: Track[] };
+
+function MixArtwork({ tracks, title }: { tracks: Track[]; title: string }) {
+  const artworkTracks = tracks.slice(0, 4);
+  return (
+    <div className="relative aspect-square overflow-hidden rounded-md bg-gradient-to-br from-emerald-950 to-slate-950 shadow-md">
+      <div className="grid size-full grid-cols-2 grid-rows-2 gap-px bg-black/40">
+        {artworkTracks.map((track, index) => {
+          const image = sanitizeUrl(track.image);
+          return <div key={`${track.id}-${index}`} className="min-h-0 min-w-0 overflow-hidden bg-secondary">
+            {image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <TrackArtwork track={track} className="size-full" rounded="rounded-none" />}
+          </div>;
+        })}
+      </div>
+      <img src="/ostrify-logo-512.webp?v=opt-1" alt="" aria-hidden="true" className="absolute left-2 top-2 size-7 rounded-full border border-black/40 bg-primary object-cover shadow-md" />
+      <span className="sr-only">{title} artwork collage</span>
+    </div>
+  );
+}
+
+function uniqueQueue(tracks: Track[], limit = 24): Track[] {
+  const ids = new Set<string>();
+  const urls = new Set<string>();
+  return tracks.filter(track => {
+    if (track.kind !== "music" || ids.has(track.id) || urls.has(track.url)) return false;
+    ids.add(track.id);
+    urls.add(track.url);
+    return true;
+  }).slice(0, limit);
+}
+
+function artistKeys(track: Track): string[] {
+  return [track.artistPubkey?.toLowerCase(), track.artistId ? `wavlake:${track.artistId.toLowerCase()}` : undefined, track.artist?.trim().toLocaleLowerCase(), track.pubkey ? `publisher:${track.pubkey.toLowerCase()}` : undefined]
+    .filter((value): value is string => Boolean(value));
+}
+
+function matchesArtists(track: Track, keys: Set<string>): boolean {
+  return artistKeys(track).some(key => keys.has(key));
+}
 
 export function MadeForYouSection({ candidates, isLoading, active = true, sessionScope }: { candidates: Track[]; isLoading: boolean; active?: boolean; sessionScope?: string }) {
   const player = usePlayer();
@@ -29,31 +69,58 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
   const liked = likedTracks.data?.tracks ?? [];
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const mixCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
+  const musicCandidates = useMemo(() => uniqueQueue(mixCandidates, 200), [mixCandidates]);
+  const musicHistory = useMemo(() => uniqueQueue(player.history, 100), [player.history]);
+  const musicLiked = useMemo(() => uniqueQueue(liked, 100), [liked]);
+  const followedReferences = useMemo(() => followedArtists.data ?? [], [followedArtists.data]);
+  const tasteCount = musicLiked.length + musicHistory.length + followedReferences.length;
   const personalizedMix = useMemo(() => buildPersonalizedMix({
     candidates: mixCandidates,
-    liked,
-    history: player.history,
-    followedArtists: followedArtists.data ?? [],
+    liked: musicLiked,
+    history: musicHistory,
+    followedArtists: followedReferences,
     variation: mixVariation,
-  }), [mixCandidates, liked, player.history, followedArtists.data, mixVariation]);
-  const diversifiedMix = useMemo(() => personalizedMix.length ? buildVariedHomeShelf({
-    candidates: mixCandidates,
-    liked,
-    history: player.history,
-    followedArtists: followedArtists.data ?? [],
-    limit: 24,
-    variation: mixVariation,
-    familiarSlots: 4,
-    excludeIds: [...new Set([...personalizedMix.map(item => item.track.id), ...player.history.map(track => track.id), ...liked.map(track => track.id)])],
-    excludeUrls: [...new Set([...personalizedMix.map(item => item.track.url), ...player.history.map(track => track.url), ...liked.map(track => track.url)])],
-  }) : [], [personalizedMix, mixCandidates, liked, player.history, followedArtists.data, mixVariation]);
-  const mix = useMemo(() => {
-    const reasons = new Map(personalizedMix.map(item => [item.track.id, item.reason]));
-    const personalizedIds = new Set(personalizedMix.map(item => item.track.id));
-    const extras = diversifiedMix.filter(track => !personalizedIds.has(track.id)).map(track => ({ track, reason: reasons.get(track.id) ?? 'A fresh find in a sound you enjoy' }));
-    return [...personalizedMix, ...extras];
-  }, [personalizedMix, diversifiedMix]);
-  const mixTracks = mix.map(item => item.track);
+  }).map(item => item.track), [mixCandidates, musicLiked, musicHistory, followedReferences, mixVariation]);
+  const recentArtists = useMemo(() => new Set(musicHistory.slice(0, 8).flatMap(artistKeys)), [musicHistory]);
+  const likedArtists = useMemo(() => new Set(musicLiked.flatMap(artistKeys)), [musicLiked]);
+  const mixCards = useMemo(() => {
+    const followed = new Set(followedReferences.flatMap(reference => {
+      const normalized = reference.toLowerCase();
+      return [normalized, normalized.startsWith('wavlake:') ? normalized : undefined];
+    }).filter((value): value is string => Boolean(value)));
+    const followedQueue = uniqueQueue([...(followedTracks.data ?? []), ...musicCandidates.filter(track => matchesArtists(track, followed))]);
+    const recentQueue = uniqueQueue([...musicHistory, ...musicCandidates.filter(track => matchesArtists(track, recentArtists))]);
+    const likedQueue = uniqueQueue([...musicLiked, ...musicCandidates.filter(track => matchesArtists(track, likedArtists))]);
+    const freshQueue = buildVariedHomeShelf({
+      candidates: musicCandidates,
+      liked: musicLiked,
+      history: musicHistory,
+      followedArtists: followedReferences,
+      limit: 24,
+      variation: mixVariation,
+      familiarSlots: 0,
+      excludeIds: [...musicHistory, ...musicLiked].map(track => track.id),
+      excludeUrls: [...musicHistory, ...musicLiked].map(track => track.url),
+    });
+    const choices: DailyMix[] = [
+      ...(tasteCount > 0 ? [{ id: 'daily', title: 'Daily Mix', subtitle: 'A little of everything you love', tracks: uniqueQueue(personalizedMix) }] : []),
+      ...(musicHistory.length > 0 ? [{ id: 'on-repeat', title: 'On Repeat', subtitle: 'Inspired by your recent listening', tracks: recentQueue }] : []),
+      ...(musicLiked.length > 0 ? [{ id: 'favorites', title: 'Liked & Loved', subtitle: 'Your favorites and more like them', tracks: likedQueue }] : []),
+      ...(followedReferences.length > 0 ? [{ id: 'following', title: 'From Your Artists', subtitle: 'New sounds from artists you follow', tracks: followedQueue }] : []),
+      ...(tasteCount > 0 ? [{ id: 'fresh', title: 'Fresh Finds', subtitle: 'Discoveries picked for your taste', tracks: freshQueue }] : []),
+    ];
+    const visible: DailyMix[] = [];
+    for (const choice of choices) {
+      if (choice.tracks.length < 4) continue;
+      const ids = new Set(choice.tracks.slice(0, 12).map(track => track.id));
+      const tooSimilar = visible.some(existing => {
+        const overlap = existing.tracks.slice(0, 12).filter(track => ids.has(track.id)).length;
+        return overlap / Math.max(1, Math.min(ids.size, Math.min(existing.tracks.length, 12))) > 0.75;
+      });
+      if (!tooSimilar) visible.push({ ...choice, tracks: choice.tracks.slice(0, 24) });
+    }
+    return visible;
+  }, [followedReferences, followedTracks.data, musicCandidates, musicHistory, musicLiked, recentArtists, likedArtists, personalizedMix, mixVariation, tasteCount]);
   const followedSet = useMemo(() => new Set((followedArtists.data ?? []).map(reference => reference.toLowerCase())), [followedArtists.data]);
   const allTracks = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
   const newFromFollows = useMemo(() => {
@@ -79,7 +146,6 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
     if (player.progress < 30 || (track.duration && player.progress >= track.duration - 30)) return [];
     return [{ track, progress: player.progress, duration: player.duration || track.duration }];
   }, [player.current, player.progress, player.duration]);
-  const tasteCount = liked.length + player.history.filter(track => track.kind === "music").length + (followedArtists.data?.length ?? 0);
   const isPersonalDataLoading = active && (playlists.isLoading || likedTracks.isLoading || followedArtists.isLoading);
   const catalogFailure = wavlake.isError && !wavlakeTracks.length;
 
@@ -94,37 +160,36 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="ghost" size="icon" onClick={() => setMixVariation(value => value + 1)} disabled={!mix.length || isLoading || isPersonalDataLoading} aria-label="Refresh Made for You mix" title="Refresh mix" className="size-8 rounded-full text-muted-foreground hover:text-foreground">
+          <Button type="button" variant="ghost" size="icon" onClick={() => setMixVariation(value => value + 1)} disabled={!mixCards.length || isLoading || isPersonalDataLoading} aria-label="Refresh Made for You mixes" title="Refresh mixes" className="size-8 rounded-full text-muted-foreground hover:text-foreground">
             <RefreshCw className="size-4" />
-          </Button>
-          <Button type="button" size="sm" onClick={() => player.playQueue(mixTracks)} disabled={!mixTracks.length} className="h-8 rounded-full px-4">
-            <Play className="mr-1.5 size-3.5 fill-current" /> Play mix
           </Button>
         </div>
       </div>
-      {(isLoading || isPersonalDataLoading) && mix.length === 0 ? (
-        <HorizontalCarousel label="Building your Made for You mix" className="px-2">
-          {Array.from({ length: 6 }, (_, index) => <div key={index} className="min-w-0 snap-start space-y-2 rounded-lg p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-3 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
+      {(isLoading || isPersonalDataLoading) && mixCards.length === 0 ? (
+        <HorizontalCarousel label="Building your Made for You mixes" className="px-2">
+          {Array.from({ length: 4 }, (_, index) => <div key={index} className="min-w-0 snap-start space-y-2 p-2"><Skeleton className="aspect-square rounded-md" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}
         </HorizontalCarousel>
-      ) : mix.length ? (
+      ) : mixCards.length ? (
         <>
-          <HorizontalCarousel label="Made for you tracks" className="px-2">
-            {mix.map(({ track, reason }) => (
-              <article key={track.id} className="min-w-0 snap-start max-w-full overflow-hidden">
-                <TrackCard track={track} showLikeAction showPlaylistAction compact />
-                <p className="px-2 pb-1 text-[11px] leading-tight text-violet-200/80">{reason}</p>
-              </article>
-            ))}
+          <HorizontalCarousel label="Made for you mixes" className="px-2">
+            {mixCards.map(mix => <article key={mix.id} className="min-w-0 snap-start p-2">
+              <button type="button" onClick={() => player.playQueue(mix.tracks)} aria-label={`Play ${mix.title}, ${mix.tracks.length} tracks`} className="group block w-full rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                <MixArtwork tracks={mix.tracks} title={mix.title} />
+                <span className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-foreground">{mix.title}</span><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Play className="size-4 fill-current" aria-hidden="true" /></span></span>
+                <span className="mt-1 line-clamp-2 block min-h-8 text-xs leading-4 text-muted-foreground">{mix.subtitle}</span>
+                <span className="mt-1 block text-[11px] text-muted-foreground/80">{mix.tracks.length} tracks</span>
+              </button>
+            </article>)}
           </HorizontalCarousel>
-          <p className="px-4 pb-3 text-[11px] text-muted-foreground sm:px-5">{mix.length} in today’s mix · focused on your taste with occasional nearby discoveries · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"}{catalogFailure ? " · Wavlake unavailable" : ""} · private to this browser</p>
+          <p className="px-4 pb-3 text-[11px] text-muted-foreground sm:px-5">Personalized from listening, likes, and followed artists · {wavlakeTracks.length ? "Nostr + Wavlake" : "Nostr"}{catalogFailure ? " · Wavlake unavailable" : ""} · private to this browser</p>
         </>
       ) : (
         <div className="px-4 pb-4 sm:px-5">
           <div className="rounded-lg border border-dashed border-white/15 bg-black/10 p-3 text-sm text-muted-foreground">
             {tasteCount === 0 ? (
-              <><p className="font-medium text-foreground">Your mix will take shape as you listen.</p><p className="mt-1">Like a few tracks, follow artists, or start playing music. Your recommendations stay in this browser.</p><Link to="/music" className="mt-3 inline-flex font-semibold text-violet-200 hover:underline">Explore music</Link></>
+              <><p className="font-medium text-foreground">Your mixes will take shape as you listen.</p><p className="mt-1">Like a few tracks, follow artists, or start playing music. Your recommendations stay in this browser.</p><Link to="/music" className="mt-3 inline-flex font-semibold text-violet-200 hover:underline">Explore music</Link></>
             ) : (
-              <><p className="font-medium text-foreground">Not enough matching music just yet.</p><p className="mt-1">We use tracks available from your Nostr discovery feed and Wavlake’s catalog. Try again after discovering more music.</p>{catalogFailure && <p className="mt-2">Wavlake’s catalog couldn’t be reached, so only Nostr results are available right now.</p>}</>
+              <><p className="font-medium text-foreground">Your mixes are still taking shape.</p><p className="mt-1">We need at least four suitable tracks for a mix. Explore music or try again after more tracks load.</p>{catalogFailure && <p className="mt-2">Wavlake’s catalog couldn’t be reached, so only Nostr results are available right now.</p>}</>
             )}
           </div>
         </div>
