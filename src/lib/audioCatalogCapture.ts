@@ -218,7 +218,7 @@ export function captureDiscoveredAudioEvents(
           ...current,
           attempted: attemptedIds.size,
           failed: current.failed + 1,
-          lastFailure: `Relay rejected or could not receive ${event.id.slice(0, 12)}: ${describeFailure(error)}`,
+          lastFailure: `Relay ${OSTRIFY_RELAY_URL} rejected or could not receive event ${event.id.slice(0, 12)}: ${describeFailure(error)}`,
           lastMessage: `Relay error for event ${event.id.slice(0, 12)}. Browsing continues.`,
         });
       }
