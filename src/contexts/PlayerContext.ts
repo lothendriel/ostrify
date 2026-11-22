@@ -45,6 +45,7 @@ export interface PlayerState {
   setVolume: (v: number) => void;
   toggleMute: () => void;
   toggleShuffle: () => void;
+  cycleShuffleAutoplay: () => void;
   cycleRepeat: () => void;
 }
 

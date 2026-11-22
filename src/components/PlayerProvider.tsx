@@ -256,6 +256,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   const autoplayRef = useRef(autoplay);
   const setAutoplay = useCallback((enabled: boolean) => {
     autoplayRef.current = enabled;
+    if (enabled) setShuffle(false);
     setAutoplayState(enabled);
     try {
       window.localStorage.setItem(PLAYER_AUTOPLAY_STORAGE_KEY, String(enabled));
@@ -644,7 +645,20 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, []);
 
   const toggleMute = useCallback(() => setMuted((m) => !m), []);
-  const toggleShuffle = useCallback(() => setShuffle((s) => !s), []);
+  const toggleShuffle = useCallback(() => {
+    if (!shuffle) setAutoplay(false);
+    setShuffle(!shuffle);
+  }, [shuffle, setAutoplay]);
+  const cycleShuffleAutoplay = useCallback(() => {
+    if (shuffle) {
+      setShuffle(false);
+      setAutoplay(true);
+    } else if (autoplay) {
+      setAutoplay(false);
+    } else {
+      setShuffle(true);
+    }
+  }, [shuffle, autoplay, setAutoplay]);
   const cycleRepeat = useCallback(() => {
     setRepeat((r) => (r === "off" ? "all" : r === "all" ? "one" : "off"));
   }, []);
@@ -678,6 +692,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       setVolume,
       toggleMute,
       toggleShuffle,
+      cycleShuffleAutoplay,
       cycleRepeat,
     }),
     [
@@ -708,6 +723,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       setVolume,
       toggleMute,
       toggleShuffle,
+      cycleShuffleAutoplay,
       cycleRepeat,
     ],
   );

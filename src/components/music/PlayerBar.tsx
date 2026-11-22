@@ -6,6 +6,7 @@ import {
   Shuffle,
   Repeat,
   Repeat1,
+  Sparkles,
   Volume2,
   Volume1,
   VolumeX,
@@ -89,12 +90,13 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           <Button
             variant="ghost"
             size="icon"
-            onClick={player.toggleShuffle}
-            aria-label="Shuffle"
-            aria-pressed={player.shuffle}
-            className={cn("rounded-full size-8 hidden sm:inline-flex", player.shuffle ? "text-primary" : "text-muted-foreground")}
+            onClick={player.cycleShuffleAutoplay}
+            aria-label={player.shuffle ? "Shuffle on" : player.autoplay ? "Autoplay similar music on" : "Shuffle and autoplay off"}
+            aria-pressed={player.shuffle || player.autoplay}
+            title={player.shuffle ? "Shuffle on — click for autoplay" : player.autoplay ? "Autoplay on — click to turn off" : "Shuffle and autoplay off — click to shuffle"}
+            className={cn("rounded-full size-8 hidden sm:inline-flex", player.shuffle || player.autoplay ? "text-primary" : "text-muted-foreground")}
           >
-            <Shuffle className="size-4" />
+            {player.autoplay ? <Sparkles className="size-4" /> : <Shuffle className="size-4" />}
           </Button>
           <Button
             variant="ghost"
