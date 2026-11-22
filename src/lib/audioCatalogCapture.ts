@@ -8,7 +8,7 @@ export const AUDIO_CATALOG_CAPTURE_STATUS_EVENT = 'ostrify-audio-catalog-capture
 export const AUDIO_CATALOG_CAPTURE_ENABLED_EVENT = 'ostrify-audio-catalog-capture-enabled';
 export const AUDIO_CATALOG_CAPTURE_LIMIT_EVENT = 'ostrify-audio-catalog-capture-limit';
 export const AUDIO_CATALOG_CAPTURE_LIMIT_KEY_PREFIX = `${AUDIO_CATALOG_CAPTURE_KEY_PREFIX}limit:`;
-export const DEFAULT_AUDIO_CATALOG_CAPTURE_LIMIT = 100;
+export const DEFAULT_AUDIO_CATALOG_CAPTURE_LIMIT = 1_000;
 
 export interface AudioCatalogCaptureStatus {
   attempted: number;
