@@ -171,7 +171,7 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
         </HorizontalCarousel>
       ) : mixCards.length ? (
         <>
-          <HorizontalCarousel label="Made for you mixes" className="px-2">
+          <HorizontalCarousel label="Made for you mixes" className="px-2" centerWhenFits>
             {mixCards.map(mix => <article key={mix.id} className="min-w-0 snap-start p-2">
               <button type="button" onClick={() => player.playQueue(mix.tracks)} aria-label={`Play ${mix.title}, ${mix.tracks.length} tracks`} className="group block w-full rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                 <MixArtwork tracks={mix.tracks} title={mix.title} />

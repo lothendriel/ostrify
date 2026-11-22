@@ -7,9 +7,10 @@ interface HorizontalCarouselProps {
   children: ReactNode;
   className?: string;
   rows?: 1 | 2;
+  centerWhenFits?: boolean;
 }
 
-export function HorizontalCarousel({ label, children, className, rows = 1 }: HorizontalCarouselProps) {
+export function HorizontalCarousel({ label, children, className, rows = 1, centerWhenFits = false }: HorizontalCarouselProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollPrev, setCanScrollPrev] = useState(false);
   const [canScrollNext, setCanScrollNext] = useState(false);
@@ -49,7 +50,7 @@ export function HorizontalCarousel({ label, children, className, rows = 1 }: Hor
         role="region"
         aria-label={label}
         tabIndex={0}
-        className={cn("grid auto-cols-[calc((100%-1rem)/2.25)] grid-flow-col gap-2 overflow-x-auto overscroll-x-contain scroll-smooth snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[calc((100%-1rem)/3)] lg:auto-cols-[calc((100%-2.5rem)/6)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary", rows === 2 ? "grid-rows-2 auto-rows-fr auto-cols-[calc((100%-0.5rem)/2)] sm:auto-cols-[calc((100%-0.5rem)/2)] lg:auto-cols-[calc((100%-0.5rem)/2)]" : "grid-rows-1", className)}
+        className={cn("grid auto-cols-[calc((100%-1rem)/2.25)] grid-flow-col gap-2 overflow-x-auto overscroll-x-contain scroll-smooth snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:auto-cols-[calc((100%-1rem)/3)] lg:auto-cols-[calc((100%-2.5rem)/6)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary", rows === 2 ? "grid-rows-2 auto-rows-fr auto-cols-[calc((100%-0.5rem)/2)] sm:auto-cols-[calc((100%-0.5rem)/2)] lg:auto-cols-[calc((100%-0.5rem)/2)]" : "grid-rows-1", centerWhenFits && !canScrollPrev && !canScrollNext && "justify-center", className)}
       >
         {children}
       </div>
