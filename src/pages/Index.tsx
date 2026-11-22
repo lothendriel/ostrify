@@ -112,6 +112,8 @@ const Index = () => {
   const followedArtists = useFollowedArtists(discoveryEnabled, homeAccountScope);
   const [pageSeed] = useState(() => crypto.randomUUID());
   const [shelfVariation, setShelfVariation] = useState(0);
+  const [genreShelfVariations, setGenreShelfVariations] = useState<Record<string, number>>({});
+  const pendingGenreRefresh = useRef(new Set<string>());
   const recentShelfHistory = useRef(readHomeShelfHistory());
   const currentShelves = useRef<{ categoryId: string; tracks: Track[] }[]>([]);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks, ...genreCatalogTracks], [tracks, wavlakeTracks, genreCatalogTracks]);
@@ -120,41 +122,34 @@ const Index = () => {
   const likedQuery = useTracksByIds(likedPlaylist?.trackIds, discoveryEnabled, [], homeAccountScope);
   const likedTracks = likedQuery.data?.tracks ?? [];
   const categoryShelves = useMemo(() => {
-    const shownOnPage = new Set<string>();
     const tracksByCategory = groupHomeTracksByCategory(allMusic, genreCatalogTracksByGenre);
     return HOME_SHELF_CATEGORIES.map(category => {
       const categoryTracks = [...(tracksByCategory.get(category.id) ?? [])];
       const recentlyShown = new Set(recentShelfHistory.current[category.id] ?? []);
       const freshCandidates = categoryTracks.filter(track => !recentlyShown.has(track.id) && !recentlyShown.has(track.url));
-      const unshownCandidates = freshCandidates.filter(track => !shownOnPage.has(track.id) && !shownOnPage.has(track.url));
       const select = (candidates: typeof allMusic, limit: number) => buildVariedHomeShelf({
         candidates,
         history: player.history,
         liked: likedTracks,
         followedArtists: followedArtists.data ?? [],
         limit,
-        variation: shelfVariation,
-        seed: pageSeed,
+        variation: genreShelfVariations[category.id] ?? 0,
+        seed: `${pageSeed}:${category.id}`,
         familiarSlots: 2,
       });
-      const preferred = select(unshownCandidates.length >= 4 ? unshownCandidates : freshCandidates, 4);
+      const preferred = select(freshCandidates.length >= 4 ? freshCandidates : categoryTracks, 4);
       const selected = preferred.length < 4
         ? [...preferred, ...select(categoryTracks.filter(item => !preferred.some(track => track.id === item.id || track.url === item.url)), 4 - preferred.length)].slice(0, 4)
         : preferred;
-      for (const track of selected) {
-        shownOnPage.add(track.id);
-        shownOnPage.add(track.url);
-      }
       return { category, tracks: selected };
     });
-  }, [allMusic, genreCatalogTracksByGenre, shelfVariation, pageSeed, player.history, likedTracks, followedArtists.data]);
+  }, [allMusic, genreCatalogTracksByGenre, genreShelfVariations, pageSeed, player.history, likedTracks, followedArtists.data]);
   const [displayShelves, setDisplayShelves] = useState<{ scope: string; shelves: HomeCategoryShelves } | null>(() => homeShelfSessionSnapshot);
   const visibleCategoryShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : categoryShelves;
   const orderedCategoryShelves = useMemo(() => [
     ...visibleCategoryShelves.filter(shelf => shelf.tracks.length > 0),
     ...visibleCategoryShelves.filter(shelf => shelf.tracks.length === 0),
   ], [visibleCategoryShelves]);
-  const previousShelfVariation = useRef(shelfVariation);
   const personalizedInputsLoading = playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading;
   const neededCatalogStillLoading = [...categoriesNeedingCatalog].some(genre => {
     const index = HOME_WAVLAKE_GENRES.indexOf(genre);
@@ -165,20 +160,26 @@ const Index = () => {
     const hasTracksToRestore = categoryShelves.some(shelf => shelf.tracks.length > 0);
     const savedShelvesAreEmpty = displayShelves?.scope === shelfSessionScope && !displayShelves.shelves.some(shelf => shelf.tracks.length > 0);
     const snapshotIsForAnotherScope = displayShelves?.scope !== shelfSessionScope;
-    const shouldRefreshSnapshot = previousShelfVariation.current !== shelfVariation
-      || !displayShelves
+    const shouldRefreshSnapshot = !displayShelves
       || snapshotIsForAnotherScope
       || (savedShelvesAreEmpty && hasTracksToRestore);
+    const refreshedCategoryIds = pendingGenreRefresh.current;
 
     // Disabled queries report isLoading=false, so don't freeze the initially empty
     // shelves before the deferred Home discovery queries have even started.
-    if (discoveryEnabled && !baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading && shouldRefreshSnapshot) {
-      previousShelfVariation.current = shelfVariation;
-      const snapshot = { scope: shelfSessionScope, shelves: categoryShelves };
+    if (discoveryEnabled && !baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading && (shouldRefreshSnapshot || refreshedCategoryIds.size > 0)) {
+      const existingShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : categoryShelves;
+      const shelves = refreshedCategoryIds.size
+        ? existingShelves.map(shelf => refreshedCategoryIds.has(shelf.category.id)
+          ? categoryShelves.find(candidate => candidate.category.id === shelf.category.id) ?? shelf
+          : shelf)
+        : categoryShelves;
+      const snapshot = { scope: shelfSessionScope, shelves };
+      pendingGenreRefresh.current = new Set();
       homeShelfSessionSnapshot = snapshot;
       setDisplayShelves(snapshot);
     }
-  }, [displayShelves, categoryShelves, shelfVariation, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope, discoveryEnabled]);
+  }, [displayShelves, categoryShelves, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope, discoveryEnabled]);
 
   useEffect(() => {
     if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
@@ -192,18 +193,19 @@ const Index = () => {
     writeHomeShelfHistory(nextHistory);
   }, [visibleCategoryShelves]);
 
-  const refreshGenreShelves = () => {
+  const refreshGenreShelf = (categoryId: string) => {
+    const currentShelf = currentShelves.current.find(shelf => shelf.categoryId === categoryId);
     const nextHistory = { ...recentShelfHistory.current };
-    for (const { categoryId, tracks: shelfTracks } of currentShelves.current) {
-      if (!shelfTracks.length) continue;
-      nextHistory[categoryId] = [...new Set([...shelfTracks.flatMap(track => [track.id, track.url]), ...(recentShelfHistory.current[categoryId] ?? [])])].slice(0, 90);
+    if (currentShelf?.tracks.length) {
+      nextHistory[categoryId] = [...new Set([
+        ...currentShelf.tracks.flatMap(track => [track.id, track.url]),
+        ...(recentShelfHistory.current[categoryId] ?? []),
+      ])].slice(0, 90);
+      recentShelfHistory.current = nextHistory;
+      writeHomeShelfHistory(nextHistory);
     }
-    recentShelfHistory.current = nextHistory;
-    writeHomeShelfHistory(nextHistory);
-    homeShelfSessionSnapshot = null;
-    setDisplayShelves(null);
-    previousShelfVariation.current = -1;
-    setShelfVariation(value => value + 1);
+    pendingGenreRefresh.current.add(categoryId);
+    setGenreShelfVariations(current => ({ ...current, [categoryId]: (current[categoryId] ?? 0) + 1 }));
   };
 
   const { greeting, greetingImage } = (() => {
@@ -245,7 +247,7 @@ const Index = () => {
       <section aria-label="Browse music by genre" className="grid grid-cols-1 gap-6 sm:grid-cols-2 2xl:grid-cols-3">
         {orderedCategoryShelves.map(({ category, tracks: categoryTracks }) => (
           <DeferredHomeSection key={category.id} title={category.label} rootMargin="600px 0px">
-            <Shelf title={category.label} tracks={categoryTracks} dense compactCards carouselRows={2} seeAllHref={`/category/${category.id}`} carouselClassName="grid-rows-2" onRefresh={refreshGenreShelves} />
+            <Shelf title={category.label} tracks={categoryTracks} dense compactCards carouselRows={2} seeAllHref={`/category/${category.id}`} carouselClassName="grid-rows-2" onRefresh={() => refreshGenreShelf(category.id)} />
           </DeferredHomeSection>
         ))}
       </section>
