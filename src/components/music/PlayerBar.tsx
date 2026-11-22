@@ -79,6 +79,17 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={player.cycleShuffleAutoplay}
+            aria-label={player.shuffle ? "Shuffle on" : player.autoplay ? "Autoplay similar music on" : "Shuffle and autoplay off"}
+            aria-pressed={player.shuffle || player.autoplay}
+            title={player.shuffle ? "Shuffle on — click for autoplay" : player.autoplay ? "Autoplay on — click to turn off" : "Shuffle and autoplay off — click to shuffle"}
+            className={cn("size-8 rounded-full", player.shuffle || player.autoplay ? "text-primary" : "text-muted-foreground")}
+          >
+            {player.autoplay ? <Sparkles className="size-4" /> : <Shuffle className="size-4" />}
+          </Button>
           <ShareTrackButton track={current} />
           <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         </div>
