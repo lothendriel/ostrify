@@ -202,4 +202,10 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Keep stacked text in display cards a little more compact across the app. */
+  article,
+  [data-slot="card"] {
+    line-height: 1.4;
+  }
 }

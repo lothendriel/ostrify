@@ -105,14 +105,14 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
             <article key={track.id} className="min-w-0 snap-start max-w-full overflow-hidden rounded-lg border border-border/50 bg-card/60 p-1.5">
               <TrackCard track={track} showLikeAction showPlaylistAction compact />
               <p className="px-2 pb-1 text-[11px] leading-tight text-emerald-200/80">{reason}</p>
-              <div className="grid grid-cols-1 gap-0.5 px-1 pb-1">
-                <Button type="button" variant="ghost" size="sm" className="h-7 justify-start gap-1.5 px-1.5 text-[11px]" onClick={() => { setFeedback(markMoreLikeThis(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
+              <div className="grid grid-cols-1 gap-0 px-1 pb-1">
+                <Button type="button" variant="ghost" size="sm" className="h-6 justify-start gap-1.5 px-1.5 text-[11px]" onClick={() => { setFeedback(markMoreLikeThis(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
                   <Heart className="size-3" /> More like this
                 </Button>
-                <Button type="button" variant="ghost" size="sm" className="h-7 justify-start gap-1.5 px-1.5 text-[11px] text-muted-foreground" onClick={() => { setFeedback(markNotForMe(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
+                <Button type="button" variant="ghost" size="sm" className="h-6 justify-start gap-1.5 px-1.5 text-[11px] text-muted-foreground" onClick={() => { setFeedback(markNotForMe(track, date)); setDismissedToday(ids => ids.includes(track.id) ? ids : [...ids, track.id]); }}>
                   <ThumbsDown className="size-3" /> Not for me
                 </Button>
-                {discoveryArtistKeys(track).length > 0 && <Button type="button" variant="ghost" size="sm" className="h-7 justify-start gap-1.5 px-1.5 text-[11px] text-muted-foreground hover:text-destructive" onClick={() => { setFeedback(blockDiscoveryArtist(track)); setDismissedToday(ids => [...new Set([...ids, ...discoveryArtistKeys(track).flatMap(key => discoveries.filter(item => discoveryArtistKeys(item.track).includes(key)).map(item => item.track.id))])]); }}>
+                {discoveryArtistKeys(track).length > 0 && <Button type="button" variant="ghost" size="sm" className="h-6 justify-start gap-1.5 px-1.5 text-[11px] text-muted-foreground hover:text-destructive" onClick={() => { setFeedback(blockDiscoveryArtist(track)); setDismissedToday(ids => [...new Set([...ids, ...discoveryArtistKeys(track).flatMap(key => discoveries.filter(item => discoveryArtistKeys(item.track).includes(key)).map(item => item.track.id))])]); }}>
                   <Ban className="size-3" /> Block artist
                 </Button>}
               </div>
