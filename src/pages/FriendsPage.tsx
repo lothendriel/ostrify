@@ -4,7 +4,7 @@ import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import { Users, UserPlus, Radio, Disc3, X, Music2, Check, CheckCircle2, Play, Shuffle } from 'lucide-react';
+import { Users, UserPlus, Radio, Disc3, X, Music2, Check, CheckCircle2, Copy, Play, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -138,6 +138,7 @@ function ProfileFriendAction({ pubkey, compact = false }: { pubkey: string; comp
 
 function FriendProfile({ pubkey }: { pubkey: string }) {
   const player = usePlayer();
+  const { toast } = useToast();
   const publisherQuery = useArtistTracks(pubkey);
 
   const library = useFriendLibrary(pubkey);
@@ -159,6 +160,14 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
   const normalizedProfileNames = [metadata?.name, metadata?.display_name].filter((value): value is string => !!value).map(value => value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, ''));
   const hasArtistCredit = publisherMusic.some(track => track.artistPubkey === pubkey || !!track.artist && normalizedProfileNames.includes(track.artist.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, '')));
   const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase();
+  const copyNpub = async () => {
+    try {
+      await navigator.clipboard.writeText(nip19.npubEncode(pubkey));
+      toast({ title: 'npub copied', description: 'This profile’s Nostr public key is ready to paste.' });
+    } catch {
+      toast({ title: 'Could not copy npub', description: 'Your browser may not allow clipboard access on this page.', variant: 'destructive' });
+    }
+  };
   return <div className="min-h-full w-full pb-10">
     <header className="relative isolate flex min-h-[320px] flex-col justify-start gap-5 overflow-hidden bg-gradient-to-b from-emerald-900 via-emerald-950 to-[#121212] px-5 pb-7 pt-16 sm:min-h-[340px] sm:flex-row sm:items-end sm:gap-6 sm:px-6 sm:pb-7">
       {banner && <img src={banner} alt="" fetchPriority="high" decoding="async" className="absolute inset-0 z-0 size-full object-cover opacity-40" />}
@@ -170,7 +179,7 @@ function FriendProfile({ pubkey }: { pubkey: string }) {
       </div>
     </header>
     <div className="min-h-[calc(100vh-9rem)] bg-gradient-to-b from-[#3b2727] via-[#201919] to-[#121212] px-4 sm:px-6 lg:px-7">
-      <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5">{publisherMusic.length > 0 && <><Button type="button" size="icon" aria-label="Play published music" className="size-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => player.playQueue(publisherMusic)}><Play className="size-6 fill-current" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Shuffle published music" className="size-11 rounded-full text-muted-foreground hover:text-foreground" onClick={() => { player.toggleShuffle(); player.playQueue(publisherMusic); }}><Shuffle className="size-5" /></Button></>}{allTracks.length > 0 && publisherMusic.length === 0 && <Button type="button" size="icon" aria-label="Play liked songs" className="size-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => player.playQueue(allTracks)}><Play className="size-6 fill-current" /></Button>}<ProfileFriendAction pubkey={pubkey} compact /></div>
+      <div className="flex flex-wrap items-center gap-4 py-4 sm:py-5">{publisherMusic.length > 0 && <><Button type="button" size="icon" aria-label="Play published music" className="size-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => player.playQueue(publisherMusic)}><Play className="size-6 fill-current" /></Button><Button type="button" variant="ghost" size="icon" aria-label="Shuffle published music" className="size-11 rounded-full text-muted-foreground hover:text-foreground" onClick={() => { player.toggleShuffle(); player.playQueue(publisherMusic); }}><Shuffle className="size-5" /></Button></>}{allTracks.length > 0 && publisherMusic.length === 0 && <Button type="button" size="icon" aria-label="Play liked songs" className="size-14 rounded-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => player.playQueue(allTracks)}><Play className="size-6 fill-current" /></Button>}<ProfileFriendAction pubkey={pubkey} compact /><Button type="button" variant="outline" size="icon" aria-label="Copy npub" title="Copy npub" className="rounded-full" onClick={() => void copyNpub()}><Copy className="size-4" /></Button></div>
       {metadata?.about && <p className="mb-5 max-w-4xl whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">{metadata.about}</p>}
       {privacy.isError && <p role="status" className="mb-6 text-sm text-muted-foreground">Profile privacy settings couldn’t be checked, so public sections are hidden for now. <button className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
       {privacy.isLoading || privacy.isError ? <div className="space-y-3 pb-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-56 w-full" /></div> : library.isLoading ? <div className="space-y-4 pb-8"><Skeleton className="h-8 w-48" /><Skeleton className="h-56 w-full" /></div> : library.isError ? <p role="alert" className="pb-8 text-sm text-destructive">Could not load this library. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p> : <>
