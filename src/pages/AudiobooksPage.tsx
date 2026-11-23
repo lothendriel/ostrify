@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { BookOpen, Headphones, Play, Pause, Search } from 'lucide-react';
+import { Headphones, Play, Pause, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrackList } from '@/components/music/TrackList';
 import { AudiobookActions } from '@/components/music/AudiobookActions';
+import { AudiobookCover } from '@/components/music/AudiobookCover';
 import { usePlayer } from '@/hooks/usePlayer';
 import { useLibriVoxBook, useLibriVoxCatalog, type LibriVoxBook } from '@/hooks/useLibriVox';
 import { useGutenbergAudiobook, useGutenbergAudiobookCatalog, type GutenbergAudiobook } from '@/hooks/useGutenbergAudiobooks';
@@ -21,18 +22,10 @@ function audiobookPath(book: Pick<SavedAudiobook, 'id' | 'source' | 'catalogId'>
   return source === 'gutenberg' ? `/audiobooks/gutenberg/${encodeURIComponent(id)}` : `/audiobooks/${encodeURIComponent(id)}`;
 }
 
-function BookCover({ covers, title, className, iconClassName }: { covers: string[]; title: string; className: string; iconClassName: string }) {
-  const [failedIndex, setFailedIndex] = useState(0);
-  const cover = covers[failedIndex];
-  return <div className={className}>
-    {cover ? <img src={cover} alt={`${title} cover`} loading="lazy" onError={() => setFailedIndex(index => index + 1)} className="size-full object-cover" /> : <div className="flex size-full flex-col items-center justify-center gap-2 p-3 text-center text-muted-foreground"><BookOpen className={iconClassName} aria-hidden /><span className="text-xs">Cover art unavailable</span></div>}
-  </div>;
-}
-
 function BookCard({ book, sourceLabel }: { book: LibriVoxBook | GutenbergAudiobook; sourceLabel: string }) {
   return <article className="min-w-0 rounded-xl bg-secondary/40 p-3 transition-colors hover:bg-secondary">
     <Link to={audiobookPath(book)} className="group block focus-visible:outline-2 focus-visible:outline-primary">
-      <BookCover covers={book.covers} title={book.title} className="mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-teal-800 to-emerald-950" iconClassName="size-12 text-white/75" />
+      <AudiobookCover book={book} className="mb-3 aspect-square rounded-lg bg-gradient-to-br from-teal-800 to-emerald-950" />
       <p className="truncate font-semibold group-hover:underline">{book.title}</p>
       <p className="mt-1 truncate text-sm text-muted-foreground">{book.author}</p>
       <p className="mt-1 text-xs text-muted-foreground">{sourceLabel}</p>
@@ -73,10 +66,10 @@ function LibriVoxCatalog() {
   return <div className="space-y-5">
     <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-2"><div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /><Input value={term} onChange={event => setTerm(event.target.value)} aria-label="Search LibriVox audiobooks" placeholder="Search LibriVox" className="h-11 pl-10" /></div><label htmlFor="librivox-search-type" className="sr-only">Search LibriVox by</label><select id="librivox-search-type" value={searchBy} onChange={event => setSearchBy(event.target.value as 'title' | 'author')} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
-      <p className="text-sm text-muted-foreground">Volunteer-read audiobooks from LibriVox. Only books with playable chapters and cover art are shown.</p>
+      <p className="text-sm text-muted-foreground">Volunteer-read audiobooks from LibriVox. Books without source cover art use an Ostrify-designed cover.</p>
     </section>
     <section className="space-y-4"><h2 className="text-2xl font-bold">{query ? `LibriVox results for “${query}”` : 'Explore LibriVox audiobooks'}</h2>
-      {(catalog.isLoading && !books.length) || query !== term.trim() ? <BookSkeletonGrid /> : catalog.isError && !books.length ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load LibriVox audiobooks. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : !visibleBooks.length && shouldScanMore && catalog.isFetchingNextPage ? <div role="status" className="rounded-lg border border-dashed p-6 text-muted-foreground">Looking through LibriVox results for books with playable chapters and cover art…</div> : !visibleBooks.length && shouldScanMore && catalog.isFetchNextPageError ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Couldn’t search further for playable books. <button className="text-primary underline" onClick={() => void catalog.fetchNextPage()}>Try again</button></div> : !visibleBooks.length ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching LibriVox books with playable chapters and cover art were found.' : 'No audiobooks with playable chapters and cover art were found.'}</div> : <><BookGrid books={visibleBooks} sourceLabel="LibriVox" />{catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more LibriVox books. Please try again.</p>}{catalog.hasNextPage && <Button type="button" variant="outline" disabled={catalog.isFetchingNextPage} onClick={() => void catalog.fetchNextPage()}>{catalog.isFetchingNextPage ? 'Loading…' : 'Load more LibriVox audiobooks'}</Button>}</>}
+      {(catalog.isLoading && !books.length) || query !== term.trim() ? <BookSkeletonGrid /> : catalog.isError && !books.length ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load LibriVox audiobooks. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : !visibleBooks.length && shouldScanMore && catalog.isFetchingNextPage ? <div role="status" className="rounded-lg border border-dashed p-6 text-muted-foreground">Looking through LibriVox results for books with playable chapters…</div> : !visibleBooks.length && shouldScanMore && catalog.isFetchNextPageError ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Couldn’t search further for playable books. <button className="text-primary underline" onClick={() => void catalog.fetchNextPage()}>Try again</button></div> : !visibleBooks.length ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching LibriVox books with playable chapters were found.' : 'No audiobooks with playable chapters were found.'}</div> : <><BookGrid books={visibleBooks} sourceLabel="LibriVox" />{catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more LibriVox books. Please try again.</p>}{catalog.hasNextPage && <Button type="button" variant="outline" disabled={catalog.isFetchingNextPage} onClick={() => void catalog.fetchNextPage()}>{catalog.isFetchingNextPage ? 'Loading…' : 'Load more LibriVox audiobooks'}</Button>}</>}
     </section>
   </div>;
 }
@@ -113,7 +106,7 @@ function Catalog() {
   const setTab = (value: string) => setSearchParams(value === 'gutenberg' ? { source: 'gutenberg' } : {}, { replace: true });
 
   return <div className="space-y-8 p-4 sm:p-6">
-    <header className="rounded-xl bg-gradient-to-br from-teal-900 via-emerald-950 to-card p-6 sm:p-8"><p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-emerald-200"><Headphones className="size-4" /> Free audiobooks</p><h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">Audiobooks</h1><p className="mt-3 max-w-2xl text-muted-foreground">Browse volunteer-read LibriVox books or AI-narrated selections from the Project Gutenberg Open Audiobook Collection.</p></header>
+    <header className="rounded-xl bg-gradient-to-br from-teal-900 via-emerald-950 to-card p-6 sm:p-8"><p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-emerald-200"><Headphones className="size-4" /> Free audiobooks</p><h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">Audiobooks</h1><p className="mt-3 max-w-2xl text-muted-foreground">Browse volunteer-read LibriVox books or AI-narrated selections from the Project Gutenberg Open Audiobook Collection. Books without source cover art get an Ostrify-designed cover.</p></header>
     <Tabs value={selectedTab} onValueChange={setTab} className="space-y-5">
       <TabsList className="grid w-full max-w-lg grid-cols-2"><TabsTrigger value="librivox">LibriVox</TabsTrigger><TabsTrigger value="gutenberg">Gutenberg Open Audiobooks</TabsTrigger></TabsList>
       <TabsContent value="librivox" className="mt-0"><LibriVoxCatalog /></TabsContent>
@@ -157,7 +150,7 @@ function BookDetail({ id, source }: { id: string; source: 'librivox' | 'gutenber
   const providerLabel = source === 'gutenberg' ? 'Project Gutenberg Open Audiobook Collection · Internet Archive' : 'LibriVox audiobook';
 
   return <div className="space-y-6 p-4 sm:p-6">
-    <div className="flex flex-col gap-6 rounded-xl bg-gradient-to-br from-teal-900/70 via-emerald-950 to-card p-6 sm:flex-row sm:items-end"><BookCover key={data.id} covers={data.covers} title={data.title} className="size-40 shrink-0 overflow-hidden rounded-lg bg-secondary sm:size-48" iconClassName="size-14" /><div><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">{providerLabel}</p><h1 className="mt-2 text-4xl font-bold tracking-tight">{data.title}</h1><p className="mt-2 text-muted-foreground">{data.author}</p><p className="mt-2 text-sm text-muted-foreground">{data.language || 'Language unspecified'} · {data.sectionCount} {data.sectionCount === 1 ? 'recording' : 'recordings'}{data.duration ? ` · ${formatDuration(data.duration)}` : ''}</p></div></div>
+    <div className="flex flex-col gap-6 rounded-xl bg-gradient-to-br from-teal-900/70 via-emerald-950 to-card p-6 sm:flex-row sm:items-end"><AudiobookCover key={data.id} book={data} className="size-40 shrink-0 rounded-lg bg-secondary sm:size-48" /><div><p className="text-sm font-semibold uppercase tracking-wider text-emerald-200">{providerLabel}</p><h1 className="mt-2 text-4xl font-bold tracking-tight">{data.title}</h1><p className="mt-2 text-muted-foreground">{data.author}</p><p className="mt-2 text-sm text-muted-foreground">{data.language || 'Language unspecified'} · {data.sectionCount} {data.sectionCount === 1 ? 'recording' : 'recordings'}{data.duration ? ` · ${formatDuration(data.duration)}` : ''}</p></div></div>
     <div className="flex flex-wrap items-center gap-4"><Button className="rounded-full" disabled={!data.chapters.length} onClick={() => { if (isCurrent && player.isPlaying) player.togglePlay(); else player.playTrack(data.chapters[0]); }}>{isPlayingBook ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}{isPlayingBook ? 'Pause' : 'Play first recording'}</Button><AudiobookActions book={savedBook} /><p className="text-sm text-muted-foreground">{source === 'gutenberg' && data.chapters.length === 1 ? 'One continuous recording. Audio hosted by Internet Archive.' : 'Recordings play in sequence.'}</p></div>
     {source === 'gutenberg' && <div className="space-y-1 text-sm text-muted-foreground"><p>Audio is served by Internet Archive. Rights and listening availability may vary by country.</p><div className="flex flex-wrap gap-x-4">{sourceUrl && <a className="text-primary underline" href={sourceUrl} target="_blank" rel="noreferrer">Project Gutenberg source</a>}<a className="text-primary underline" href={`https://archive.org/details/${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">Internet Archive item</a>{rightsUrl && <a className="text-primary underline" href={rightsUrl} target="_blank" rel="noreferrer">Rights information</a>}</div></div>}
     <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-bold">{data.chapters.length > 1 ? 'Recordings' : 'Chapter'}</h2><Button type="button" className="rounded-full" disabled={!data.chapters.length} onClick={() => { if (isCurrent && player.isPlaying) player.togglePlay(); else player.playQueue(data.chapters); }}>{isPlayingBook ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}{isPlayingBook ? 'Pause' : 'Play all recordings'}</Button></div><TrackList tracks={data.chapters} selectionLabel="chapters" emptyMessage="No playable recordings are available for this audiobook." /></section>
