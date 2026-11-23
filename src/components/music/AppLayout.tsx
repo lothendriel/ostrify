@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, Menu } from "lucide-react";
+import { ArrowLeft, Home, Menu, RefreshCw } from "lucide-react";
 import { usePreviousLocation } from "@/components/NavigationHistory";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -102,6 +102,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <DeveloperZapButton />
                 <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
                 <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
+                <Button type="button" variant="ghost" size="icon" className="rounded-full" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>
+                  <RefreshCw className="size-5" />
+                </Button>
               </div>
               <LoginArea className="max-w-60" />
             </div>
