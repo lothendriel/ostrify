@@ -19,6 +19,7 @@ import { FreshTracksCarousel } from "@/components/music/FreshTracksCarousel";
 import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { DeferredHomeSection } from "@/components/music/DeferredHomeSection";
 import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
+import { FeaturedAudiobooks } from "@/components/music/FeaturedAudiobooks";
 import { CATEGORIES, categoriesForTrack, groupTracksByCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
@@ -89,6 +90,7 @@ const Index = () => {
   });
 
   const { ref: discoveryTriggerRef, isNearViewport: discoveryEnabled } = useNearViewport<HTMLDivElement>("100px 0px");
+  const { ref: featuredAudiobooksRef, isNearViewport: featuredAudiobooksEnabled } = useNearViewport<HTMLDivElement>("300px 0px");
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const homeAccountScope = useHomeSessionScope();
@@ -235,6 +237,9 @@ const Index = () => {
       <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
       <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
       <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
+      <div ref={featuredAudiobooksRef}>
+        <FeaturedAudiobooks enabled={featuredAudiobooksEnabled} />
+      </div>
       <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} sessionScope={homeAccountScope} />}</DeferredHomeSection>
 
       <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home sessionScope={homeAccountScope} />}</DeferredHomeSection>
