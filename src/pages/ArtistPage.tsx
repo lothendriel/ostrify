@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Music2, Play, Pause, BadgeCheck, Radio, Upload } from "lucide-react";
+import { Clock, Music2, Play, Pause, BadgeCheck, Radio, Upload, Copy } from "lucide-react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { useSeoMeta } from "@unhead/react";
@@ -20,6 +20,7 @@ import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { TrackList } from "@/components/music/TrackList";
 import { FollowButton } from "@/components/music/FollowButton";
 import { SharePageButton } from "@/components/music/SharePageButton";
+import { useToast } from "@/hooks/useToast";
 
 function PopularTrackRow({ track, index }: { track: Track; index: number }) {
   const player = usePlayer();
@@ -108,6 +109,7 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
   const { albums, singles } = useMemo(() => groupIntoAlbums(visiblePublishedMusicTracks), [visiblePublishedMusicTracks]);
   const player = usePlayer();
   const radio = useRadio();
+  const { toast } = useToast();
 
   const banner = sanitizeUrl(metadata?.banner);
   const picture = sanitizeUrl(metadata?.picture);
@@ -135,6 +137,15 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
       player.togglePlay();
     } else {
       player.playQueue(playableTracks, 0);
+    }
+  };
+
+  const copyNpub = async () => {
+    try {
+      await navigator.clipboard.writeText(nip19.npubEncode(pubkey));
+      toast({ title: "npub copied", description: "This artist’s Nostr public key is ready to paste." });
+    } catch {
+      toast({ title: "Could not copy npub", description: "Your browser may not allow clipboard access on this page.", variant: "destructive" });
     }
   };
 
@@ -168,6 +179,9 @@ function ArtistProfile({ pubkey }: { pubkey: string }) {
         </Button>
         <FollowButton pubkey={pubkey} />
         <SharePageButton title={name} pagePath={`/artist/${nip19.npubEncode(pubkey)}`} pageType="artist" referenceTags={[["p", pubkey]]} />
+        <Button type="button" variant="outline" size="icon" aria-label="Copy npub" title="Copy npub" className="rounded-full" onClick={() => void copyNpub()}>
+          <Copy className="size-4" />
+        </Button>
         <Button
           type="button"
           variant="outline"
