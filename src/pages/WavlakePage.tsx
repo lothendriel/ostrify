@@ -13,6 +13,7 @@ import { SharePageButton } from '@/components/music/SharePageButton';
 import { useRadio } from '@/hooks/useRadio';
 import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
 import type { Track } from '@/lib/music';
+import { RESULTS_PER_PAGE } from '@/lib/pagination';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
   if (!items.length) return null;
@@ -55,7 +56,7 @@ function CatalogTracks({ artistId, onTracksChange }: { artistId?: string; onTrac
     const seen = new Set<string>();
     return (catalog.data?.pages.flatMap(p => p.tracks) ?? []).filter(t => !seen.has(t.id) && !!seen.add(t.id));
   }, [catalog.data]);
-  const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
+  const pageCount = Math.max(1, Math.ceil(tracks.length / RESULTS_PER_PAGE));
   const visiblePage = Math.min(page, pageCount);
   useEffect(() => { onTracksChange?.(tracks); }, [onTracksChange, tracks]);
   const loadWavlakeTracks = async (requiredTrackCount: number) => {
@@ -109,11 +110,11 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
       return true;
     });
   }, [catalog.data]);
-  const pageCount = Math.max(1, Math.ceil(items.length / 15));
+  const pageCount = Math.max(1, Math.ceil(items.length / RESULTS_PER_PAGE));
   const parsedPage = Number(searchParams.get('page') ?? '1');
   const requestedPage = Number.isInteger(parsedPage) ? Math.max(parsedPage, 1) : 1;
   const page = catalog.hasNextPage ? requestedPage : Math.min(requestedPage, pageCount);
-  const visibleItems = items.slice((page - 1) * 15, page * 15);
+  const visibleItems = items.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE);
   const title = type === 'artist' ? 'Browse Wavlake artists' : 'Browse Wavlake albums';
   const kindLabel = type === 'artist' ? 'artists' : 'albums';
 
@@ -127,7 +128,7 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
   }, [catalog.data, page, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!catalog.isLoading && !catalog.isFetchingNextPage && catalog.hasNextPage && items.length < 15) {
+    if (!catalog.isLoading && !catalog.isFetchingNextPage && catalog.hasNextPage && items.length < RESULTS_PER_PAGE) {
       void catalog.fetchNextPage();
     }
   }, [catalog.data, catalog.hasNextPage, catalog.isFetchingNextPage, catalog.isLoading, catalog.fetchNextPage, items.length]);
@@ -137,13 +138,13 @@ export function RankedReleasesPage({ type }: { type: 'artist' | 'album' }) {
   const goToNextPage = async () => {
     if (catalog.isFetchingNextPage) return;
     let allItems = items;
-    while (allItems.length < (page + 1) * 15 && catalog.hasNextPage) {
+    while (allItems.length < (page + 1) * RESULTS_PER_PAGE && catalog.hasNextPage) {
       const result = await catalog.fetchNextPage();
       const releases = result.data?.pages.flatMap(pageData => pageData.releases) ?? [];
       allItems = [...new Map(releases.map(item => [item.id, item])).values()];
       if (!result.hasNextPage) break;
     }
-    if (allItems.length > page * 15) setSearchParams({ page: String(page + 1) });
+    if (allItems.length > page * RESULTS_PER_PAGE) setSearchParams({ page: String(page + 1) });
   };
 
   return <div className="p-4 sm:p-6 space-y-6">

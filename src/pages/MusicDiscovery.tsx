@@ -15,6 +15,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
 import { Input } from '@/components/ui/input';
 import { LikeButton } from '@/components/music/LikeButton';
+import { RESULTS_PER_PAGE } from '@/lib/pagination';
 
 function cloudflareThumbnail(url: string): string | undefined {
   try {
@@ -74,7 +75,7 @@ export default function MusicDiscovery() {
       return terms.every(term => searchable.includes(term));
     });
   }, [hideClips, nostrSearch, tracks]);
-  const trackPageCount = Math.max(1, Math.ceil(matchingTracks.length / 20));
+  const trackPageCount = Math.max(1, Math.ceil(matchingTracks.length / RESULTS_PER_PAGE));
   const [trackPage, setTrackPage] = useState(1);
   const currentTrackPage = Math.min(trackPage, trackPageCount);
   const filteredTracks = matchingTracks;

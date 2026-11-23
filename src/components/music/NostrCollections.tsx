@@ -17,6 +17,7 @@ import type { Track } from '@/lib/music';
 import { useCategoryTracks } from '@/hooks/useCategoryTracks';
 import { useWavlakeGenreCatalog, type WavlakeRelease } from '@/hooks/useWavlake';
 import { CATEGORIES, tracksInCategory } from '@/lib/categories';
+import { RESULTS_PER_PAGE } from '@/lib/pagination';
 
 function PublisherCard({ pubkey, podcast, compact = false }: { pubkey: string; podcast: boolean; compact?: boolean }) {
   const { data } = useAuthor(pubkey);
@@ -165,7 +166,7 @@ export function CategoryCollectionsPage({ type }: { type: 'publishers' | 'albums
       ...releases.map(release => ({ source: 'wavlake' as const, release })),
     ], [collections, releases, type]);
   const [searchParams, setSearchParams] = useSearchParams();
-  const pageCount = Math.max(1, Math.ceil(items.length / 15));
+  const pageCount = Math.max(1, Math.ceil(items.length / RESULTS_PER_PAGE));
   const requestedPage = Number(searchParams.get('page') ?? '1');
   const page = Number.isInteger(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
   const isLoading = nostrQuery.isLoading || wavlakeQueries.some(query => query.isLoading);
@@ -181,7 +182,7 @@ export function CategoryCollectionsPage({ type }: { type: 'publishers' | 'albums
     setSearchParams(next, { replace: true });
   }, [page, searchParams, setSearchParams]);
 
-  const visibleItems = items.slice((page - 1) * 15, page * 15);
+  const visibleItems = items.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE);
   const pagination = <nav aria-label={`${type} pagination`} className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
     <Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1}><ChevronLeft className="size-4" /> Previous</Button>
     <p aria-live="polite" className="text-sm text-muted-foreground">Page {page} of {pageCount} <span className="hidden sm:inline">· {items.length} {type}</span></p>
@@ -243,12 +244,12 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
     });
   }, [collections.publishers, profiles.data, type]);
   const items = type === 'publishers' ? publishers : collections.albums;
-  const pageCount = Math.max(1, Math.ceil(items.length / 15));
+  const pageCount = Math.max(1, Math.ceil(items.length / RESULTS_PER_PAGE));
   const requestedPage = Number(searchParams.get('page') ?? '1');
   const page = Number.isInteger(requestedPage) ? Math.min(Math.max(requestedPage, 1), pageCount) : 1;
   const isCollectionLoading = (feed.isLoading && !feed.data) || (type === 'publishers' && publisherKeys.length > 0 && profiles.isLoading && !profiles.data);
-  const visiblePublishers = type === 'publishers' ? publishers.slice((page - 1) * 15, page * 15) : [];
-  const visibleAlbums = type === 'albums' ? collections.albums.slice((page - 1) * 15, page * 15) : [];
+  const visiblePublishers = type === 'publishers' ? publishers.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE) : [];
+  const visibleAlbums = type === 'albums' ? collections.albums.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE) : [];
   const hasVisibleItems = visiblePublishers.length > 0 || visibleAlbums.length > 0;
   const title = type === 'publishers' ? 'Artists & publishers to explore' : 'Albums to explore';
   useSeoMeta({ title: `${title} — Nostr music — Ostrify` });
@@ -280,7 +281,7 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
     }).filter(track => track.duration === undefined || track.duration >= 30);
     const nextCollections = collectionItems(uniqueTracks);
     const nextCount = type === 'publishers' ? nextCollections.publishers.length : nextCollections.albums.length;
-    if (nextCount > page * 15) setSearchParams({ page: String(page + 1) });
+    if (nextCount > page * RESULTS_PER_PAGE) setSearchParams({ page: String(page + 1) });
   };
 
   if (isCollectionLoading) return <div className="p-4 sm:p-6 space-y-6"><h1 className="text-3xl font-bold">{title}</h1><div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-square rounded-lg" />)}</div></div>;

@@ -16,6 +16,7 @@ import { isTrackVisibleInOstrify } from "@/lib/musicVisibility";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { captureDiscoveredAudioEvents } from "@/lib/audioCatalogCapture";
 import { getUserDataReadRelays } from "@/lib/appRelays";
+import { RESULTS_PER_PAGE } from "@/lib/pagination";
 
 export function MyUploadsManager() {
   const { user, metadata } = useCurrentUser();
@@ -116,7 +117,7 @@ export function MyUploadsManager() {
       <div><h2 id="uploaded-tracks-heading" className="text-2xl font-bold">Tracks</h2><p className="text-sm text-muted-foreground">Your uploaded tracks, 20 per page. Use the visibility button on a track to update it.</p></div>
       {hasError && <p role="alert" className="text-sm text-destructive">Couldn’t load your uploads from your read relays or DROPS. <button type="button" className="underline" onClick={() => { void authorTracks.refetch(); void identifiedTracks.refetch(); }}>Try again</button></p>}
       {message && <p role="status" className="text-sm text-muted-foreground">{message}</p>}
-      <TrackList tracks={allOwnedTracks} isLoading={isLoading} bulkSelect={false} pageSize={20} emptyMessage="No uploaded tracks were found on your read relays or DROPS." renderTrailingAction={track => <div className="flex items-center gap-2"><span className="hidden text-xs text-muted-foreground sm:inline">{track.visibility === "hidden" ? "Hidden in Ostrify" : "Visible on Ostrify"}</span><Button type="button" size="sm" variant="outline" disabled={publish.isPending || track.event?.kind !== 36787} onClick={() => { void updateVisibility(track, track.visibility === "hidden" ? "public" : "hidden").catch(error => setMessage(error instanceof Error ? error.message : "Could not update track visibility.")); }}>{track.visibility === "hidden" ? "Show" : "Hide"}</Button></div>} />
+      <TrackList tracks={allOwnedTracks} isLoading={isLoading} bulkSelect={false} pageSize={RESULTS_PER_PAGE} emptyMessage="No uploaded tracks were found on your read relays or DROPS." renderTrailingAction={track => <div className="flex items-center gap-2"><span className="hidden text-xs text-muted-foreground sm:inline">{track.visibility === "hidden" ? "Hidden in Ostrify" : "Visible on Ostrify"}</span><Button type="button" size="sm" variant="outline" disabled={publish.isPending || track.event?.kind !== 36787} onClick={() => { void updateVisibility(track, track.visibility === "hidden" ? "public" : "hidden").catch(error => setMessage(error instanceof Error ? error.message : "Could not update track visibility.")); }}>{track.visibility === "hidden" ? "Show" : "Hide"}</Button></div>} />
     </section>
   </div>;
 }

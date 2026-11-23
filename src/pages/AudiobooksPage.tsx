@@ -14,7 +14,7 @@ import { useLibriVoxBook, useLibriVoxCatalog, type LibriVoxBook } from '@/hooks/
 import { useGutenbergAudiobook, useGutenbergAudiobookCatalog, type GutenbergAudiobook } from '@/hooks/useGutenbergAudiobooks';
 import { useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { formatDuration } from '@/lib/music';
-import { AUDIOBOOK_CATALOG_PAGE_SIZE } from '@/lib/audiobookCatalog';
+import { RESULTS_PER_PAGE } from '@/lib/pagination';
 import { sanitizeUrl } from '@/lib/sanitize';
 
 function audiobookPath(book: Pick<SavedAudiobook, 'id' | 'source' | 'catalogId'>): string {
@@ -79,27 +79,36 @@ function LibriVoxCatalog() {
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useLibriVoxCatalog(query, searchBy);
   const total = catalog.data?.pages[0]?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / AUDIOBOOK_CATALOG_PAGE_SIZE));
-  const loadedPages = catalog.data?.pages.length ?? 0;
-  const books = useMemo(() => {
+  const allBooks = useMemo(() => {
     const uniqueBooks = new Map<string, LibriVoxBook>();
-    for (const book of catalog.data?.pages[page - 1]?.books ?? []) {
+    for (const book of catalog.data?.pages.flatMap(batch => batch.books) ?? []) {
       if (!uniqueBooks.has(book.catalogId)) uniqueBooks.set(book.catalogId, book);
     }
     return [...uniqueBooks.values()];
-  }, [catalog.data?.pages, page]);
+  }, [catalog.data?.pages]);
+  const pageCount = Math.max(1, Math.ceil((catalog.hasNextPage ? total : allBooks.length) / RESULTS_PER_PAGE));
+  const books = useMemo(() => allBooks.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE), [allBooks, page]);
   useEffect(() => { setPage(1); }, [query, searchBy]);
 
   const nextPage = async () => {
-    if (page < loadedPages) {
+    const requiredCount = (page + 1) * RESULTS_PER_PAGE;
+    if (allBooks.length >= requiredCount || !catalog.hasNextPage && allBooks.length > page * RESULTS_PER_PAGE) {
       setPage(current => current + 1);
       return;
     }
     if (!catalog.hasNextPage || catalog.isFetchingNextPage) return;
-    const result = await catalog.fetchNextPage();
-    if (result.data?.pages[page]) setPage(current => current + 1);
+    let loadedBooks = allBooks;
+    let hasMore: boolean = catalog.hasNextPage;
+    while (loadedBooks.length < requiredCount && hasMore) {
+      const result = await catalog.fetchNextPage();
+      if (result.isFetchNextPageError) break;
+      const batches = result.data?.pages.flatMap(batch => batch.books) ?? [];
+      loadedBooks = [...new Map(batches.map(book => [book.catalogId, book])).values()];
+      hasMore = Boolean(result.hasNextPage);
+    }
+    if (loadedBooks.length >= requiredCount || !hasMore && loadedBooks.length > page * RESULTS_PER_PAGE) setPage(current => current + 1);
   };
-  const canGoNext = page < pageCount && (page < loadedPages || catalog.hasNextPage);
+  const canGoNext = page < pageCount && (catalog.hasNextPage || allBooks.length > page * RESULTS_PER_PAGE);
   const pagination = (position: 'top' | 'bottom') => <AudiobookCatalogPagination label="LibriVox audiobooks" page={page} pageCount={pageCount} total={total} isFetching={catalog.isFetchingNextPage} canGoNext={canGoNext} onPrevious={() => setPage(current => Math.max(1, current - 1))} onNext={() => void nextPage()} position={position} />;
   const isSearchPending = query !== term.trim();
 
@@ -127,27 +136,36 @@ function GutenbergCatalog() {
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useGutenbergAudiobookCatalog(query, searchBy);
   const total = catalog.data?.pages[0]?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / AUDIOBOOK_CATALOG_PAGE_SIZE));
-  const loadedPages = catalog.data?.pages.length ?? 0;
-  const books = useMemo(() => {
+  const allBooks = useMemo(() => {
     const uniqueBooks = new Map<string, GutenbergAudiobook>();
-    for (const book of catalog.data?.pages[page - 1]?.books ?? []) {
+    for (const book of catalog.data?.pages.flatMap(batch => batch.books) ?? []) {
       if (!uniqueBooks.has(book.catalogId)) uniqueBooks.set(book.catalogId, book);
     }
     return [...uniqueBooks.values()];
-  }, [catalog.data?.pages, page]);
+  }, [catalog.data?.pages]);
+  const pageCount = Math.max(1, Math.ceil((catalog.hasNextPage ? total : allBooks.length) / RESULTS_PER_PAGE));
+  const books = useMemo(() => allBooks.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE), [allBooks, page]);
   useEffect(() => { setPage(1); }, [query, searchBy]);
 
   const nextPage = async () => {
-    if (page < loadedPages) {
+    const requiredCount = (page + 1) * RESULTS_PER_PAGE;
+    if (allBooks.length >= requiredCount || !catalog.hasNextPage && allBooks.length > page * RESULTS_PER_PAGE) {
       setPage(current => current + 1);
       return;
     }
     if (!catalog.hasNextPage || catalog.isFetchingNextPage) return;
-    const result = await catalog.fetchNextPage();
-    if (result.data?.pages[page]) setPage(current => current + 1);
+    let loadedBooks = allBooks;
+    let hasMore: boolean = catalog.hasNextPage;
+    while (loadedBooks.length < requiredCount && hasMore) {
+      const result = await catalog.fetchNextPage();
+      if (result.isFetchNextPageError) break;
+      const batches = result.data?.pages.flatMap(batch => batch.books) ?? [];
+      loadedBooks = [...new Map(batches.map(book => [book.catalogId, book])).values()];
+      hasMore = Boolean(result.hasNextPage);
+    }
+    if (loadedBooks.length >= requiredCount || !hasMore && loadedBooks.length > page * RESULTS_PER_PAGE) setPage(current => current + 1);
   };
-  const canGoNext = page < pageCount && (page < loadedPages || catalog.hasNextPage);
+  const canGoNext = page < pageCount && (catalog.hasNextPage || allBooks.length > page * RESULTS_PER_PAGE);
   const pagination = (position: 'top' | 'bottom') => <AudiobookCatalogPagination label="Gutenberg audiobooks" page={page} pageCount={pageCount} total={total} isFetching={catalog.isFetchingNextPage} canGoNext={canGoNext} onPrevious={() => setPage(current => Math.max(1, current - 1))} onNext={() => void nextPage()} position={position} />;
   const isSearchPending = query !== term.trim();
 

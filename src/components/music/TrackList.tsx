@@ -7,8 +7,9 @@ import { ChevronLeft, ChevronRight, Clock, ListPlus } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { usePlayer } from "@/hooks/usePlayer";
 import type { ReactNode } from "react";
+import { RESULTS_PER_PAGE } from "@/lib/pagination";
 
-export const TRACKS_PER_PAGE = 20;
+export const TRACKS_PER_PAGE = RESULTS_PER_PAGE;
 
 interface TrackListProps {
   tracks: Track[];

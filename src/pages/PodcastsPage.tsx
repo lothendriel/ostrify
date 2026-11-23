@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { audioDetailPath } from "@/lib/audioDetail";
 import { SharePageButton } from "@/components/music/SharePageButton";
+import { RESULTS_PER_PAGE } from "@/lib/pagination";
 
 export function CombinedPodcastEpisodesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,7 +41,7 @@ export function CombinedPodcastEpisodesPage() {
   }, [fountainTracks, nostrTracks]);
   const isLoading = nostrEpisodes.isLoading || fountainQuery.isLoading;
   const isError = nostrEpisodes.isError && fountainQuery.isError;
-  const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
+  const pageCount = Math.max(1, Math.ceil(tracks.length / RESULTS_PER_PAGE));
 
   useSeoMeta({ title: "Podcast episodes — Ostrify" });
   useEffect(() => {
@@ -60,7 +61,7 @@ export function CombinedPodcastEpisodesPage() {
       loadedTracks = [...byUrl.values()].sort((left, right) => right.createdAt - left.createdAt);
       hasMore = Boolean(result.hasNextPage);
     }
-    return loadedTracks.length >= requiredCount || (!hasMore && loadedTracks.length > requiredCount - 20);
+    return loadedTracks.length >= requiredCount || (!hasMore && loadedTracks.length > requiredCount - RESULTS_PER_PAGE);
   };
 
   return <main className="space-y-6 p-4 sm:p-6">
@@ -105,7 +106,7 @@ export function PodcastBrowsePage({ type }: { type: "shows" | "episodes" }) {
     });
   }, [episodesQuery.data]);
   const itemsCount = type === "shows" ? shows.length : tracks.length;
-  const pageSize = 20;
+  const pageSize = RESULTS_PER_PAGE;
   const hasMorePages = type === "shows" ? showsQuery.hasNextPage : episodesQuery.hasNextPage;
   const pageCount = Math.max(1, Math.ceil(itemsCount / pageSize));
   const effectivePage = Math.min(page, pageCount + (hasMorePages ? 1 : 0));
@@ -184,8 +185,8 @@ function FountainShowsPage() {
   const favorites = usePodcastFavorites();
   const favoriteActions = usePodcastFavoriteActions();
   const shows = showsQuery.data.filter(show => show.feedUrl && show.feedGuid);
-  const pageCount = Math.max(1, Math.ceil(shows.length / 20));
-  const visibleShows = shows.slice((page - 1) * 20, page * 20);
+  const pageCount = Math.max(1, Math.ceil(shows.length / RESULTS_PER_PAGE));
+  const visibleShows = shows.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE);
 
   useSeoMeta({ title: "Fountain RSS shows — Podcasts — Ostrify" });
   useEffect(() => {
@@ -193,20 +194,20 @@ function FountainShowsPage() {
   }, [page, pageCount, searchParams, setSearchParams, showsQuery.hasNextPage]);
 
   const nextPage = async () => {
-    if (shows.length > page * 20) {
+    if (shows.length > page * RESULTS_PER_PAGE) {
       setSearchParams({ page: String(page + 1) });
       return;
     }
     if (!showsQuery.hasNextPage || showsQuery.isFetchingNextPage) return;
     let count = shows.length;
     let hasMore: boolean = showsQuery.hasNextPage;
-    while (count <= page * 20 && hasMore) {
+    while (count <= page * RESULTS_PER_PAGE && hasMore) {
       const result = await showsQuery.fetchNextPage();
       const allShows = result.data?.pages.flatMap(batch => batch.shows) ?? [];
       count = [...new Map(allShows.filter(show => show.feedUrl && show.feedGuid).map(show => [show.id, show])).values()].length;
       hasMore = Boolean(result.hasNextPage);
     }
-    if (count > page * 20) setSearchParams({ page: String(page + 1) });
+    if (count > page * RESULTS_PER_PAGE) setSearchParams({ page: String(page + 1) });
   };
 
   return <main className="space-y-6 p-4 sm:p-6">
@@ -225,19 +226,19 @@ function FountainEpisodesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(requestedPage) ? Math.max(requestedPage, 1) : 1;
-  const [episodeLimit, setEpisodeLimit] = useState(() => Math.min(Math.max(20, page * 20), 120));
+  const [episodeLimit, setEpisodeLimit] = useState(() => Math.min(Math.max(RESULTS_PER_PAGE, page * RESULTS_PER_PAGE), 120));
   const [pendingPage, setPendingPage] = useState<number | null>(null);
   const [exhausted, setExhausted] = useState(false);
   const episodes = usePodcastEpisodes(120, episodeLimit);
   const tracks = (episodes.data ?? []).filter(track => track.source === "fountain");
-  const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
-  const visibleTracks = tracks.slice((page - 1) * 20, page * 20);
+  const pageCount = Math.max(1, Math.ceil(tracks.length / RESULTS_PER_PAGE));
+  const visibleTracks = tracks.slice((page - 1) * RESULTS_PER_PAGE, page * RESULTS_PER_PAGE);
 
   useSeoMeta({ title: "Latest Fountain episodes — Podcasts — Ostrify" });
   useEffect(() => {
     if (pendingPage === null || episodes.isFetching) return;
     if (tracks.length < episodeLimit || episodeLimit >= 120) setExhausted(true);
-    setSearchParams({ page: String(Math.min(pendingPage, Math.max(1, Math.ceil(tracks.length / 20)))) });
+    setSearchParams({ page: String(Math.min(pendingPage, Math.max(1, Math.ceil(tracks.length / RESULTS_PER_PAGE)))) });
     setPendingPage(null);
   }, [episodeLimit, episodes.isFetching, pendingPage, setSearchParams, tracks.length]);
   useEffect(() => {
@@ -248,15 +249,15 @@ function FountainEpisodesPage() {
   }, [exhausted, page, pageCount, setSearchParams]);
 
   const nextPage = () => {
-    if (tracks.length > page * 20) {
+    if (tracks.length > page * RESULTS_PER_PAGE) {
       setSearchParams({ page: String(page + 1) });
       return;
     }
     if (episodes.isFetching || episodeLimit >= 120 || exhausted) return;
     setPendingPage(page + 1);
-    setEpisodeLimit(limit => Math.min(limit + 20, 120));
+    setEpisodeLimit(limit => Math.min(limit + RESULTS_PER_PAGE, 120));
   };
-  const pagination = (position: "top" | "bottom") => <nav aria-label={`Latest Fountain episodes pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t py-3"}`}><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1 || episodes.isFetching}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{exhausted && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} episodes loaded</span></p><Button type="button" variant="outline" onClick={nextPage} disabled={episodes.isFetching || exhausted && page * 20 >= tracks.length}>{episodes.isFetching && pendingPage !== null ? "Loading…" : "Next →"}</Button></nav>;
+  const pagination = (position: "top" | "bottom") => <nav aria-label={`Latest Fountain episodes pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t py-3"}`}><Button type="button" variant="outline" onClick={() => setSearchParams(page === 2 ? {} : { page: String(page - 1) })} disabled={page <= 1 || episodes.isFetching}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {page}{exhausted && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} episodes loaded</span></p><Button type="button" variant="outline" onClick={nextPage} disabled={episodes.isFetching || exhausted && page * RESULTS_PER_PAGE >= tracks.length}>{episodes.isFetching && pendingPage !== null ? "Loading…" : "Next →"}</Button></nav>;
 
   return <main className="space-y-6 p-4 sm:p-6">
 
@@ -323,7 +324,7 @@ const PodcastsPage = () => {
     if (loaded >= requiredCount) updateNostrPage(nostrPageRef.current + 1);
     return false;
   };
-  const nostrTrackPageCount = Math.max(1, Math.ceil(relayedNostrTracks.length / 20));
+  const nostrTrackPageCount = Math.max(1, Math.ceil(relayedNostrTracks.length / RESULTS_PER_PAGE));
   const nostrTrackPage = Math.min(nostrPage, nostrTrackPageCount + (nostrEpisodes.hasNextPage ? 1 : 0));
   const selectedTracks = source === "nostr" ? nostrTracks : fountainTracks;
   const selectedTracksLoading = source === "nostr" ? nostrEpisodes.isLoading : source === "fountain" && episodes.isLoading;
@@ -534,20 +535,20 @@ function PodcastEpisodeList({ tracks, show, favorites, onToggleFavorite, onPlayT
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const player = usePlayer();
-  const pageCount = Math.max(1, Math.ceil(tracks.length / 20));
+  const pageCount = Math.max(1, Math.ceil(tracks.length / RESULTS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
-  const pageStart = (currentPage - 1) * 20;
-  const visibleTracks = tracks.slice(pageStart, pageStart + 20);
+  const pageStart = (currentPage - 1) * RESULTS_PER_PAGE;
+  const visibleTracks = tracks.slice(pageStart, pageStart + RESULTS_PER_PAGE);
   const selectedTracks = tracks.filter(track => selectedIds.includes(track.id));
   const allSelected = tracks.length > 0 && selectedTracks.length === tracks.length;
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
   const pagination = (position: "top" | "bottom") => <nav aria-label={`Podcast episode pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "mb-3 border-y py-3" : "mt-4 border-t pt-4"}`}><Button type="button" variant="outline" onClick={() => setPage(value => Math.max(1, value - 1))} disabled={currentPage <= 1}><ChevronLeft className="size-4" /> Previous</Button><p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage} of {pageCount} · {tracks.length} episodes</p><Button type="button" variant="outline" onClick={() => setPage(value => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount}>Next <ChevronRight className="size-4" /></Button></nav>;
-  return <div>{tracks.length > 20 && pagination("top")}<div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-card/50 px-3 py-2"><Checkbox checked={allSelected ? true : selectedTracks.length ? "indeterminate" : false} aria-label="Select all podcast episodes" onCheckedChange={checked => setSelectedIds(checked === true ? tracks.map(track => track.id) : [])} /><span className="min-w-0 flex-1 text-sm">{selectedTracks.length ? `${selectedTracks.length} of ${tracks.length} episodes selected` : `Select all ${tracks.length} episodes`}</span>{selectedTracks.length > 0 && <Button type="button" size="sm" variant="outline" onClick={() => { player.addToQueue(selectedTracks); setSelectedIds([]); }}><ListPlus className="size-4" /> Add selected to queue</Button>}</div><div className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span aria-hidden="true" /><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Show</span><span className="pr-14">Actions</span></div>{visibleTracks.map((track, index) => {
+  return <div>{tracks.length > RESULTS_PER_PAGE && pagination("top")}<div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-card/50 px-3 py-2"><Checkbox checked={allSelected ? true : selectedTracks.length ? "indeterminate" : false} aria-label="Select all podcast episodes" onCheckedChange={checked => setSelectedIds(checked === true ? tracks.map(track => track.id) : [])} /><span className="min-w-0 flex-1 text-sm">{selectedTracks.length ? `${selectedTracks.length} of ${tracks.length} episodes selected` : `Select all ${tracks.length} episodes`}</span>{selectedTracks.length > 0 && <Button type="button" size="sm" variant="outline" onClick={() => { player.addToQueue(selectedTracks); setSelectedIds([]); }}><ListPlus className="size-4" /> Add selected to queue</Button>}</div><div className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 border-b border-border/50 px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground"><span aria-hidden="true" /><span className="text-center">#</span><span>Episode</span><span className="hidden md:block">Show</span><span className="pr-14">Actions</span></div>{visibleTracks.map((track, index) => {
     const episodeId = track.podcastIndexEpisodeId;
     const favorite: PodcastFavorite | undefined = episodeId ? { id: `podcast-index:episode:id:${episodeId}`, source: "podcast-index", title: track.title, publisher: show.title, image: track.image ?? show.image, feedId: show.feedId, episode: true, episodeId } : undefined;
     const isSaved = favorite ? favorites.some(item => item.id === favorite.id) : false;
     return <div key={track.id} className="grid grid-cols-[1.25rem_2rem_minmax(0,1fr)_auto] md:grid-cols-[1.25rem_2rem_minmax(0,1fr)_minmax(0,14rem)_auto] items-center gap-3 rounded-md px-3 py-2 hover:bg-accent/10"><Checkbox checked={selectedIds.includes(track.id)} aria-label={`${selectedIds.includes(track.id) ? "Deselect" : "Select"} ${track.title}`} onCheckedChange={checked => setSelectedIds(ids => checked === true ? [...new Set([...ids, track.id])] : ids.filter(id => id !== track.id))} /><span className="text-center text-sm text-muted-foreground">{pageStart + index + 1}</span><Link to={audioDetailPath(track)} aria-label={`View details for ${track.title}`} title={`View details for ${track.title}`} className="min-w-0 truncate text-left font-medium hover:text-primary hover:underline">{track.title}</Link><span className="hidden truncate text-sm text-muted-foreground md:block">{show.title}</span><div className="flex items-center gap-1">{favorite ? <PodcastFavoriteButton favorite={favorite} saved={isSaved} onToggle={saved => onToggleFavorite(favorite, saved)} pending={saving} userLoggedIn={userLoggedIn} /> : null}<LikeButton trackId={track.id} /><AddToPlaylistMenu trackId={track.id} /><QueueActionsMenu track={track} /></div></div>;
-  })}{tracks.length > 20 && pagination("bottom")}</div>;
+  })}{tracks.length > RESULTS_PER_PAGE && pagination("bottom")}</div>;
 }
 
 export default PodcastsPage;
