@@ -50,7 +50,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const togglePanel = (panel: 'friends' | 'queue' | 'notifications') => setActivePanel(current => current === panel ? null : panel);
 
   return (
-    <div className="h-dvh flex flex-col bg-background text-foreground overflow-hidden">
+    <div className="fixed inset-x-0 top-0 h-svh flex flex-col bg-background text-foreground overflow-hidden">
       <div className="flex-1 flex min-h-0 gap-0 md:gap-2 md:p-2">
         {/* Desktop sidebar */}
         <aside className="hidden md:flex shrink-0 h-full min-h-0">
