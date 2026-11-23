@@ -13,7 +13,7 @@
     "https://cdn.sovbit.host"
   ],
   "id": "ostrify",
-  "title": "ostrify",
+  "title": "Ostrify",
   "fallback": "/index.html",
   "gatewayHostnames": [
     "shakespeare.to"
