@@ -12,6 +12,9 @@ import type { Track } from "@/lib/music";
 
 type FeaturedBook = LibriVoxBook | GutenbergAudiobook;
 type FeaturedSource = "librivox" | "gutenberg";
+const WEEKLY_PICK_COUNT = 2;
+const DAILY_PICK_COUNT = 4;
+
 interface FeaturedPicks {
   weekly: FeaturedBook[];
   daily: FeaturedBook[];
@@ -48,15 +51,15 @@ function chooseFeaturedBooks(books: FeaturedBook[], day: string, week: string): 
   const weeklyPool = preferredWeeklySource === "librivox"
     ? librivox.length ? librivox : gutenberg
     : gutenberg.length ? gutenberg : librivox;
-  const weekly = pickDistinct(weeklyPool, `weekly:${week}`, 2);
+  const weekly = pickDistinct(weeklyPool, `weekly:${week}`, WEEKLY_PICK_COUNT);
   const usedIds = new Set(weekly.map(book => book.id));
-  weekly.push(...pickDistinct(books, `weekly-fill:${week}`, 2 - weekly.length, usedIds));
+  weekly.push(...pickDistinct(books, `weekly-fill:${week}`, WEEKLY_PICK_COUNT - weekly.length, usedIds));
   for (const book of weekly) usedIds.add(book.id);
 
   const alternateSourcePool = weekly[0]?.source === "librivox" ? gutenberg : librivox;
-  const daily = pickDistinct(alternateSourcePool, `daily:${day}`, 2, usedIds);
+  const daily = pickDistinct(alternateSourcePool, `daily:${day}`, DAILY_PICK_COUNT, usedIds);
   for (const book of daily) usedIds.add(book.id);
-  daily.push(...pickDistinct(books, `daily-fill:${day}`, 2 - daily.length, usedIds));
+  daily.push(...pickDistinct(books, `daily-fill:${day}`, DAILY_PICK_COUNT - daily.length, usedIds));
 
   return { weekly, daily };
 }
@@ -144,22 +147,22 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3">
+    <div className="mx-auto max-w-5xl space-y-3">
       <h2 className="text-center text-lg font-semibold tracking-tight">Featured audiobooks</h2>
       <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-sm">
         <img src="/library-background.webp" alt="" aria-hidden="true" loading="lazy" className="absolute inset-0 size-full object-cover opacity-40" />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-slate-950/75 to-slate-950/85" />
-        <div className="relative grid grid-cols-1 divide-y divide-white/20 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <div className="relative grid grid-cols-1 divide-y divide-white/20 lg:grid-cols-[2fr_4fr] lg:divide-x lg:divide-y-0">
           <section aria-labelledby="weekly-featured-audiobooks" className="min-w-0 space-y-1.5 px-3 py-3 sm:px-4">
             <h3 id="weekly-featured-audiobooks" className="text-center text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">This week’s picks</h3>
             <div className="grid grid-cols-2 divide-x divide-white/15">
-              {showSkeletons ? <><PickSkeleton /><PickSkeleton /></> : picks.weekly.map(book => <PickCard key={book.id} book={book} />)}
+              {showSkeletons ? Array.from({ length: WEEKLY_PICK_COUNT }, (_, index) => <PickSkeleton key={`weekly-skeleton-${index}`} />) : picks.weekly.map(book => <PickCard key={book.id} book={book} />)}
             </div>
           </section>
           <section aria-labelledby="daily-featured-audiobooks" className="min-w-0 space-y-1.5 px-3 py-3 sm:px-4">
             <h3 id="daily-featured-audiobooks" className="text-center text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">Today’s picks</h3>
-            <div className="grid grid-cols-2 divide-x divide-white/15">
-              {showSkeletons ? <><PickSkeleton /><PickSkeleton /></> : picks.daily.map(book => <PickCard key={book.id} book={book} />)}
+            <div className="grid grid-cols-2 xl:grid-cols-4">
+              {showSkeletons ? Array.from({ length: DAILY_PICK_COUNT }, (_, index) => <div key={`daily-skeleton-${index}`} className={index === 0 ? "" : index % 2 === 1 ? "border-l border-white/15" : "xl:border-l xl:border-white/15"}><PickSkeleton /></div>) : picks.daily.map((book, index) => <div key={book.id} className={index === 0 ? "" : index % 2 === 1 ? "border-l border-white/15" : "xl:border-l xl:border-white/15"}><PickCard book={book} /></div>)}
             </div>
           </section>
         </div>
