@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Headphones, Play, Pause, Search } from 'lucide-react';
+import { Headphones, Play, Pause, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +14,7 @@ import { useLibriVoxBook, useLibriVoxCatalog, type LibriVoxBook } from '@/hooks/
 import { useGutenbergAudiobook, useGutenbergAudiobookCatalog, type GutenbergAudiobook } from '@/hooks/useGutenbergAudiobooks';
 import { useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { formatDuration } from '@/lib/music';
+import { AUDIOBOOK_CATALOG_PAGE_SIZE } from '@/lib/audiobookCatalog';
 import { sanitizeUrl } from '@/lib/sanitize';
 
 function audiobookPath(book: Pick<SavedAudiobook, 'id' | 'source' | 'catalogId'>): string {
@@ -42,34 +43,78 @@ function BookSkeletonGrid() {
   return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" aria-label="Loading audiobooks">{Array.from({ length: 10 }, (_, index) => <div key={index} className="space-y-3"><Skeleton className="aspect-square rounded-lg" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-3 w-1/2" /></div>)}</div>;
 }
 
+function AudiobookCatalogPagination({
+  label,
+  page,
+  pageCount,
+  total,
+  isFetching,
+  canGoNext,
+  onPrevious,
+  onNext,
+  position,
+}: {
+  label: string;
+  page: number;
+  pageCount: number;
+  total: number;
+  isFetching: boolean;
+  canGoNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  position: "top" | "bottom";
+}) {
+  return <nav aria-label={`${label} pagination ${position}`} className={`flex flex-wrap items-center justify-between gap-3 ${position === "top" ? "border-y py-3" : "border-t pt-4"}`}>
+    <Button type="button" variant="outline" onClick={onPrevious} disabled={page <= 1 || isFetching}><ChevronLeft className="size-4" /> Previous</Button>
+    <p aria-live="polite" className="text-sm text-muted-foreground">Page {page} of {pageCount} <span className="hidden sm:inline">· {total.toLocaleString()} results</span></p>
+    <Button type="button" variant="outline" onClick={onNext} disabled={!canGoNext || isFetching}>{isFetching ? "Loading…" : "Next"} <ChevronRight className="size-4" /></Button>
+  </nav>;
+}
+
 function LibriVoxCatalog() {
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
   const [searchBy, setSearchBy] = useState<'title' | 'author'>('title');
+  const [page, setPage] = useState(1);
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useLibriVoxCatalog(query, searchBy);
+  const total = catalog.data?.pages[0]?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / AUDIOBOOK_CATALOG_PAGE_SIZE));
+  const loadedPages = catalog.data?.pages.length ?? 0;
   const books = useMemo(() => {
     const uniqueBooks = new Map<string, LibriVoxBook>();
-    for (const book of catalog.data?.pages.flatMap(page => page.books) ?? []) {
+    for (const book of catalog.data?.pages[page - 1]?.books ?? []) {
       if (!uniqueBooks.has(book.catalogId)) uniqueBooks.set(book.catalogId, book);
     }
     return [...uniqueBooks.values()];
-  }, [catalog.data?.pages]);
-  const visibleBooks = books;
-  const loadedPages = catalog.data?.pages.length ?? 0;
-  const shouldScanMore = visibleBooks.length < 20 && loadedPages < 20;
+  }, [catalog.data?.pages, page]);
+  useEffect(() => { setPage(1); }, [query, searchBy]);
 
-  useEffect(() => {
-    if (shouldScanMore && catalog.hasNextPage && !catalog.isFetchingNextPage && !catalog.isFetchNextPageError) void catalog.fetchNextPage();
-  }, [shouldScanMore, catalog.hasNextPage, catalog.isFetchingNextPage, catalog.isFetchNextPageError, catalog.fetchNextPage]);
+  const nextPage = async () => {
+    if (page < loadedPages) {
+      setPage(current => current + 1);
+      return;
+    }
+    if (!catalog.hasNextPage || catalog.isFetchingNextPage) return;
+    const result = await catalog.fetchNextPage();
+    if (result.data?.pages[page]) setPage(current => current + 1);
+  };
+  const canGoNext = page < pageCount && (page < loadedPages || catalog.hasNextPage);
+  const pagination = (position: 'top' | 'bottom') => <AudiobookCatalogPagination label="LibriVox audiobooks" page={page} pageCount={pageCount} total={total} isFetching={catalog.isFetchingNextPage} canGoNext={canGoNext} onPrevious={() => setPage(current => Math.max(1, current - 1))} onNext={() => void nextPage()} position={position} />;
+  const isSearchPending = query !== term.trim();
 
   return <div className="space-y-5">
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2"><div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /><Input value={term} onChange={event => setTerm(event.target.value)} aria-label="Search LibriVox audiobooks" placeholder="Search LibriVox" className="h-11 pl-10" /></div><label htmlFor="librivox-search-type" className="sr-only">Search LibriVox by</label><select id="librivox-search-type" value={searchBy} onChange={event => setSearchBy(event.target.value as 'title' | 'author')} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
+      <div className="flex flex-wrap items-center gap-2"><div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /><Input value={term} onChange={event => { setTerm(event.target.value); setPage(1); }} aria-label="Search LibriVox audiobooks" placeholder="Search LibriVox" className="h-11 pl-10" /></div><label htmlFor="librivox-search-type" className="sr-only">Search LibriVox by</label><select id="librivox-search-type" value={searchBy} onChange={event => { setSearchBy(event.target.value as 'title' | 'author'); setPage(1); }} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
       <p className="text-sm text-muted-foreground">Volunteer-read audiobooks from LibriVox. Books without source cover art use an Ostrify-designed cover.</p>
     </section>
     <section className="space-y-4"><h2 className="text-2xl font-bold">{query ? `LibriVox results for “${query}”` : 'Explore LibriVox audiobooks'}</h2>
-      {(catalog.isLoading && !books.length) || query !== term.trim() ? <BookSkeletonGrid /> : catalog.isError && !books.length ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load LibriVox audiobooks. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : !visibleBooks.length && shouldScanMore && catalog.isFetchingNextPage ? <div role="status" className="rounded-lg border border-dashed p-6 text-muted-foreground">Looking through LibriVox results for books with playable chapters…</div> : !visibleBooks.length && shouldScanMore && catalog.isFetchNextPageError ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Couldn’t search further for playable books. <button className="text-primary underline" onClick={() => void catalog.fetchNextPage()}>Try again</button></div> : !visibleBooks.length ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching LibriVox books with playable chapters were found.' : 'No audiobooks with playable chapters were found.'}</div> : <><BookGrid books={visibleBooks} sourceLabel="LibriVox" />{catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more LibriVox books. Please try again.</p>}{catalog.hasNextPage && <Button type="button" variant="outline" disabled={catalog.isFetchingNextPage} onClick={() => void catalog.fetchNextPage()}>{catalog.isFetchingNextPage ? 'Loading…' : 'Load more LibriVox audiobooks'}</Button>}</>}
+      {(catalog.isLoading && !catalog.data) || isSearchPending ? <BookSkeletonGrid /> : catalog.isError && !catalog.data ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load LibriVox audiobooks. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : total === 0 ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching LibriVox books were found.' : 'No LibriVox audiobooks were found.'}</div> : <>
+        {pagination('top')}
+        {books.length ? <BookGrid books={books} sourceLabel="LibriVox" /> : <p role="status" className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">No playable audiobooks were found on this results page.</p>}
+        {catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load the next LibriVox page. <button type="button" className="underline" onClick={() => void nextPage()}>Try again</button></p>}
+        {pagination('bottom')}
+      </>}
     </section>
   </div>;
 }
@@ -78,24 +123,46 @@ function GutenbergCatalog() {
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
   const [searchBy, setSearchBy] = useState<'title' | 'author'>('title');
+  const [page, setPage] = useState(1);
   useEffect(() => { const timer = setTimeout(() => setQuery(term.trim()), 400); return () => clearTimeout(timer); }, [term]);
   const catalog = useGutenbergAudiobookCatalog(query, searchBy);
+  const total = catalog.data?.pages[0]?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / AUDIOBOOK_CATALOG_PAGE_SIZE));
+  const loadedPages = catalog.data?.pages.length ?? 0;
   const books = useMemo(() => {
     const uniqueBooks = new Map<string, GutenbergAudiobook>();
-    for (const book of catalog.data?.pages.flatMap(page => page.books) ?? []) {
+    for (const book of catalog.data?.pages[page - 1]?.books ?? []) {
       if (!uniqueBooks.has(book.catalogId)) uniqueBooks.set(book.catalogId, book);
     }
     return [...uniqueBooks.values()];
-  }, [catalog.data?.pages]);
-  const total = catalog.data?.pages[0]?.total;
+  }, [catalog.data?.pages, page]);
+  useEffect(() => { setPage(1); }, [query, searchBy]);
+
+  const nextPage = async () => {
+    if (page < loadedPages) {
+      setPage(current => current + 1);
+      return;
+    }
+    if (!catalog.hasNextPage || catalog.isFetchingNextPage) return;
+    const result = await catalog.fetchNextPage();
+    if (result.data?.pages[page]) setPage(current => current + 1);
+  };
+  const canGoNext = page < pageCount && (page < loadedPages || catalog.hasNextPage);
+  const pagination = (position: 'top' | 'bottom') => <AudiobookCatalogPagination label="Gutenberg audiobooks" page={page} pageCount={pageCount} total={total} isFetching={catalog.isFetchingNextPage} canGoNext={canGoNext} onPrevious={() => setPage(current => Math.max(1, current - 1))} onNext={() => void nextPage()} position={position} />;
+  const isSearchPending = query !== term.trim();
 
   return <div className="space-y-5">
     <section className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2"><div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /><Input value={term} onChange={event => setTerm(event.target.value)} aria-label="Search Gutenberg audiobooks" placeholder="Search Gutenberg audiobooks" className="h-11 pl-10" /></div><label htmlFor="gutenberg-search-type" className="sr-only">Search Gutenberg by</label><select id="gutenberg-search-type" value={searchBy} onChange={event => setSearchBy(event.target.value as 'title' | 'author')} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
+      <div className="flex flex-wrap items-center gap-2"><div className="relative min-w-48 flex-1"><Search className="absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" /><Input value={term} onChange={event => { setTerm(event.target.value); setPage(1); }} aria-label="Search Gutenberg audiobooks" placeholder="Search Gutenberg audiobooks" className="h-11 pl-10" /></div><label htmlFor="gutenberg-search-type" className="sr-only">Search Gutenberg by</label><select id="gutenberg-search-type" value={searchBy} onChange={event => { setSearchBy(event.target.value as 'title' | 'author'); setPage(1); }} className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"><option value="title">Title</option><option value="author">Author</option></select></div>
       <p className="text-sm text-muted-foreground">AI-narrated Project Gutenberg books from the Open Audiobook Collection, hosted by Internet Archive. Rights and listening availability may vary by country; check each source item.</p>
     </section>
-    <section className="space-y-4"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-2xl font-bold">{query ? `Gutenberg results for “${query}”` : 'Explore Gutenberg Open Audiobooks'}</h2>{typeof total === 'number' && <span className="text-sm text-muted-foreground">{total.toLocaleString()} catalog items</span>}</div>
-      {(catalog.isLoading && !books.length) || query !== term.trim() ? <BookSkeletonGrid /> : catalog.isError && !books.length ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load the Gutenberg Open Audiobook catalog from Internet Archive. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : !books.length ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching Gutenberg audiobooks were found.' : 'No Gutenberg audiobooks were found.'}</div> : <><BookGrid books={books} sourceLabel="Gutenberg Open Audiobook" />{catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load more Gutenberg audiobooks. Please try again.</p>}{catalog.hasNextPage && <Button type="button" variant="outline" disabled={catalog.isFetchingNextPage} onClick={() => void catalog.fetchNextPage()}>{catalog.isFetchingNextPage ? 'Loading…' : 'Load more Gutenberg audiobooks'}</Button>}</>}
+    <section className="space-y-4"><div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-2xl font-bold">{query ? `Gutenberg results for “${query}”` : 'Explore Gutenberg Open Audiobooks'}</h2>{total > 0 && <span className="text-sm text-muted-foreground">{total.toLocaleString()} catalog items</span>}</div>
+      {(catalog.isLoading && !catalog.data) || isSearchPending ? <BookSkeletonGrid /> : catalog.isError && !catalog.data ? <div role="alert" className="rounded-lg border border-dashed p-6 text-sm">Unable to load the Gutenberg Open Audiobook catalog from Internet Archive. <button className="text-primary underline" onClick={() => void catalog.refetch()}>Try again</button></div> : total === 0 ? <div className="rounded-lg border border-dashed p-6 text-muted-foreground">{query ? 'No matching Gutenberg audiobooks were found.' : 'No Gutenberg audiobooks were found.'}</div> : <>
+        {pagination('top')}
+        {books.length ? <BookGrid books={books} sourceLabel="Gutenberg Open Audiobook" /> : <p role="status" className="rounded-lg border border-dashed p-6 text-center text-muted-foreground">No audiobooks were found on this results page.</p>}
+        {catalog.isFetchNextPageError && <p role="alert" className="text-sm text-destructive">Couldn’t load the next Gutenberg page. <button type="button" className="underline" onClick={() => void nextPage()}>Try again</button></p>}
+        {pagination('bottom')}
+      </>}
     </section>
   </div>;
 }

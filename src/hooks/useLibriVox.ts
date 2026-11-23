@@ -2,10 +2,10 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { Track } from '@/lib/music';
 import type { SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { sanitizeUrl } from '@/lib/sanitize';
+import { AUDIOBOOK_CATALOG_PAGE_SIZE } from '@/lib/audiobookCatalog';
 
 const ARCHIVE_SEARCH = 'https://archive.org/advancedsearch.php';
 const ARCHIVE_ITEM = 'https://archive.org/metadata';
-const PAGE_SIZE = 24;
 
 export interface LibriVoxBook extends SavedAudiobook {
   source: 'librivox';
@@ -86,7 +86,7 @@ export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author', 
       const terms = normalizedQuery.split(/\s+/).filter(Boolean).map(term => `${field}:${JSON.stringify(`*${term.replace(/[\\"\\\\]/g, '\\\\$&')}*`)}`);
       url.searchParams.set('q', `collection:librivoxaudio${terms.length ? ` AND ${terms.join(' AND ')}` : ''}`);
       url.searchParams.set('fl[]', 'identifier,title,creator,language');
-      url.searchParams.set('rows', String(PAGE_SIZE));
+      url.searchParams.set('rows', String(AUDIOBOOK_CATALOG_PAGE_SIZE));
       url.searchParams.set('page', String(pageParam));
       url.searchParams.set('output', 'json');
       url.searchParams.set('sort[]', 'publicdate desc');
@@ -101,11 +101,11 @@ export function useLibriVoxCatalog(query: string, searchBy: 'title' | 'author', 
         if (!identifier || !validIdentifier(identifier) || !title || title === '[]' || /^Nc[a-f0-9]{10,}$/i.test(author)) return [];
         return [makeBook(identifier, title, author, text(item?.language))];
       });
-      const total = typeof response.numFound === 'number' && Number.isFinite(response.numFound) ? response.numFound : pageParam * PAGE_SIZE;
+      const total = typeof response.numFound === 'number' && Number.isFinite(response.numFound) ? response.numFound : pageParam * AUDIOBOOK_CATALOG_PAGE_SIZE;
       return { books, total, fetchedCount: response.docs.length };
     },
     getNextPageParam: (lastPage, _pages, lastPageParam) => {
-      const hasMoreResults = lastPageParam * PAGE_SIZE < lastPage.total;
+      const hasMoreResults = lastPageParam * AUDIOBOOK_CATALOG_PAGE_SIZE < lastPage.total;
       return hasMoreResults && lastPage.fetchedCount > 0 ? lastPageParam + 1 : undefined;
     },
   });

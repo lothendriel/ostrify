@@ -12,6 +12,10 @@ import type { Track } from "@/lib/music";
 
 type FeaturedBook = LibriVoxBook | GutenbergAudiobook;
 type FeaturedSource = "librivox" | "gutenberg";
+interface FeaturedPicks {
+  weekly: FeaturedBook[];
+  daily: FeaturedBook[];
+}
 
 function hashSeed(value: string): number {
   let hash = 2166136261;
@@ -30,26 +34,30 @@ function getPeriodKeys(date: Date): { day: string; week: string } {
   return { day, week: weekStart.toISOString().slice(0, 10) };
 }
 
-function pickFrom(books: FeaturedBook[], seed: string): FeaturedBook | undefined {
-  if (!books.length) return undefined;
-  const sorted = [...books].sort((left, right) => left.catalogId.localeCompare(right.catalogId));
-  return sorted[hashSeed(seed) % sorted.length];
+function pickDistinct(books: FeaturedBook[], seed: string, count: number, excludedIds: Set<string> = new Set()): FeaturedBook[] {
+  const sorted = books.filter(book => !excludedIds.has(book.id)).sort((left, right) => left.catalogId.localeCompare(right.catalogId));
+  if (!sorted.length || count <= 0) return [];
+  const start = hashSeed(seed) % sorted.length;
+  return Array.from({ length: Math.min(count, sorted.length) }, (_, index) => sorted[(start + index) % sorted.length]);
 }
 
-function chooseFeaturedBooks(books: FeaturedBook[], day: string, week: string): { weekly?: FeaturedBook; daily?: FeaturedBook } {
+function chooseFeaturedBooks(books: FeaturedBook[], day: string, week: string): FeaturedPicks {
   const librivox = books.filter(book => book.source === "librivox");
   const gutenberg = books.filter(book => book.source === "gutenberg");
-  // Alternate the weekly source by week, and use the other catalog for today's pick when possible.
   const preferredWeeklySource: FeaturedSource = hashSeed(week) % 2 === 0 ? "librivox" : "gutenberg";
   const weeklyPool = preferredWeeklySource === "librivox"
     ? librivox.length ? librivox : gutenberg
     : gutenberg.length ? gutenberg : librivox;
-  const weekly = pickFrom(weeklyPool, `weekly:${week}`);
-  const otherSourcePool = weekly?.source === "librivox" ? gutenberg : librivox;
-  const dailyPool = otherSourcePool.length
-    ? otherSourcePool
-    : books.filter(book => book.id !== weekly?.id);
-  const daily = pickFrom(dailyPool, `daily:${day}`);
+  const weekly = pickDistinct(weeklyPool, `weekly:${week}`, 2);
+  const usedIds = new Set(weekly.map(book => book.id));
+  weekly.push(...pickDistinct(books, `weekly-fill:${week}`, 2 - weekly.length, usedIds));
+  for (const book of weekly) usedIds.add(book.id);
+
+  const alternateSourcePool = weekly[0]?.source === "librivox" ? gutenberg : librivox;
+  const daily = pickDistinct(alternateSourcePool, `daily:${day}`, 2, usedIds);
+  for (const book of daily) usedIds.add(book.id);
+  daily.push(...pickDistinct(books, `daily-fill:${day}`, 2 - daily.length, usedIds));
+
   return { weekly, daily };
 }
 
@@ -69,32 +77,29 @@ function useBookDetails(book: FeaturedBook | undefined) {
   return book?.source === "gutenberg" ? gutenberg : librivox;
 }
 
-function PickCard({
-  book,
-  label,
-  details,
-  onPlay,
-  isPlaying,
-}: {
-  book: FeaturedBook;
-  label: string;
-  details: { data?: { chapters: Track[] } | null; isLoading: boolean; isError: boolean };
-  onPlay: () => void;
-  isPlaying: boolean;
-}) {
+function PickCard({ book }: { book: FeaturedBook }) {
+  const details = useBookDetails(book);
+  const player = usePlayer();
+  const tracks = details.data?.chapters ?? [];
+  const isCurrent = tracks.some(track => track.id === player.current?.id);
+  const isPlaying = isCurrent && player.isPlaying;
   const sourceLabel = book.source === "gutenberg" ? "Project Gutenberg" : "LibriVox";
-  const canPlay = !!details.data?.chapters.length;
+  const canPlay = tracks.length > 0;
+
+  const playBook = () => {
+    if (isCurrent) player.togglePlay();
+    else if (canPlay) player.playQueue(tracks);
+  };
 
   return (
-    <article className="flex min-w-0 flex-col items-center gap-2 px-1 py-2 text-center sm:px-3">
-      <p className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">{label}</p>
-      <Link to={audiobookPath(book)} className="flex min-w-0 flex-col items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300">
+    <article className="flex min-w-0 flex-col items-center gap-1 px-1.5 py-1 text-center sm:px-2">
+      <Link to={audiobookPath(book)} className="flex min-w-0 flex-col items-center gap-1 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300">
         <AudiobookCover key={book.id} book={book} className="h-28 w-20 shrink-0 rounded-lg border border-white/20 bg-white/10 shadow-md sm:h-32 sm:w-24" />
-        <span className="line-clamp-2 min-h-10 max-w-full text-sm font-semibold leading-5 text-white hover:underline">{book.title}</span>
+        <span className="line-clamp-2 min-h-9 max-w-full text-sm font-semibold leading-tight text-white hover:underline">{book.title}</span>
       </Link>
-      <p className="max-w-full truncate text-xs text-white/75">{book.author}</p>
-      <p className="text-[0.65rem] font-medium text-emerald-100/90">{sourceLabel}</p>
-      <Button type="button" size="sm" variant="secondary" disabled={!canPlay} onClick={onPlay} className="mt-1 h-8 min-w-24 rounded-full border border-white/20 bg-white/90 px-3 text-xs text-slate-950 hover:bg-white disabled:bg-white/70 disabled:text-slate-600">
+      <p className="max-w-full truncate text-xs leading-tight text-white/75">{book.author}</p>
+      <p className="text-[0.65rem] font-medium leading-none text-emerald-100/90">{sourceLabel}</p>
+      <Button type="button" size="sm" variant="secondary" disabled={!canPlay} onClick={playBook} className="mt-0.5 h-8 min-w-24 rounded-full border border-white/20 bg-white/90 px-3 text-xs text-slate-950 hover:bg-white disabled:bg-white/70 disabled:text-slate-600">
         {isPlaying ? <Pause className="size-3.5 fill-current" /> : <Play className="size-3.5 fill-current" />}
         {isPlaying ? "Pause" : details.isLoading ? "Loading" : details.isError || !canPlay ? "Unavailable" : "Listen"}
       </Button>
@@ -104,11 +109,10 @@ function PickCard({
 
 function PickSkeleton() {
   return (
-    <div className="flex flex-col items-center gap-2 px-1 py-3">
-      <Skeleton className="h-3 w-20 bg-white/20" />
-      <Skeleton className="size-16 rounded-lg bg-white/20 sm:size-[4.5rem]" />
-      <Skeleton className="h-4 w-28 bg-white/20" />
-      <Skeleton className="h-3 w-20 bg-white/20" />
+    <div className="flex flex-col items-center gap-1 px-1.5 py-1">
+      <Skeleton className="h-28 w-20 rounded-lg bg-white/20 sm:h-32 sm:w-24" />
+      <Skeleton className="h-4 w-24 bg-white/20" />
+      <Skeleton className="h-3 w-16 bg-white/20" />
       <Skeleton className="h-8 w-24 rounded-full bg-white/20" />
     </div>
   );
@@ -119,7 +123,6 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
   const { day, week } = getPeriodKeys(now);
   const librivoxCatalog = useLibriVoxCatalog("", "title", enabled);
   const gutenbergCatalog = useGutenbergAudiobookCatalog("", "title", enabled);
-  const player = usePlayer();
 
   const books = useMemo(() => {
     const unique = new Map<string, FeaturedBook>();
@@ -130,31 +133,13 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
     return [...unique.values()];
   }, [librivoxCatalog.data, gutenbergCatalog.data]);
   const picks = useMemo(() => chooseFeaturedBooks(books, day, week), [books, day, week]);
-  const weeklyDetails = useBookDetails(picks.weekly);
-  const dailyDetails = useBookDetails(picks.daily);
-  const weeklyTracks = weeklyDetails.data?.chapters ?? [];
-  const dailyTracks = dailyDetails.data?.chapters ?? [];
-  const weeklyIsCurrent = weeklyTracks.some(track => track.id === player.current?.id);
-  const dailyIsCurrent = dailyTracks.some(track => track.id === player.current?.id);
-  const isLoading = enabled && books.length === 0 && (librivoxCatalog.isLoading || gutenbergCatalog.isLoading);
+  const isLoading = enabled && (
+    (!librivoxCatalog.data && librivoxCatalog.isLoading)
+    || (!gutenbergCatalog.data && gutenbergCatalog.isLoading)
+  );
+  const showSkeletons = !enabled || isLoading;
 
-  const playBook = (tracks: Track[], isCurrent: boolean) => {
-    if (isCurrent) player.togglePlay();
-    else if (tracks.length) player.playQueue(tracks);
-  };
-
-  if (!enabled) {
-    return (
-      <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-slate-950 p-4 text-white shadow-sm sm:p-5" aria-hidden="true">
-        <div className="grid grid-cols-2 divide-x divide-white/15">
-          <PickSkeleton />
-          <PickSkeleton />
-        </div>
-      </div>
-    );
-  }
-
-  if (!books.length && !isLoading) {
+  if (enabled && !books.length && !isLoading) {
     return <p role="status" className="mx-auto max-w-xl rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Featured audiobooks are temporarily unavailable. Please try again later.</p>;
   }
 
@@ -164,11 +149,19 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
       <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-sm">
         <img src="/library-background.webp" alt="" aria-hidden="true" loading="lazy" className="absolute inset-0 size-full object-cover opacity-40" />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-slate-950/75 to-slate-950/85" />
-        <div className="relative grid grid-cols-2 divide-x divide-white/20 px-3 py-2 sm:px-5 sm:py-3">
-          {isLoading ? <><PickSkeleton /><PickSkeleton /></> : <>
-            {picks.weekly && <PickCard book={picks.weekly} label="This week" details={weeklyDetails} isPlaying={weeklyIsCurrent && player.isPlaying} onPlay={() => playBook(weeklyTracks, weeklyIsCurrent)} />}
-            {picks.daily && <PickCard book={picks.daily} label="Today’s pick" details={dailyDetails} isPlaying={dailyIsCurrent && player.isPlaying} onPlay={() => playBook(dailyTracks, dailyIsCurrent)} />}
-          </>}
+        <div className="relative grid grid-cols-1 divide-y divide-white/20 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          <section aria-labelledby="weekly-featured-audiobooks" className="min-w-0 space-y-1.5 px-3 py-3 sm:px-4">
+            <h3 id="weekly-featured-audiobooks" className="text-center text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">This week’s picks</h3>
+            <div className="grid grid-cols-2 divide-x divide-white/15">
+              {showSkeletons ? <><PickSkeleton /><PickSkeleton /></> : picks.weekly.map(book => <PickCard key={book.id} book={book} />)}
+            </div>
+          </section>
+          <section aria-labelledby="daily-featured-audiobooks" className="min-w-0 space-y-1.5 px-3 py-3 sm:px-4">
+            <h3 id="daily-featured-audiobooks" className="text-center text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">Today’s picks</h3>
+            <div className="grid grid-cols-2 divide-x divide-white/15">
+              {showSkeletons ? <><PickSkeleton /><PickSkeleton /></> : picks.daily.map(book => <PickCard key={book.id} book={book} />)}
+            </div>
+          </section>
         </div>
       </div>
     </div>
