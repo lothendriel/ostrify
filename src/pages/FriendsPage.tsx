@@ -70,25 +70,46 @@ function ProfileFollowers({ pubkey }: { pubkey: string }) {
     ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
     ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
   ])].sort();
-  const key = ['public-ostrify-followers', pubkey, readRelays.join('|')];
+  const key = ['public-ostrify-followers-v2', pubkey, readRelays.join('|')];
   const coverage = useLibraryCoverage(key);
   const followers = useQuery({
     queryKey: key,
     enabled: readRelays.length > 0,
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
-      const result = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], '#p': [pubkey], limit: 500 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]), libraryReadRetryOptions(client, key));
-      saveLibraryCoverage(client, key, result);
-      const current = result.events.filter(event => event.kind === 30000 && event.pubkey !== pubkey && event.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people') && event.tags.some(([name, value]) => name === 'p' && value === pubkey)).map(event => event.pubkey);
-      const previous = result.complete ? [] : client.getQueryData<string[]>(key) ?? [];
-      return [...new Set([...previous, ...current])];
+      const options = libraryReadRetryOptions(client, key);
+      // The #p query only finds candidates: an unfollow no longer matches it.
+      const candidates = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], '#d': ['ostrify-people'], '#p': [pubkey], limit: 500 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]), options);
+      const matching = candidates.events.filter(event => event.kind === 30000 && event.pubkey !== pubkey && /^[0-9a-f]{64}$/.test(event.pubkey) && event.tags.find(([name]) => name === 'd')?.[1] === 'ostrify-people' && event.tags.some(([name, value]) => name === 'p' && value === pubkey));
+      const previous = client.getQueryData<{ pubkeys: string[]; unconfirmed: boolean }>(key)?.pubkeys ?? [];
+      const authors = [...new Set([...matching.map(event => event.pubkey), ...previous])];
+      if (!authors.length) {
+        saveLibraryCoverage(client, key, candidates);
+        return { pubkeys: [], unconfirmed: false };
+      }
+      // Batch author-constrained follow-set reads, without #p, so unfollows can be seen.
+      const filters = Array.from({ length: Math.ceil(authors.length / 50) }, (_, index) => {
+        const batch = authors.slice(index * 50, index * 50 + 50);
+        return { kinds: [30000], authors: batch, '#d': ['ostrify-people'], limit: batch.length * 10 };
+      });
+      const checked = await queryLibraryEvents(nostr, readRelays, filters, AbortSignal.any([signal, AbortSignal.timeout(8000)]), options);
+      const incompleteRelays = [...new Set([...candidates.incompleteRelays, ...checked.incompleteRelays])];
+      saveLibraryCoverage(client, key, { complete: incompleteRelays.length === 0, incompleteRelays, completedRelays: readRelays.filter(relay => !incompleteRelays.includes(relay)) });
+      const checkedAuthors = new Set(checked.events.filter(event => event.kind === 30000 && authors.includes(event.pubkey) && event.tags.find(([name]) => name === 'd')?.[1] === 'ostrify-people').map(event => event.pubkey));
+      const followers = authors.filter(author => {
+        const event = reconcileLibraryEvent(client, author, 30000, 'ostrify-people', [...matching.filter(item => item.pubkey === author), ...checked.events.filter(item => item.pubkey === author)]);
+        // Missing data is not evidence of an unfollow.
+        return event ? event.tags.some(([name, value]) => name === 'p' && value === pubkey) : previous.includes(author);
+      });
+      return { pubkeys: followers, unconfirmed: authors.some(author => !checkedAuthors.has(author)) };
     },
   });
   if (followers.isLoading) return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="aspect-square w-full rounded-full" />)}</div>;
   if (followers.isError) return <p role="status" className="text-sm text-muted-foreground">Followers aren’t available from your relays right now.</p>;
   return <div className="space-y-3">
-    {coverage && !coverage.complete && <p role="status" className="text-sm text-muted-foreground">Some relays did not finish; followers may be incomplete or out of date. <button type="button" className="underline" onClick={() => void followers.refetch()}>Try again</button></p>}
-    {!followers.data?.length ? <p className="text-sm text-muted-foreground">No Ostrify followers found in the relay responses received.</p> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{followers.data.map(follower => <ProfilePersonCard key={follower} pubkey={follower} />)}</div>}
+    {!readRelays.length && <p role="status" className="text-sm text-muted-foreground">Enable a read relay to check followers.</p>}
+    {(coverage && !coverage.complete || followers.data?.unconfirmed) && <p role="status" className="text-sm text-muted-foreground">Some relays or current follow lists could not be checked; followers may be incomplete or out of date. <button type="button" className="underline" onClick={() => void followers.refetch()}>Try again</button></p>}
+    {!followers.data?.pubkeys.length ? <p className="text-sm text-muted-foreground">No Ostrify followers found in the relay responses received.</p> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{followers.data.pubkeys.map(follower => <ProfilePersonCard key={follower} pubkey={follower} />)}</div>}
   </div>;
 }
 

@@ -1,6 +1,6 @@
 # Ostrify Code Audit
 
-**Last updated:** 2026-11-24 after the replaceable-event selection improvements. The original re-audit reviewed commit `305d88a`; subsequent updates record the library-write, library-read, and selection changes.
+**Last updated:** 2026-11-24 after the relay/Blossom sync, TuneStr revision, and follower-discovery follow-up. The original re-audit reviewed commit `305d88a`; subsequent updates record the library-write, library-read, and selection changes.
 
 **Scope:** A targeted review of previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a comprehensive signer, cross-device, accessibility, or performance test. Statuses describe the reviewed implementation and its known limitations; completion of a relay query does not prove that a relay has all events.
 
@@ -9,14 +9,15 @@
 ## Remaining work, in priority order
 
 1. **Secure video embeds and review external URLs.** Restrict supported iframe hosts, provide a safe fallback, and review CSP and other untrusted URL sinks. See §1.
-2. **Finish the remaining replaceable-event review.** The named profile and library paths now use NIP-01 tie-breaking and coordinate checks, but relay/Blossom settings sync, TuneStr stream revisions, and public follower discovery still need separate review and changes. See §5.
-3. **Harden playback.** Test and improve queue restoration, track removal, end-of-queue behavior, rapid changes, and autoplay rejection; clarify the Next button. See §11.
-4. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
-5. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
-6. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
-7. **Improve notification and relay transparency.** Explain notification limitations and measure polling and TuneStr relay request costs before optimizing. See §§7–8.
-8. **Finish external-data and sharing review.** Validate remaining catalog URL and metadata handling, then confirm the intended canonical domain and social sharing previews. See §9 and the sharing-metadata observation below.
-9. **Clean up cache-key and maintainability issues.** Review Home-session cache behavior, shared key helpers, and compressed JSX. The duplicate podcast guard is already fixed. See §§10 and 14.
+2. **Harden playback.** Test and improve queue restoration, track removal, end-of-queue behavior, rapid changes, and autoplay rejection; clarify the Next button. See §11.
+3. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
+4. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
+5. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
+6. **Improve notification and relay transparency.** Explain notification limitations and measure polling and TuneStr relay request costs before optimizing. See §§7–8.
+7. **Finish external-data and sharing review.** Validate remaining catalog URL and metadata handling, then confirm the intended canonical domain and social sharing previews. See §9 and the sharing-metadata observation below.
+8. **Clean up cache-key and maintainability issues.** Review Home-session cache behavior, shared key helpers, and compressed JSX. The duplicate podcast guard is already fixed. See §§10 and 14.
+
+**Replaceable-event follow-up:** The three identified settings, TuneStr, and follower paths have been addressed, subject to relay and verification limitations in §5.
 
 **Completed library-read improvement:** Per-relay response coverage, cached-revision reconciliation, and partial-result notices are implemented. The remaining limitations and verification needs are documented in the library-completeness section below.
 
@@ -34,7 +35,7 @@
 | Cache-key mismatches | **Partial** | Normal playlist, artist, and podcast update paths account for relay-scoped keys; Home-session keys and consistency still need review. |
 | Library-read relay completeness | **Done** | Per-relay EOSE coverage is reported, incomplete results are surfaced, and the reviewed library reads retain the newest known revisions. Relay data can still be missing or stale. |
 | URL validation and iframe origins | **Open** | Stream URLs are HTTPS-validated but arbitrary HTTPS hosts can still be embedded; CSP allows HTTPS frames. |
-| Replaceable-event selection | **Partial** | The named library and profile reads, friend status and inbox lookups, audiobook remote selection, and several profile and notification reads now use the NIP-01 tie-break. Settings sync, TuneStr revisions, and public follower discovery still need work. |
+| Replaceable-event selection | **Done** | The specifically identified settings, TuneStr, follower, profile and library paths now reconcile revisions using the NIP-01 tie-break. Relay completeness and controlled-conflict validation remain limitations; this is not a proof of app-wide coverage. |
 | Concurrent replaceable-list writes | **Partial** | Public library writes now use local coordination, relay reconciliation, and delivery warnings; cross-device conflicts remain possible and authenticated testing is outstanding. |
 | Playback edge cases and tests | **Open** | The Next button can still be activated at the queue end; no focused player test file was found. |
 | Accessibility consistency | **Open** | Some asynchronous placeholders still use labels without a live status; a broader accessibility check remains. |
@@ -67,7 +68,7 @@ Further review should consider application-specific replay, ordering, timestamp 
 
 `src/hooks/useListeningSharing.ts`, `src/components/music/ListeningStatusSync.tsx`, and `src/pages/SettingsPage.tsx` communicate pending, published, and failed clear results. Settings says that sharing is off locally while an earlier public status may remain visible, and warns that relays and clients can retain older copies. This addresses the original UI recommendation; acceptance by the configured publisher is not proof that every relay erased a prior status.
 
-### 5. Replaceable-event selection — Partial
+### 5. Replaceable-event selection — Done for the identified paths, with limitations
 
 The shared comparator in `src/lib/libraryQuery.ts` selects the newest timestamp and, on a tie, the lexically lowest event ID. Coordinate selection checks author and kind, and for addressable events the first `d` tag. Library reconciliation keeps whole signed revisions and can consider recent local public writes.
 
@@ -76,7 +77,13 @@ The shared comparator in `src/lib/libraryQuery.ts` selects the newest timestamp 
 - Remote profile privacy and the public followed-people view reconcile the same coordinate and observe the shared revision; friend library playlist, album, artist, and people selection and music-status reads apply the tie-break with author/kind/identifier checks. Followed-artist display reads now request up to 20 candidates per relay instead of one.
 - Private audiobook remote selection uses the same tie-break without placing decrypted data in the public revision cache. NIP-17 inbox-relay and Nostr follow lookups, direct-message relay selection, notification follow sets, account and author metadata, and publisher metadata also select matching revisions consistently.
 
-**Remaining:** `NostrSync.tsx` still uses timestamp-only or first-result selection for NIP-65 and Blossom settings; fixing cached equal-timestamp revisions needs care not to overwrite local Blossom edits. TuneStr's kind-30311 stream discovery currently selects playable parsed revisions by timestamp, and public follower discovery starts from a `#p` query that can return an older follow without seeing a newer unfollow. These paths need their own coordinate-aware review, including pagination and local-settings behavior. The current changes have not established app-wide consistency. No client can retrieve versions that responding relays do not supply, and finite query limits may still omit candidates.
+**Follow-up implemented:**
+
+- NIP-65 and Blossom sync select matching author/kind revisions with the same tie-break and retain event IDs for later comparisons. Local Blossom edits are marked and are not overwritten by background reads. Legacy lists whose source is unknown are preserved conservatively when they differ from the published list. Settings provides an explicit, confirmed option to replace the local list with a published list; if no list is returned or settings change during the lookup, the local list is kept. A publish does not discard edits made while signing.
+- TuneStr rechecks discovered kind-30311 coordinates by author and identifier without the original topic or time filter. It selects the latest revision before parsing, including across loaded pages, so a received unplayable replacement can suppress an older playable revision. Missing responses and bounded lookups are reported as potentially incomplete.
+- Public follower discovery treats `#p` results as candidates, then queries their current author-constrained follow sets without `#p`. It reconciles cached revisions and retains previously known followers when there is no evidence of an unfollow; partial or unconfirmed results show a warning and retry control.
+
+**Limits:** Relays can omit newer events, apply limits, or return stale versions even after EOSE; neither follower lists nor TuneStr results are guaranteed complete. TuneStr coordinate checks are limited to 250 authors per batch, add a second relay request, and do not discover an event absent from the initial filters. The Blossom list is device-local when edited, including across account switches, until explicitly published or replaced; the explicit replacement uses only responding relays. Cross-tab coordination and real signer/account-switch races have not been fully tested. These changes address the reviewed paths, not every possible replaceable-event use in the app.
 
 ### 6. Concurrent replaceable-list writes — Partial
 
@@ -102,7 +109,7 @@ The shared comparator in `src/lib/libraryQuery.ts` selects the newest timestamp 
 
 ### 8. TuneStr query fan-out — Review
 
-`useTunestrStreams.ts` sends four filters to each selected and recommended relay, refreshes every 60 seconds while enabled, and tracks failed relays. Check actual request volume, slow and partially responding relay behavior, and pagination before choosing limits or deduplication changes. This is a performance investigation, not a measured defect in this audit.
+`useTunestrStreams.ts` sends four discovery filters to each selected and recommended relay, then sends a bounded author/identifier lookup for discovered stream revisions. It refreshes every 60 seconds while enabled and reports failed or unconfirmed lookups. Measure the added request volume, slow and partially responding relay behavior, and pagination before changing limits or deduplication. This is a performance investigation, not a measured defect in this audit.
 
 ### 9. External data validation — Partial
 
@@ -160,3 +167,4 @@ Browser checks with simulated relay responses exercised complete, delayed, and f
 - For library-write commit `25f6865`, `tsc --noEmit` and Shakespeare's `build_project` passed. The signed-out library and like flows rendered in preview. Authenticated writes, relay failures, and cross-device conflicts were not exercised. `npm test` and a direct Vitest attempt could not run because the necessary commands/packages were unavailable in that environment.
 - The library-read update was checked with simulated relay responses in the preview and a temporary signed-in preview account for partial notices, privacy controls, and retry controls. `tsc --noEmit` and Shakespeare's build passed. `npm test` and a direct Vitest attempt could not run because `npm` and Vitest are unavailable in this environment. No live cross-device conflict test or automated test suite was performed for this update; see the library-completeness section for the checks and their limits.
 - For the replaceable-event selection update, `tsc --noEmit` and Shakespeare's build passed. A public profile loaded from live relay responses in preview, including its followed people and playlists, and expanding a playlist worked. The preview did not verify same-second competing events or authenticated signer flows. `npm test` could not run because `npm` is unavailable; direct Vitest was also unavailable.
+- For the settings, stream, and follower follow-up, `tsc --noEmit` and Shakespeare's build passed. The preview showed a local Blossom edit surviving reload, and kept the list when no published list was found. Live TuneStr results and an older-recording batch rendered, and the public follower view displayed its partial-result warning and retry control. A temporary browser check of the actual TuneStr merge helper passed for timestamp ties across pages, a newer unplayable replacement, and separate authors; the temporary harness was removed. The preview did not simulate competing relay responses for followers or settings, or exercise a real signer, cross-tab edits, or account switches. `npm test` and Vitest remain unavailable in this environment.

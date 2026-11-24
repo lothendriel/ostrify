@@ -7,14 +7,21 @@ export interface RelayMetadata {
   relays: { url: string; read: boolean; write: boolean }[];
   /** Unix timestamp of when the relay list was last updated */
   updatedAt: number;
+  /** ID of the cached signed NIP-65 event, when known. */
+  eventId?: string;
 }
 
 /** Blossom server list metadata (BUD-03 / kind 10063), mirroring RelayMetadata for parity. */
 export interface BlossomServerMetadata {
   /** Ordered list of Blossom server URLs (most trusted/reliable first per BUD-03). */
   servers: string[];
-  /** Unix timestamp of when the server list was last updated (from kind 10063 created_at). */
+  /** Unix timestamp of the latest saved local or published change. */
   updatedAt: number;
+  /** Signed revision and author, when this list came from Nostr. */
+  eventId?: string;
+  pubkey?: string;
+  /** Unsynced edits must not be overwritten by background relay reads. */
+  isLocal?: boolean;
 }
 
 export interface AppConfig {

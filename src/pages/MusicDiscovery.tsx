@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { TrackList } from '@/components/music/TrackList';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMusicDiscovery } from '@/hooks/useMusicDiscovery';
-import { useTunestrStreams, type TunestrStream } from '@/hooks/useTunestrStreams';
+import { mergeTunestrPages, useTunestrStreams, type TunestrStream } from '@/hooks/useTunestrStreams';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
 import { Input } from '@/components/ui/input';
@@ -81,14 +81,7 @@ export default function MusicDiscovery() {
   const filteredTracks = matchingTracks;
   const latest = feed.data?.pages.at(-1);
   const failed = latest?.failed ?? [];
-  const tunedStreams = useMemo(() => {
-    const unique = new Map<string, TunestrStream>();
-    for (const stream of tunestr.data?.pages.flatMap(page => page.streams) ?? []) {
-      const existing = unique.get(stream.id);
-      if (!existing || existing.createdAt < stream.createdAt) unique.set(stream.id, stream);
-    }
-    return [...unique.values()].sort((left, right) => right.createdAt - left.createdAt);
-  }, [tunestr.data]);
+  const tunedStreams = useMemo(() => mergeTunestrPages(tunestr.data?.pages ?? []), [tunestr.data]);
   const liveStreams = tunedStreams.filter(stream => stream.isLive);
   const recordings = tunedStreams.filter(stream => !stream.isLive);
   const visibleRecordings = recordings.slice(0, visibleRecordingCount);
@@ -153,7 +146,7 @@ export default function MusicDiscovery() {
           <div><p className="text-sm text-muted-foreground">NIP-53 streams and recordings published on Nostr. A Cloudflare HLS manifest is video, so it must play in a video player; the raw .m3u8 URL is not a normal web page.</p></div>
           {!supportedRelayCount && <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Add read relays in Settings to discover TuneStr shows.</div>}
           {tunestr.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">TuneStr shows couldn’t be loaded. <button className="underline" onClick={() => void tunestr.refetch()}>Try again</button></div>}
-          {tunestr.data?.pages.flatMap(page => page.failed).length ? <p className="text-sm text-muted-foreground">Some relays didn’t respond. Results from the relays that did respond are shown.</p> : null}
+          {tunestr.data?.pages.some(page => page.failed.length > 0 || page.unconfirmed) ? <p role="status" className="text-sm text-muted-foreground">Some relays or current stream revisions could not be checked. Results may be incomplete or out of date.</p> : null}
 
           <section aria-labelledby="tunestr-live-heading" className="space-y-4">
             <div><h2 id="tunestr-live-heading" className="text-2xl font-bold">Live streams</h2><p className="text-sm text-muted-foreground">Currently live TuneStr shows.</p></div>

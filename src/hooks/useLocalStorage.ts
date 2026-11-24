@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * Generic hook for managing localStorage state
@@ -24,9 +24,13 @@ export function useLocalStorage<T>(
     }
   });
 
+  // Event handlers and asynchronous queries may update before React re-renders.
+  // Keep their functional updates based on the latest value, not a stale closure.
+  const stateRef = useRef(state);
   const setValue = (value: T | ((prev: T) => T)) => {
     try {
-      const valueToStore = value instanceof Function ? value(state) : value;
+      const valueToStore = value instanceof Function ? value(stateRef.current) : value;
+      stateRef.current = valueToStore;
       setState(valueToStore);
       localStorage.setItem(key, serialize(valueToStore));
     } catch (error) {
@@ -39,7 +43,9 @@ export function useLocalStorage<T>(
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === key && e.newValue !== null) {
         try {
-          setState(deserialize(e.newValue));
+          const next = deserialize(e.newValue);
+          stateRef.current = next;
+          setState(next);
         } catch (error) {
           console.warn(`Failed to sync ${key} from localStorage:`, error);
         }

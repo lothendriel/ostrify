@@ -20,12 +20,16 @@ const RelayMetadataSchema = z.object({
     write: z.boolean(),
   })),
   updatedAt: z.number(),
+  eventId: z.string().regex(/^[0-9a-f]{64}$/).optional(),
 }) satisfies z.ZodType<RelayMetadata>;
 
 // Zod schema for BlossomServerMetadata validation
 const BlossomServerMetadataSchema = z.object({
   servers: z.array(z.url()),
   updatedAt: z.number(),
+  eventId: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  pubkey: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  isLocal: z.boolean().optional(),
 }) satisfies z.ZodType<BlossomServerMetadata>;
 
 // Zod schema for AppConfig validation

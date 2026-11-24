@@ -129,7 +129,7 @@ function isPublicPageQueryKey(queryKey: QueryKey): boolean {
     return isStringArray(subtype) && subtype.length <= 200 && subtype.every(pubkey => /^[0-9a-f]{64}$/i.test(pubkey)) && id === undefined && extra === undefined && queryKey.length === 2;
   }
   if (scope === "tunestr-live-streams") {
-    return hasSafeRelayKey(subtype) && id === undefined && extra === undefined && queryKey.length === 2;
+    return hasSafeRelayKey(subtype) && id === "v2" && extra === undefined && queryKey.length === 3;
   }
   if (scope === "ostrify-public-playlists") {
     return hasSafeRelayKey(subtype) && id === "" && extra === undefined && queryKey.length === 3;

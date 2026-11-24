@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
@@ -9,6 +9,7 @@ import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
 import { getUserRelayUrls, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 import { isOriginalSoundTitle, type Track } from '@/lib/music';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
+import { isNewerReplaceableEvent, reconcileLibraryEvent } from '@/lib/libraryQuery';
 
 const STREAM_PUBKEYS = [TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY];
 // Match TuneStr's stream page topic filters (tags are case-sensitive at relays).
@@ -58,6 +59,31 @@ function streamPlaybackUrl(url: string): string {
 
 function tagValue(event: { tags: string[][] }, name: string): string | undefined {
   return event.tags.find(([key]) => key === name)?.[1];
+}
+
+function streamCoordinate(event: NostrEvent): string | undefined {
+  const d = tagValue(event, 'd');
+  return event.kind === 30311 && /^[0-9a-f]{64}$/.test(event.pubkey) && d ? `${event.pubkey}:${d}` : undefined;
+}
+
+/** Select addressable revisions before parsing, including non-playable replacements. */
+export function mergeTunestrPages(pages: { streams: TunestrStream[]; revisions: NostrEvent[] }[]): TunestrStream[] {
+  const revisions = new Map<string, NostrEvent>();
+  const n94 = new Map<string, TunestrStream>();
+  for (const page of pages) {
+    for (const stream of page.streams) if (stream.format === 'n94') n94.set(stream.id, stream);
+    for (const event of page.revisions) {
+      const coordinate = streamCoordinate(event);
+      if (!coordinate) continue;
+      const previous = revisions.get(coordinate);
+      if (!previous || isNewerReplaceableEvent(event, previous)) revisions.set(coordinate, event);
+    }
+  }
+  const streams = [...revisions.values()].flatMap(event => {
+    const stream = parseTunestrStreamEvent(event);
+    return stream ? [stream] : [];
+  });
+  return [...n94.values(), ...streams].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function parseN94Stream(event: NostrEvent): TunestrStream | null {
@@ -161,6 +187,7 @@ export function parseTunestrStreamEvent(event: NostrEvent): TunestrStream | null
 
 export function useTunestrStreams(enabled = true) {
   const { nostr } = useNostr();
+  const client = useQueryClient();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const relays = [...new Set([
@@ -171,7 +198,7 @@ export function useTunestrStreams(enabled = true) {
   const relayKey = relays.join('|');
 
   return useInfiniteQuery({
-    queryKey: ['tunestr-live-streams', relayKey],
+    queryKey: ['tunestr-live-streams', relayKey, 'v2'],
     initialPageParam: undefined as number | undefined,
     enabled: enabled && relays.length > 0,
     retry: false,
@@ -209,22 +236,55 @@ export function useTunestrStreams(enabled = true) {
 
       const discoveredEvents = [...new Map(responses.filter(response => response.relay !== OSTRIFY_RELAY_URL).flatMap(response => response.events).map(event => [event.id, event])).values()];
       captureDiscoveredAudioEvents(nostr, discoveredEvents, user?.pubkey);
-      const byAddress = new Map<string, TunestrStream>();
+      const coordinates = new Map<string, { pubkey: string; d: string }>();
       for (const event of discoveredEvents) {
-        const stream = event.kind === 1053 ? parseN94Stream(event) : parseTunestrStreamEvent(event);
-        if (!stream) continue;
-        const address = stream.format === 'n94' ? stream.id : `${stream.track.pubkey}:${tagValue(event, 'd')}`;
-        const previous = byAddress.get(address);
-        if (!previous || previous.createdAt < stream.createdAt) byAddress.set(address, stream);
+        const address = streamCoordinate(event);
+        const d = tagValue(event, 'd');
+        if (address && d) coordinates.set(address, { pubkey: event.pubkey, d });
       }
-
-      const streams = [...byAddress.values()].sort((a, b) => Number(b.isLive) - Number(a.isLive) || b.createdAt - a.createdAt);
+      // Re-query discovered coordinates without topical or time filters: a newer
+      // update may have dropped those tags or changed status to unplayable.
+      const byAuthor = new Map<string, string[]>();
+      for (const { pubkey, d } of coordinates.values()) byAuthor.set(pubkey, [...(byAuthor.get(pubkey) ?? []), d]);
+      const authors = [...byAuthor.entries()];
+      const selected = authors.slice(0, 250);
+      const filters = selected.map(([author, identifiers]) => ({ kinds: [30311], authors: [author], '#d': identifiers, limit: Math.max(20, identifiers.length * 10) }));
+      let unconfirmed = authors.length > selected.length;
+      const checkedEvents: NostrEvent[] = [];
+      if (filters.length) {
+        await Promise.all(responses.filter(response => response.ok && response.relay !== OSTRIFY_RELAY_URL).map(async ({ relay }) => {
+          try {
+            checkedEvents.push(...await nostr.relay(relay).query(filters, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) }));
+          } catch (error) {
+            if (signal.aborted) throw error;
+            unconfirmed = true;
+            if (!failed.includes(relay)) failed.push(relay);
+          }
+        }));
+      }
+      const checkedCoordinates = new Set(checkedEvents.map(streamCoordinate).filter((value): value is string => !!value && coordinates.has(value)));
+      if ([...coordinates.keys()].some(address => !checkedCoordinates.has(address))) unconfirmed = true;
+      const latest = new Map<string, NostrEvent>();
+      for (const event of [...discoveredEvents, ...checkedEvents]) {
+        const address = streamCoordinate(event);
+        if (!address || !coordinates.has(address)) continue;
+        const previous = latest.get(address);
+        if (!previous || isNewerReplaceableEvent(event, previous)) latest.set(address, event);
+      }
+      const revisions = [...coordinates].flatMap(([address, { pubkey, d }]) => {
+        const event = reconcileLibraryEvent(client, pubkey, 30311, d, [latest.get(address)]);
+        return event ? [event] : [];
+      });
+      const streams = discoveredEvents.flatMap(event => {
+        const stream = event.kind === 1053 ? parseN94Stream(event) : null;
+        return stream ? [stream] : [];
+      });
       const allEvents = responses.filter(response => response.relay !== OSTRIFY_RELAY_URL).flatMap(response => response.events);
       const oldest = allEvents.reduce<number | undefined>((cursor, event) => cursor === undefined || event.created_at < cursor ? event.created_at : cursor, undefined);
       const next = typeof until === 'number'
         ? oldest === undefined ? undefined : Math.max(0, oldest - 1)
         : Math.floor(Date.now() / 1000) - RECORDING_RECENT_WINDOW_SECONDS - 1;
-      return { streams, failed, next, rawCount: allEvents.length, isRecentPage: typeof until !== 'number' };
+      return { streams, revisions, failed, unconfirmed, next, rawCount: allEvents.length, isRecentPage: typeof until !== 'number' };
     },
     getNextPageParam: (page, pages) => {
       // Always offer one older-than-recent query, even if the recent query was
