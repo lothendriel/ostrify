@@ -1,70 +1,118 @@
 # Ostrify Code Audit
 
-**Scope:** Read-only review of the project structure and representative application code, with particular attention to Nostr data handling, playback, persistence, API requests, security, accessibility, and maintainability. No application code was changed for this audit.
+**Re-audited:** 2026-11-24 against commit `305d88a` (before this report update).
 
-## Highest-priority suggestions
+**Scope:** A targeted, read-only review of the previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a live relay, signer, cross-device, accessibility, or performance test. Statuses describe what the code currently shows; they do not establish when a change was made or guarantee behavior in every environment. No application code was changed for this audit.
 
-### 1. Tighten URL validation and iframe origins
+**Status key:** **Done** = the specific earlier recommendation is present in the reviewed code; **Partial** = some improvements are present but meaningful follow-up remains; **Open** = the issue or recommendation remains; **Review** = an opportunity requiring measurement or broader verification rather than a confirmed defect.
 
-`src/lib/sanitize.ts` accepts any absolute HTTPS URL, while several components use remote URLs without calling it. The clearest concern is `src/pages/MusicDiscovery.tsx`, which renders an event-derived stream URL in an iframe. Validate the URL and allowlist supported embed hosts before rendering it. Apply the same URL policy consistently to event- and catalog-sourced images and links.
+## Previous findings: status at a glance
 
-The Content Security Policy in `index.html` currently permits `frame-src https:`. Where practical, restrict frames to the providers the app actually embeds. URL validation and a narrower CSP provide complementary defenses.
+| Previous finding | Status | Summary |
+| --- | --- | --- |
+| Listening status clearing feedback | **Done** | Settings distinguishes local opt-out, pending, success, and failure, and warns about retained copies. |
+| NIP-17 validation | **Partial** | Wrap, seal, rumor, author, timestamp structure, and relevant tags are checked; further protocol and replay review is worthwhile. The old recommendation to match seal and wrapper authors was incorrect. |
+| NIP-17 sync cost | **Partial** | Processed wrap IDs are cached during the query-cache lifetime, but initial decryptions and retries can still be expensive. |
+| External catalog validation | **Partial** | The specifically cited audiobook covers and metadata now have meaningful checks; other catalog paths still need a systematic review. |
+| Notification baseline and polling | **Partial** | The UI mentions device-local storage and known followers are retained across refreshes. Initial omissions and polling costs still merit review. |
+| Cache-key mismatches | **Partial** | Normal playlist, artist, and podcast update paths account for relay-scoped keys; Home-session keys and consistency still need review. |
+| URL validation and iframe origins | **Open** | Stream URLs are HTTPS-validated but arbitrary HTTPS hosts can still be embedded; CSP allows HTTPS frames. |
+| Replaceable-event selection | **Open** | Several paths still sort only by timestamp; followed-artist reads still use `limit: 1` per relay. |
+| Concurrent replaceable-list writes | **Open** | Some read or cache safeguards exist, but concurrent writes can still overwrite each other. |
+| Playback edge cases and tests | **Open** | The Next button can still be activated at the queue end; no focused player test file was found. |
+| Accessibility consistency | **Open** | Some asynchronous placeholders still use labels without a live status; a broader accessibility check remains. |
+| NIP-19 destinations | **Open** | Note, event, and addressable-event routes still show placeholders. |
+| Duplicate podcast read-relay check | **Open** | The duplicate guard is still present. |
+| JSX maintainability | **Review** | Long, compressed JSX remains in several components. |
+| TuneStr request cost | **Review** | Per-relay multi-filter queries remain; performance and partial-result behavior need measurement. |
 
-### 2. Review NIP-17 friend-message validation and sync costs
+## Detailed findings and recommendations
 
-`src/hooks/useFriends.ts` verifies the seal signature and rumor event hash, but `unwrapMessage()` does not explicitly check the seal author against the outer gift-wrap author or validate the rumor timestamp and complete expected tag structure. Review the NIP-17 validation and replay assumptions, add the appropriate checks, and document those rules.
+### 1. URL validation and iframe origins — Open
 
-The hook may query up to 500 gift wraps and decrypt them sequentially every 30 seconds. This can create significant work and repeated interactive signer prompts. Profile this path and consider incremental synchronization or a smaller bounded strategy.
+`src/hooks/useTunestrStreams.ts` applies `sanitizeUrl()` to event-sourced streaming and recording URLs, and also sanitizes stream images. However, `streamPlaybackUrl()` returns other HTTPS URLs unchanged, and `src/components/music/TunestrPlayer.tsx` loads those URLs in an iframe without a host allowlist. A publicly supplied music-tagged stream can therefore cause an arbitrary HTTPS page to be embedded. The earlier report located the iframe in `MusicDiscovery.tsx`; it is now in `TunestrPlayer.tsx`.
 
-### 3. Clarify whether listening activity was actually cleared
+`index.html` still permits `frame-src 'self' https:`. Consider an explicit set of supported embed hosts, a safe external-link fallback for unsupported providers, and a correspondingly narrower CSP after checking provider compatibility. Review event- and catalog-sourced URLs throughout the app rather than assuming every raw-looking render site lacks parse-time validation. `src/lib/sanitize.ts` allows HTTPS only; its comment incorrectly also mentions data images.
 
-`src/components/music/ListeningStatusSync.tsx` disables local sharing and attempts to publish an empty status, but logs a warning if publishing fails. The UI may still say activity is private even when a previously published status remains visible until expiration. Surface delivery failure and distinguish “sharing disabled on this device” from “status successfully cleared on relays.”
+### 2. NIP-17 friend-message validation — Partial; correction to prior audit
 
-### 4. Use consistent replaceable-event selection
+`src/hooks/useFriends.ts` now validates the outer wrap and seal signatures, kind and field shape, recipient and application tags, safe integer timestamps, an empty seal tag list, an unsigned kind-14 rumor, the rumor hash, and the **seal-to-rumor author match**. It checks that the current user participates in the rumor. These are meaningful improvements over the previous description.
 
-Several kind `30000` lookups select the latest event by timestamp only. NIP-01 defines an event-ID tie-break when timestamps match. This pattern appears in privacy, followed-artist, friend-library, and follow-list paths. A shared helper for selecting the latest replaceable event—with the tie-break and author checks—would avoid inconsistent results.
+**Correction:** The old audit suggested matching the seal author against the outer gift-wrap author. Do **not** add that check: NIP-17/NIP-59 use a one-time wrapper key, which normally differs from the sender's seal key. NIP-17 instead requires matching the seal author to the rumor author, which the code does.
 
-`useFollowedArtists()` requests `limit: 1` and sorts the returned result locally. If a relay returns an older copy, the client may not see the newest version. Consider querying and selecting the latest event robustly across configured read relays.
+Further review should consider application-specific replay, ordering, timestamp bounds, and malformed or adversarial messages without rejecting legitimate randomized wrapper timestamps or valid protocol behavior. This review did not prove a replay vulnerability.
 
-### 5. Protect replaceable-list writes from concurrent updates
+### 3. Friend inbox sync cost — Partial
 
-Playlist, podcast-favorite, followed-artist, and followed-people mutations read the current event and then publish a replacement. Concurrent changes from another tab or device can be overwritten. Consider serializing writes within the app and reconciling with the newest relay state before publishing. Make conflicts or uncertain delivery visible rather than silently losing changes.
+`useFriends.ts` still queries up to 500 gift wraps every 30 seconds and decrypts unseen wraps sequentially. It now remembers successfully processed wrap IDs in the TanStack Query cache, so repeated polls within that cache lifetime do not repeatedly decrypt the same wraps. Failed signer decryptions remain eligible for retry; initial loads, cache loss, and repeated failures may still prompt users or be costly. Measure with extension and remote signers, and consider bounded/incremental processing while accounting for NIP-17 randomized timestamps and potentially missed older events.
 
-## Other worthwhile improvements
+### 4. Listening activity clearing feedback — Done
 
-### Notifications and polling
+`src/hooks/useListeningSharing.ts`, `src/components/music/ListeningStatusSync.tsx`, and `src/pages/SettingsPage.tsx` communicate pending, published, and failed clear results. Settings says that sharing is off locally while an earlier public status may remain visible, and warns that relays and clients can retain older copies. This addresses the original UI recommendation; acceptance by the configured publisher is not proof that every relay erased a prior status.
 
-- `NotificationsBell.tsx` uses the initial observed follower set as its baseline, and stores notifications only on the current device. Relay omissions can make a previously known follower appear new later. Explain these limits in the UI and consider how to reduce false notifications.
-- The app invalidates broad query groups on focus and visibility changes, while some queries also poll periodically. Measure request volume and deduplicate refresh triggers, especially for mobile clients and slow relays.
-- TuneStr discovery fans out several filters across multiple relays per page. Review the request cost, limits, and behavior when only some relays respond.
+### 5. Replaceable-event selection — Open
 
-### External data validation
+`useProfilePrivacy.ts`, `useFollowedPeople.ts`, and `useFriendLibrary.ts` still select some kind-30000 events by timestamp only. NIP-01's event-ID tie-break should be applied consistently alongside kind, author, and `d`-tag checks. `useFollowedArtists.ts` still requests `limit: 1` per relay, although `queryLibraryEvents()` now queries multiple relays and can preserve cached artists when its result is incomplete. Review whether querying additional candidates and using a shared comparator improves convergence; no client can retrieve versions that no responding relay supplies.
 
-`src/hooks/usePodcasts.ts` performs useful runtime checks on Podcast Index and Fountain responses. Apply similarly thorough validation to other external catalog data, especially audiobook cover URLs and metadata before using them in `src` or `href` attributes.
+### 6. Concurrent replaceable-list writes — Open
 
-### Query cache keys
+`useFollowedPeople.ts` compares a fetched event with its cached event and rejects some same-second writes; podcast favorites and artist follows also query before publishing. Playlists, however, prefer a cached entry in `usePlaylists.ts`, and none of these read-then-publish flows can guarantee conflict-free updates across tabs or devices. Serialize local writes where appropriate, reconcile with recent relay state, and explain uncertain delivery or conflicts. Nostr relays do not provide an atomic compare-and-swap, so such safeguards cannot guarantee cross-device conflict prevention.
 
-Some cache writes use keys that differ from the full query keys. For example, playlist and followed-artist cache updates omit relay-key segments. Centralized query-key factories would make updates and invalidations easier to reason about and less error-prone.
+### 7. Notifications and polling — Partial / Review
 
-### Playback edge cases and tests
+`NotificationsPanel` says updates are saved only on this device. `NotificationsBell.tsx` retains the union of previously known followers, reducing the original risk that a temporarily missing *already-known* follower is repeatedly reported as new. An initially omitted follower may still appear new when discovered later; the initial baseline and incomplete relay results are not explained in the UI. Its follower query still polls every 60 seconds.
 
-`src/components/PlayerProvider.tsx` contains substantial queue, restore, and audio-element logic. It is a high-value target for focused tests covering restored empty queues, removing the current track, advancing at the end of a queue, rapid queue changes, and autoplay rejection. The “Next” button remains enabled at the end of a non-repeating queue, where pressing it has no effect; consider disabling it or defining clearer behavior.
+`useSavedAlbums.ts` separately invalidates on window focus, while other queries use focus refresh or periodic polling. The former audit's broad focus/visibility-invalidation characterization was not re-established across the current app. Measure real request volume and overlapping triggers before changing them.
 
-### Accessibility consistency
+### 8. TuneStr query fan-out — Review
 
-Some loading placeholders use `aria-label` on non-live containers, which may not be announced by assistive technology. Use `role="status"` or an appropriate `aria-live` region for meaningful asynchronous updates, and review small-text contrast in the dark theme. Continue checking keyboard access and focus indicators on dialogs, menus, and custom controls.
+`useTunestrStreams.ts` sends four filters to each selected and recommended relay, refreshes every 60 seconds while enabled, and tracks failed relays. Check actual request volume, slow and partially responding relay behavior, and pagination before choosing limits or deduplication changes. This is a performance investigation, not a measured defect in this audit.
 
-### Incomplete NIP-19 destinations
+### 9. External data validation — Partial
 
-`src/pages/NIP19Page.tsx` currently renders placeholders for note, event, and addressable-event identifiers. This may be intentional, but users opening shared NIP-19 links will reach incomplete views. Consider implementing those routes or giving them a clear, useful unsupported-content state.
+The earlier audiobook-specific recommendation is substantially addressed: `useLibriVox.ts` and `useGutenbergAudiobooks.ts` check response shape and identifiers, construct Internet Archive cover and audio URLs from validated identifiers, and sanitize the Gutenberg source URL; `AudiobookCover.tsx` sanitizes cover URLs before rendering. A broader review of other external catalog fields and URL sinks remains advisable; this audit did not establish that every catalog is fully validated.
 
-### Maintainability cleanup
+### 10. Query cache keys — Partial
 
-- `usePodcastFavoriteActions()` contains a duplicate `readRelayKey` check.
-- Several components contain very compressed, long JSX expressions. Formatting and extracting shared UI and query helpers would make future review and changes safer.
+`useFollowedArtists.ts` uses prefix-based `setQueriesData` for ordinary relay-scoped keys, `usePlaylists.ts` updates ordinary playlist keys with a relay-aware cache key and prefix updates, and `usePodcastFavoriteActions()` updates its full relay-aware key. Thus the old examples should not be treated as evidence that all writes simply omit relay keys.
+
+Home queries can instead be prefixed with `['home-session', scope, ...]` by `homeSessionQueryKey()`, while the normal playlist and artist update/invalidation prefixes start with `['playlists', ...]` or `['followed-artists', ...]`. Check whether those separate Home snapshots are intentionally stable or should be reconciled after mutations. Shared key factories and focused tests would make the intended scope clearer.
+
+### 11. Playback edge cases and tests — Open
+
+`src/components/PlayerProvider.tsx` handles queue restoration and autoplay rejection in several paths, but no focused player test file was found among the existing test files. Add coverage for restored empty queues, removing the active item, end-of-queue behavior, rapid updates, and rejected playback. `PlayerBar.tsx` disables Next only when no track is selected. At the end of a non-repeating, non-shuffled queue, `next()` sets playback to stopped rather than advancing; decide whether to disable the control or make this behavior clear. Shuffle, repeat, and autoplay should be considered before changing the button.
+
+### 12. Accessibility consistency — Open
+
+Some structured loading states still use `aria-label` on non-live containers, for example `FriendsActivitySheet.tsx`, `NostrCollections.tsx`, and `AudiobooksPage.tsx`. Other areas already use `role="status"` or `aria-live`. Review meaningful asynchronous announcements, keyboard navigation, focus indicators, and dark-theme text contrast with real assistive technology and contrast measurements; these were not tested here.
+
+### 13. NIP-19 destinations — Open
+
+`src/pages/NIP19Page.tsx` resolves `npub` and `nprofile`, but renders `Note placeholder`, `Event placeholder`, and `Addressable event placeholder` for the other supported identifier types. Implement appropriate content views or useful unsupported/not-found states. This does not mean Ostrify's separate `/audio` or `/listen` sharing routes are necessarily broken.
+
+### 14. Maintainability cleanup — Open / Review
+
+- The duplicate `if (!readRelayKey)` check remains in `src/hooks/usePodcasts.ts` inside `usePodcastFavoriteActions()`.
+- Long compressed JSX remains, for example in `MyUploadsManager.tsx` and `NotificationsBell.tsx`. Extracting focused helpers could make future review safer, but should be prioritized below functional and security work.
+
+## Additional observations from this review
+
+### Library completeness can overstate cross-relay coverage — Review
+
+`src/lib/libraryQuery.ts` sets `complete = true` when **one** relay sends EOSE, then gives other relays a 700 ms grace period. This means the flag indicates at least one completed response, not that all selected relays responded or that the newest version was retrieved. For example, `useFollowedArtists.ts` replaces its cached list when `complete` is true; a fast but stale or empty relay combined with a slow relay could make the displayed list temporarily lose entries. Consider reporting per-relay completion separately and making cache replacement decisions reflect the intended trade-off between speed and completeness. A live-relay reproduction was not performed.
+
+### Sharing metadata points to a different host — Review
+
+`index.html` hardcodes `og:url`, `og:image`, and `twitter:image` to an older-looking `shakespeare.to` host, while the README identifies `ostrify.studio314.us` and the project also has a `shakespeare.wtf` deployment URL. Confirm the intended canonical domain and that the image is publicly reachable before updating these tags. Social crawlers often rely on the initial HTML rather than client-side metadata; validate actual share previews after any change.
+
+### Chart helper uses injected CSS — Review
+
+`src/components/ui/chart.tsx` builds a `<style>` element with `dangerouslySetInnerHTML` from chart configuration. The search in this review found no current application use of `ChartContainer` outside the helper, so this is not an identified active event-data injection path. If used later, keep its IDs, color values, and configuration keys trusted or strictly validated; do not pass Nostr-sourced strings into CSS unchecked.
 
 ## Validation performed
 
-- TypeScript check: `tsc --noEmit` passed.
-- The full `npm test` script could not be run because `npm` is not available in the audit environment.
-- The working tree was clean at the start of the audit. No application code was modified.
+- Compared each previous finding to current source and reviewed NIP-17 and NIP-59 for the wrapper/seal author correction.
+- Static review only; no live signer, relay, multi-device, playback, screen-reader, or performance tests were performed.
+- `tsc --noEmit` passed.
+- Shakespeare's `build_project` completed successfully, and the Home page rendered in preview. No application UI was changed by this audit.
+- `npm test` could not run: `npm` is not available in this environment. Therefore the full test script, including ESLint and Vitest, was not verified.
