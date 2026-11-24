@@ -1,6 +1,6 @@
 # Ostrify Code Audit
 
-**Last updated:** 2026-11-24 after the relay/Blossom sync, TuneStr revision, and follower-discovery follow-up. The original re-audit reviewed commit `305d88a`; subsequent updates record the library-write, library-read, and selection changes.
+**Last updated:** 2026-11-24 after the playback hardening follow-up. The original re-audit reviewed commit `305d88a`; subsequent updates record library, event-selection, and playback changes.
 
 **Scope:** A targeted review of previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a comprehensive signer, cross-device, accessibility, or performance test. Statuses describe the reviewed implementation and its known limitations; completion of a relay query does not prove that a relay has all events.
 
@@ -9,7 +9,7 @@
 ## Remaining work, in priority order
 
 1. **Secure video embeds and review external URLs.** Restrict supported iframe hosts, provide a safe fallback, and review CSP and other untrusted URL sinks. See §1.
-2. **Harden playback.** Test and improve queue restoration, track removal, end-of-queue behavior, rapid changes, and autoplay rejection; clarify the Next button. See §11.
+2. **Finish playback verification.** The identified queue, restoration, end-of-queue, rapid-update, and rejected-playback paths were improved and exercised with simulated audio. Add automated regression coverage and verify real audio, autoplay, and browser/device differences. See §11.
 3. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
 4. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
 5. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
@@ -37,7 +37,7 @@
 | URL validation and iframe origins | **Open** | Stream URLs are HTTPS-validated but arbitrary HTTPS hosts can still be embedded; CSP allows HTTPS frames. |
 | Replaceable-event selection | **Done** | The specifically identified settings, TuneStr, follower, profile and library paths now reconcile revisions using the NIP-01 tie-break. Relay completeness and controlled-conflict validation remain limitations; this is not a proof of app-wide coverage. |
 | Concurrent replaceable-list writes | **Partial** | Public library writes now use local coordination, relay reconciliation, and delivery warnings; cross-device conflicts remain possible and authenticated testing is outstanding. |
-| Playback edge cases and tests | **Open** | The Next button can still be activated at the queue end; no focused player test file was found. |
+| Playback edge cases and tests | **Partial** | Queue transitions, restoration, Next, and rejected playback were hardened and checked with simulated audio. A focused automated player suite and broader real-device verification remain outstanding. |
 | Accessibility consistency | **Open** | Some asynchronous placeholders still use labels without a live status; a broader accessibility check remains. |
 | NIP-19 destinations | **Open** | Note, event, and addressable-event routes still show placeholders. |
 | Duplicate podcast read-relay check | **Done** | The duplicate guard was removed in the library-write update. |
@@ -121,9 +121,11 @@ The earlier audiobook-specific recommendation is substantially addressed: `useLi
 
 Home queries can instead be prefixed with `['home-session', scope, ...]` by `homeSessionQueryKey()`, while the normal playlist and artist update/invalidation prefixes start with `['playlists', ...]` or `['followed-artists', ...]`. Check whether those separate Home snapshots are intentionally stable or should be reconciled after mutations. Shared key factories and focused tests would make the intended scope clearer.
 
-### 11. Playback edge cases and tests — Open
+### 11. Playback edge cases and tests — Partial
 
-`src/components/PlayerProvider.tsx` handles queue restoration and autoplay rejection in several paths, but no focused player test file was found among the existing test files. Add coverage for restored empty queues, removing the active item, end-of-queue behavior, rapid updates, and rejected playback. `PlayerBar.tsx` disables Next only when no track is selected. At the end of a non-repeating, non-shuffled queue, `next()` sets playback to stopped rather than advancing; decide whether to disable the control or make this behavior clear. Shuffle, repeat, and autoplay should be considered before changing the button.
+**Implemented:** Queue operations use the latest queue and position rather than stale render snapshots. Removing the active track advances only to upcoming audio or clears the queue, and duplicate adjacent entries restart correctly. Restoring a queue skips invalid items, preserves the saved position while metadata is pending, and starts a fallback item paused if the saved active item is invalid. Playback attempts are tracked so a late rejection from an earlier track cannot change the new track’s state; a failed attempt displays a retry message and saves the paused state. User actions invalidate pending autoplay recommendations. Next is disabled when there is no next queue item, except when repeat-all or a multi-item shuffle can advance; automatic recommendations still wait for the track to end. A single-item shuffle no longer silently repeats without repeat-all.
+
+**Validation and remaining work:** A temporary browser harness with simulated audio exercised empty-queue restoration, recovery from an invalid active item, a queued update before restored metadata, rapid additions, removing the active item, duplicate-track transitions, repeat-all, end-of-queue Next, rejected playback, and a delayed rejection from a previous track. The harness was removed. Add a maintained automated player regression suite and verify real audio playback, natural endings, autoplay recommendations, restore behavior, and mobile browser restrictions on actual devices. The preview blocked a real media playback attempt, so it did not establish that live audio plays successfully in a normal browser.
 
 ### 12. Accessibility consistency — Open
 
@@ -168,3 +170,4 @@ Browser checks with simulated relay responses exercised complete, delayed, and f
 - The library-read update was checked with simulated relay responses in the preview and a temporary signed-in preview account for partial notices, privacy controls, and retry controls. `tsc --noEmit` and Shakespeare's build passed. `npm test` and a direct Vitest attempt could not run because `npm` and Vitest are unavailable in this environment. No live cross-device conflict test or automated test suite was performed for this update; see the library-completeness section for the checks and their limits.
 - For the replaceable-event selection update, `tsc --noEmit` and Shakespeare's build passed. A public profile loaded from live relay responses in preview, including its followed people and playlists, and expanding a playlist worked. The preview did not verify same-second competing events or authenticated signer flows. `npm test` could not run because `npm` is unavailable; direct Vitest was also unavailable.
 - For the settings, stream, and follower follow-up, `tsc --noEmit` and Shakespeare's build passed. The preview showed a local Blossom edit surviving reload, and kept the list when no published list was found. Live TuneStr results and an older-recording batch rendered, and the public follower view displayed its partial-result warning and retry control. A temporary browser check of the actual TuneStr merge helper passed for timestamp ties across pages, a newer unplayable replacement, and separate authors; the temporary harness was removed. The preview did not simulate competing relay responses for followers or settings, or exercise a real signer, cross-tab edits, or account switches. `npm test` and Vitest remain unavailable in this environment.
+- For playback hardening, `tsc --noEmit` and Shakespeare's build passed. The temporary simulated-audio browser checks described in §11 passed and the harness was removed. The actual player bar showed the failure/retry state when live media could not start in preview; successful real-media playback and mobile-device behavior remain unverified. `npm test` and direct Vitest could not run because npm and Vitest are unavailable.

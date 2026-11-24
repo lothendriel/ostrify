@@ -49,6 +49,7 @@ function PodcastShowLink({ track }: { track: Track }) {
 export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle: () => void; queueOpen?: boolean }) {
   const player = usePlayer();
   const { current } = player;
+  const canGoNext = !!current && (player.index < player.queue.length - 1 || player.repeat === "all" || (player.shuffle && player.queue.length > 1));
 
   const VolumeIcon = player.muted || player.volume === 0 ? VolumeX : player.volume < 0.5 ? Volume1 : Volume2;
 
@@ -63,7 +64,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
               <div className="min-w-0 flex-1 overflow-hidden">
                 <Link to={audioDetailPath(current)} className="block min-w-0 truncate text-ellipsis text-xs font-medium hover:underline sm:text-sm" aria-label={`View details for ${current.title}`} title={current.title}>{current.title}</Link>
                 <div className="truncate text-[11px] text-muted-foreground sm:text-xs">
-                  {current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
+                  {player.playbackError ? <span role="status" className="text-destructive" title={player.playbackError}>{player.playbackError}</span> : current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
                 </div>
               </div>
               {current.kind === 'music' && current.source !== 'tunestr' && <div className="hidden sm:flex items-center">
@@ -142,8 +143,9 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.next}
-            disabled={!current}
+            disabled={!canGoNext}
             aria-label="Next"
+            title={canGoNext ? "Next track" : player.autoplay && current?.kind === "music" ? "Similar music can start automatically when this track ends" : "No next track in the queue"}
             className="rounded-full size-10 text-muted-foreground hover:text-foreground sm:size-8"
           >
             <SkipForward className="size-5 fill-current" />

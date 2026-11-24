@@ -13,6 +13,8 @@ export interface PlayerState {
   /** The currently loaded track, if any. */
   current: Track | undefined;
   isPlaying: boolean;
+  /** An audio playback request was blocked or failed. */
+  playbackError?: string;
   /** Current playback position in seconds. */
   progress: number;
   /** Duration of current track in seconds. */
