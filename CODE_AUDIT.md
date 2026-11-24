@@ -1,10 +1,25 @@
 # Ostrify Code Audit
 
-**Re-audited:** 2026-11-24 against commit `305d88a` (before this report update).
+**Last updated:** 2026-11-24 against commit `25f6865` (before this report update). The original re-audit reviewed commit `305d88a`; this update records the subsequent library-write changes and their remaining limitations.
 
-**Scope:** A targeted, read-only review of the previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a live relay, signer, cross-device, accessibility, or performance test. Statuses describe what the code currently shows; they do not establish when a change was made or guarantee behavior in every environment. No application code was changed for this audit.
+**Scope:** A targeted, read-only review of the previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a live relay, signer, cross-device, accessibility, or performance test. Statuses describe what the code currently shows; they do not establish when a change was made or guarantee behavior in every environment. No application code was changed in this report update.
 
 **Status key:** **Done** = the specific earlier recommendation is present in the reviewed code; **Partial** = some improvements are present but meaningful follow-up remains; **Open** = the issue or recommendation remains; **Review** = an opportunity requiring measurement or broader verification rather than a confirmed defect.
+
+## Remaining work, in priority order
+
+1. **Secure video embeds and review external URLs.** Restrict supported iframe hosts, provide a safe fallback, and review CSP and other untrusted URL sinks. See §1.
+2. **Improve library-read completeness.** Distinguish a response from one relay from all selected relays responding, and prevent stale or partial display reads from incorrectly replacing useful cached data. See the library-completeness observation below.
+3. **Finish consistent replaceable-event selection.** Use the NIP-01 tie-break and author/identifier checks across the remaining read paths. The write reconciliation helper already uses the tie-break. See §5.
+4. **Harden playback.** Test and improve queue restoration, track removal, end-of-queue behavior, rapid changes, and autoplay rejection; clarify the Next button. See §11.
+5. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
+6. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
+7. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
+8. **Improve notification and relay transparency.** Explain notification limitations and measure polling and TuneStr relay request costs before optimizing. See §§7–8.
+9. **Finish external-data and sharing review.** Validate remaining catalog URL and metadata handling, then confirm the intended canonical domain and social sharing previews. See §9 and the sharing-metadata observation below.
+10. **Clean up cache-key and maintainability issues.** Review Home-session cache behavior, shared key helpers, and compressed JSX. The duplicate podcast guard is already fixed. See §§10 and 14.
+
+**Follow-up on library writes:** The requested safeguards have been implemented, but authenticated, cross-tab, and multi-device validation is still needed, and conflicts cannot be eliminated completely. Review private audiobook sync separately. See §6.
 
 ## Previous findings: status at a glance
 
@@ -17,12 +32,12 @@
 | Notification baseline and polling | **Partial** | The UI mentions device-local storage and known followers are retained across refreshes. Initial omissions and polling costs still merit review. |
 | Cache-key mismatches | **Partial** | Normal playlist, artist, and podcast update paths account for relay-scoped keys; Home-session keys and consistency still need review. |
 | URL validation and iframe origins | **Open** | Stream URLs are HTTPS-validated but arbitrary HTTPS hosts can still be embedded; CSP allows HTTPS frames. |
-| Replaceable-event selection | **Open** | Several paths still sort only by timestamp; followed-artist reads still use `limit: 1` per relay. |
-| Concurrent replaceable-list writes | **Open** | Some read or cache safeguards exist, but concurrent writes can still overwrite each other. |
+| Replaceable-event selection | **Partial** | Library-write reconciliation uses the NIP-01 timestamp and event-ID tie-break; several other read paths still sort only by timestamp. |
+| Concurrent replaceable-list writes | **Partial** | Public library writes now use local coordination, relay reconciliation, and delivery warnings; cross-device conflicts remain possible and authenticated testing is outstanding. |
 | Playback edge cases and tests | **Open** | The Next button can still be activated at the queue end; no focused player test file was found. |
 | Accessibility consistency | **Open** | Some asynchronous placeholders still use labels without a live status; a broader accessibility check remains. |
 | NIP-19 destinations | **Open** | Note, event, and addressable-event routes still show placeholders. |
-| Duplicate podcast read-relay check | **Open** | The duplicate guard is still present. |
+| Duplicate podcast read-relay check | **Done** | The duplicate guard was removed in the library-write update. |
 | JSX maintainability | **Review** | Long, compressed JSX remains in several components. |
 | TuneStr request cost | **Review** | Per-relay multi-filter queries remain; performance and partial-result behavior need measurement. |
 
@@ -50,13 +65,27 @@ Further review should consider application-specific replay, ordering, timestamp 
 
 `src/hooks/useListeningSharing.ts`, `src/components/music/ListeningStatusSync.tsx`, and `src/pages/SettingsPage.tsx` communicate pending, published, and failed clear results. Settings says that sharing is off locally while an earlier public status may remain visible, and warns that relays and clients can retain older copies. This addresses the original UI recommendation; acceptance by the configured publisher is not proof that every relay erased a prior status.
 
-### 5. Replaceable-event selection — Open
+### 5. Replaceable-event selection — Partial
 
-`useProfilePrivacy.ts`, `useFollowedPeople.ts`, and `useFriendLibrary.ts` still select some kind-30000 events by timestamp only. NIP-01's event-ID tie-break should be applied consistently alongside kind, author, and `d`-tag checks. `useFollowedArtists.ts` still requests `limit: 1` per relay, although `queryLibraryEvents()` now queries multiple relays and can preserve cached artists when its result is incomplete. Review whether querying additional candidates and using a shared comparator improves convergence; no client can retrieve versions that no responding relay supplies.
+The library-write reconciliation path in `src/lib/libraryQuery.ts` now selects the newest matching event using the NIP-01 timestamp and event-ID tie-break, with author, kind, and addressable identifier checks. Recent locally published public events can also be considered by the affected read paths.
 
-### 6. Concurrent replaceable-list writes — Open
+Other read paths are not yet consistent: `useProfilePrivacy.ts`, `useFollowedPeople.ts`'s initial relay selection, and `useFriendLibrary.ts` still select some kind-30000 events by timestamp only. `useFollowedArtists.ts` still requests `limit: 1` per relay for display reads. Apply the comparator consistently and review whether requesting additional candidates improves convergence. No client can retrieve versions that no responding relay supplies.
 
-`useFollowedPeople.ts` compares a fetched event with its cached event and rejects some same-second writes; podcast favorites and artist follows also query before publishing. Playlists, however, prefer a cached entry in `usePlaylists.ts`, and none of these read-then-publish flows can guarantee conflict-free updates across tabs or devices. Serialize local writes where appropriate, reconcile with recent relay state, and explain uncertain delivery or conflicts. Nostr relays do not provide an atomic compare-and-swap, so such safeguards cannot guarantee cross-device conflict prevention.
+### 6. Concurrent replaceable-list writes — Partial
+
+**Implemented in `25f6865`:**
+
+- Playlist and like changes, playlist deletion, artist and people follows, profile-section visibility, podcast favorites, and saved albums use a shared per-coordinate in-memory write queue. Where Web Locks are available, cooperating Ostrify tabs on the same origin also coordinate writes.
+- Before writing, `readLibraryForWrite()` queries the configured user-data read relays, requires at least one completed response, filters to the relevant author and kind, and considers valid recent locally published events and applicable cached events. It reports when some read relays did not finish. Same-second updates wait rather than deliberately publishing a future-dated replacement.
+- Playlist editing, reordering, and deletion check the revision the user saw; conflicting changes produce a refresh-and-retry error instead of silently overwriting that revision. Reordering also checks the track IDs.
+- `useLibraryPublish()` checks the signer account, sends to configured write relays individually, reports partial acceptance, and explains that a wholly unconfirmed update might still have reached a relay. The affected action UIs expose relevant errors. The app keeps a signed public last-write event locally to help cooperating tabs see it; no signer secret is stored there.
+- The duplicate podcast read-relay guard was removed.
+
+**Remaining limitations and work:**
+
+- Nostr has no atomic compare-and-swap. Other devices, browsers, clients, and tabs without Web Locks can still publish concurrent replacements. A read can be incomplete or become stale between checking and publishing. Some relay reads may be incomplete and the write can still proceed with a warning; an accepting relay may not retain the event.
+- Validate the safeguards with authenticated signers and controlled relays: simultaneous same-tab and cross-tab changes, delayed or missing relay responses, partial and unconfirmed writes, stale playlist edits and deletions, same-second updates, storage failure, and account switching. Also test real cross-device conflicts and clarify recovery where necessary. These scenarios have not been verified by the preview used for the implementation.
+- Private audiobook sync uses its separate `useAudiobookLibrarySync.ts` flow; it was not moved to this public-library write coordinator. Review its concurrent-update and deletion/merge behavior separately without storing decrypted private library content in the public-event cache.
 
 ### 7. Notifications and polling — Partial / Review
 
@@ -90,29 +119,29 @@ Some structured loading states still use `aria-label` on non-live containers, fo
 
 `src/pages/NIP19Page.tsx` resolves `npub` and `nprofile`, but renders `Note placeholder`, `Event placeholder`, and `Addressable event placeholder` for the other supported identifier types. Implement appropriate content views or useful unsupported/not-found states. This does not mean Ostrify's separate `/audio` or `/listen` sharing routes are necessarily broken.
 
-### 14. Maintainability cleanup — Open / Review
+### 14. Maintainability cleanup — Partial / Review
 
-- The duplicate `if (!readRelayKey)` check remains in `src/hooks/usePodcasts.ts` inside `usePodcastFavoriteActions()`.
+- **Done:** the duplicate `if (!readRelayKey)` check in `usePodcastFavoriteActions()` was removed in `25f6865`.
 - Long compressed JSX remains, for example in `MyUploadsManager.tsx` and `NotificationsBell.tsx`. Extracting focused helpers could make future review safer, but should be prioritized below functional and security work.
 
 ## Additional observations from this review
 
 ### Library completeness can overstate cross-relay coverage — Review
 
-`src/lib/libraryQuery.ts` sets `complete = true` when **one** relay sends EOSE, then gives other relays a 700 ms grace period. This means the flag indicates at least one completed response, not that all selected relays responded or that the newest version was retrieved. For example, `useFollowedArtists.ts` replaces its cached list when `complete` is true; a fast but stale or empty relay combined with a slow relay could make the displayed list temporarily lose entries. Consider reporting per-relay completion separately and making cache replacement decisions reflect the intended trade-off between speed and completeness. A live-relay reproduction was not performed.
+The fast display helper `queryLibraryEvents()` in `src/lib/libraryQuery.ts` still sets `complete = true` when **one** relay sends EOSE, then gives other relays a 700 ms grace period. This flag does not mean that all selected relays responded or that the newest version was retrieved. For example, `useFollowedArtists.ts` can replace its displayed list after a fast but stale or empty response; it now also considers a locally remembered recent write, but that does not cover every remote update.
+
+The new **write-specific** `readLibraryForWrite()` is separate: it waits up to four seconds per relay in parallel, requires at least one completed response, and reports partial responses. It still cannot prove it saw every remote update. Consider reporting per-relay completion for display queries too and making cache decisions reflect the intended trade-off between speed and completeness. A live-relay reproduction was not performed.
 
 ### Sharing metadata points to a different host — Review
 
-`index.html` hardcodes `og:url`, `og:image`, and `twitter:image` to an older-looking `shakespeare.to` host, while the README identifies `ostrify.studio314.us` and the project also has a `shakespeare.wtf` deployment URL. Confirm the intended canonical domain and that the image is publicly reachable before updating these tags. Social crawlers often rely on the initial HTML rather than client-side metadata; validate actual share previews after any change.
+`index.html` hardcodes `og:url`, `og:image`, and `twitter:image` to the Shakespeare deployment at `0171xlfg6yo0wjs9yhveno8onk4d56evm4dkxm6qq323hyigvhostrify.shakespeare.to`; the README also identifies `ostrify.studio314.us`. Confirm which domain should be canonical and that its image is publicly reachable before changing these tags. Social crawlers often rely on the initial HTML rather than client-side metadata; validate actual share previews after any change.
 
 ### Chart helper uses injected CSS — Review
 
 `src/components/ui/chart.tsx` builds a `<style>` element with `dangerouslySetInnerHTML` from chart configuration. The search in this review found no current application use of `ChartContainer` outside the helper, so this is not an identified active event-data injection path. If used later, keep its IDs, color values, and configuration keys trusted or strictly validated; do not pass Nostr-sourced strings into CSS unchecked.
 
-## Validation performed
+## Validation and review history
 
-- Compared each previous finding to current source and reviewed NIP-17 and NIP-59 for the wrapper/seal author correction.
-- Static review only; no live signer, relay, multi-device, playback, screen-reader, or performance tests were performed.
-- `tsc --noEmit` passed.
-- Shakespeare's `build_project` completed successfully, and the Home page rendered in preview. No application UI was changed by this audit.
-- `npm test` could not run: `npm` is not available in this environment. Therefore the full test script, including ESLint and Vitest, was not verified.
+- The original re-audit compared previous findings to source and reviewed NIP-17 and NIP-59 for the wrapper/seal author correction. Its review was static; it did not exercise live signers, relays, multiple devices, playback, screen readers, or performance.
+- For library-write commit `25f6865`, `tsc --noEmit` and Shakespeare's `build_project` passed. The signed-out library and like flows rendered in preview. Authenticated writes, relay failures, and cross-device conflicts were not exercised. `npm test` and a direct Vitest attempt could not run because the necessary commands/packages were unavailable in that environment.
+- This report update reviewed the changed source and commit. `tsc --noEmit` and Shakespeare's `build_project` passed, and Home rendered in preview. `npm test` could not run because `npm` is unavailable; no new authenticated or cross-device testing was performed.
