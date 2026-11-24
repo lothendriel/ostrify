@@ -27,7 +27,7 @@ export function LikeButton({ trackId, className, size = 18, collection }: LikeBu
       toast({ title: "Log in to like tracks", variant: "destructive" });
       return;
     }
-    toggleLike.mutate({ trackId, liked: !liked, playlistId, title: collectionTitle }, { onSuccess: () => toast({ title: liked ? `Removed from ${collectionTitle}` : `Added to ${collectionTitle}` }), onError: () => toast({ title: 'Could not save your like', description: 'Please check your relay connections and try again.', variant: 'destructive' }) });
+    toggleLike.mutate({ trackId, liked: !liked, playlistId, title: collectionTitle }, { onSuccess: () => toast({ title: liked ? `Removed from ${collectionTitle}` : `Added to ${collectionTitle}` }), onError: error => toast({ title: 'Could not save your like', description: error.message, variant: 'destructive' }) });
   };
 
   return (

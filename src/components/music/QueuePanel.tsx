@@ -52,7 +52,7 @@ export function QueuePanel({ open, onClose }: { open: boolean; onClose: () => vo
         });
         setChooserOpen(false);
       },
-      onError: () => toast({ title: 'Could not add queue to playlist', description: 'Check your relay connection and try again.', variant: 'destructive' }),
+      onError: error => toast({ title: 'Could not add queue to playlist', description: error.message, variant: 'destructive' }),
     });
   };
 

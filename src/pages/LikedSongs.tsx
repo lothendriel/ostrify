@@ -56,9 +56,9 @@ const LikedSongs = () => {
       }
     }
     if (nextTrackIds.length !== playlist.trackIds.length || nextTrackIds.every((id, index) => id === playlist.trackIds[index])) return;
-    reorderPlaylist.mutate({ playlistId: playlist.id, trackIds: nextTrackIds }, {
+    reorderPlaylist.mutate({ playlistId: playlist.id, trackIds: nextTrackIds, expectedEventId: playlist.event.id }, {
       onSuccess: () => toast({ title: "Liked Songs order saved" }),
-      onError: () => toast({ title: "Could not reorder Liked Songs", description: "Check your relay connection and try again.", variant: "destructive" }),
+      onError: error => toast({ title: "Could not reorder Liked Songs", description: error.message, variant: "destructive" }),
     });
   };
 

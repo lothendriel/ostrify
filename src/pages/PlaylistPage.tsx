@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { useSeoMeta } from "@unhead/react";
 import { ArrowDownAZ, Music, Pencil, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,9 +16,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { usePlaylist, usePlaylistActions, rememberPlaylistDeletion, type Playlist } from "@/hooks/usePlaylists";
+import { usePlaylist, usePlaylistActions } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
-import { useNostrPublish } from "@/hooks/useNostrPublish";
 import { useToast } from "@/hooks/useToast";
 import { CollectionHeader } from "@/components/music/CollectionHeader";
 import { TrackList } from "@/components/music/TrackList";
@@ -34,11 +32,9 @@ const PlaylistPage = () => {
   const { data: playlist, isLoading: playlistLoading } = usePlaylist(id);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
-  const { removeFromPlaylist, reorderPlaylist } = usePlaylistActions();
-  const { mutate: publish } = useNostrPublish();
+  const { removeFromPlaylist, reorderPlaylist, deletePlaylist } = usePlaylistActions();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [sort, setSort] = useState<PlaylistSort>("original");
@@ -64,7 +60,7 @@ const PlaylistPage = () => {
     if (!playlist) return;
     removeFromPlaylist.mutate(
       { playlistId: playlist.id, trackId: track.id },
-      { onSuccess: () => toast({ title: "Removed from playlist" }) },
+      { onSuccess: () => toast({ title: "Removed from playlist" }), onError: error => toast({ title: 'Could not update playlist', description: error.message, variant: 'destructive' }) },
     );
   };
 
@@ -84,39 +80,18 @@ const PlaylistPage = () => {
       }
     }
     if (nextTrackIds.length !== playlist.trackIds.length || nextTrackIds.every((id, index) => id === playlist.trackIds[index])) return;
-    reorderPlaylist.mutate({ playlistId: playlist.id, trackIds: nextTrackIds }, {
+    reorderPlaylist.mutate({ playlistId: playlist.id, trackIds: nextTrackIds, expectedEventId: playlist.event.id }, {
       onSuccess: () => toast({ title: "Playlist order saved" }),
-      onError: () => toast({ title: "Could not reorder playlist", description: "Check your relay connection and try again.", variant: "destructive" }),
+      onError: error => toast({ title: "Could not reorder playlist", description: error.message, variant: "destructive" }),
     });
   };
 
   const handleDelete = () => {
     if (!playlist) return;
-    // NIP-09 deletion request for the NIP-51 bookmark set.
-    publish(
-      {
-        kind: 5,
-        content: "Deleted playlist",
-        tags: [
-          ["a", `30003:${playlist.event.pubkey}:${playlist.id}`],
-          ["e", playlist.event.id],
-        ],
-      },
-      {
-        onSuccess: deletion => {
-          rememberPlaylistDeletion(playlist.event.pubkey, playlist.id, deletion.created_at);
-          void queryClient.setQueriesData<Playlist[]>(
-            { queryKey: ["playlists"] },
-            current => current?.filter(item => item.id !== playlist.id),
-          );
-          void queryClient.invalidateQueries({ queryKey: ["ostrify-public-playlists"] });
-          void queryClient.invalidateQueries({ queryKey: ["playlists"] });
-          toast({ title: "Playlist deleted" });
-          navigate("/");
-        },
-        onError: () => toast({ title: "Playlist deletion failed", description: "The playlist is still in your library. Please try again.", variant: "destructive" }),
-      },
-    );
+    deletePlaylist.mutate({ id: playlist.id, expectedEventId: playlist.event.id }, {
+      onSuccess: () => { toast({ title: "Playlist deletion requested" }); navigate("/"); },
+      onError: error => toast({ title: "Playlist deletion could not be confirmed", description: error.message, variant: "destructive" }),
+    });
   };
 
   if (!playlistLoading && !playlist) {

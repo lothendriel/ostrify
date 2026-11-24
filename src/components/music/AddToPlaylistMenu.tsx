@@ -65,7 +65,7 @@ export function AddToPlaylistMenu({ trackId, trigger, onCreateNew }: AddToPlayli
                   if (has) return;
                   addToPlaylist.mutate(
                     { playlistId: p.id, trackId },
-                    { onSuccess: () => toast({ title: `Added to ${p.title}` }) },
+                    { onSuccess: () => toast({ title: `Added to ${p.title}` }), onError: error => toast({ title: 'Could not update playlist', description: error.message, variant: 'destructive' }) },
                   );
                 }}
               >

@@ -6,8 +6,9 @@ import { eventToTrack, fountainShowGuid, parsePodcastEpisodeTrack, type Track } 
 import { sanitizeUrl } from "@/lib/sanitize";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
-import { useNostrPublish } from "@/hooks/useNostrPublish";
-import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { useLibraryPublish } from "@/hooks/useNostrPublish";
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, newestLibraryEvent, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { useToast } from '@/hooks/useToast';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { getUserDataReadRelays, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 import { homeSessionQueryKey } from '@/lib/homeSession';
@@ -1263,9 +1264,10 @@ export function usePodcastFavorites() {
         [{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }],
         AbortSignal.any([signal, AbortSignal.timeout(8000)]),
       );
-      const event = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND && item.tags.some(([name, value]) => name === "d" && value === "favorite-podcasts")).sort((a, b) => b.created_at - a.created_at)[0];
+      const recent = recentLibraryEvent(user.pubkey, PODCAST_FAVORITES_KIND, 'favorite-podcasts');
+      const event = newestLibraryEvent([...events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND), ...(recent ? [recent] : [])]);
       const current = parsePodcastFavorites(event);
-      if (!complete) {
+      if (!complete && !recent) {
         const cached = queryClient.getQueryData<PodcastFavorite[]>(queryKey) ?? [];
         const byId = new Map(cached.map(favorite => [favorite.id, favorite]));
         for (const favorite of current) byId.set(favorite.id, favorite);
@@ -1318,10 +1320,11 @@ export function findPodcastShowFavorite(show: PodcastShow, favorites: PodcastFav
 }
 
 export function usePodcastFavoriteActions() {
+  const { toast } = useToast();
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
-  const { mutateAsync: publish } = useNostrPublish();
+  const { mutateAsync: publish } = useLibraryPublish();
   const queryClient = useQueryClient();
   const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
   const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey];
@@ -1330,26 +1333,33 @@ export function usePodcastFavoriteActions() {
     mutationFn: async (input: { favorite: PodcastFavorite; saved: boolean }) => {
       if (!user) throw new Error("Log in to save podcasts");
       if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
-      if (!readRelayKey) throw new Error("Enable a read relay to refresh your saved podcasts.");
-      const events = await nostr.query([{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], '#d': ['favorite-podcasts'], limit: 10 }], { signal: AbortSignal.timeout(15000), relays: readRelayKey.split('|') });
-      const existing = events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND && item.tags.some(([name, value]) => name === "d" && value === "favorite-podcasts")).sort((a, b) => b.created_at - a.created_at)[0];
-      const current = parsePodcastFavorites(existing);
-      const has = current.some(item => item.id === input.favorite.id);
-      const next = input.saved
-        ? (has ? current : [...current, input.favorite])
-        : current.filter(item => item.id !== input.favorite.id);
-      const tags: string[][] = existing?.tags.filter(([name]) => name !== "p" && name !== "url" && name !== "ostrify" && name !== "ostrify-episode" && name !== "ostrify-show").map(tag => [...tag]) ?? [];
-      for (const favorite of next) {
-        if (favorite.source === "nostr" && favorite.pubkey) tags.push(["p", favorite.pubkey]);
-        else if (favorite.source === "podcast-index" && favorite.feedUrl && !favorite.episode) tags.push(["url", favorite.feedUrl]);
-        if (favorite.episode) tags.push(["ostrify-episode", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : "", favorite.episodeId ? String(favorite.episodeId) : ""]);
-        else tags.push(["ostrify-show", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.identity ?? (favorite.source === "nostr" ? `nostr:${favorite.pubkey ?? ""}` : favorite.source === "fountain" ? `fountain:${favorite.feedGuid ?? ""}` : favorite.feedUrl ?? ""), favorite.feedId ? String(favorite.feedId) : ""]);
-      }
-      tags.unshift(["d", "favorite-podcasts"]);
-      const event = await publish({ kind: PODCAST_FAVORITES_KIND, content: existing?.content ?? "", tags });
-      return parsePodcastFavorites(event);
+      return withLibraryWrite(user.pubkey, PODCAST_FAVORITES_KIND, 'favorite-podcasts', async () => {
+        const result = await readLibraryForWrite(nostr, readRelayKey.split('|'), user.pubkey, PODCAST_FAVORITES_KIND, 'favorite-podcasts');
+        const existing = result.event;
+        const current = parsePodcastFavorites(existing);
+        const has = current.some(item => item.id === input.favorite.id);
+        const next = input.saved
+          ? (has ? current : [...current, input.favorite])
+          : current.filter(item => item.id !== input.favorite.id);
+        const tags: string[][] = existing?.tags.filter(([name, value]) => !(name === 'd' && value === 'favorite-podcasts') && name !== "p" && name !== "url" && name !== "ostrify" && name !== "ostrify-episode" && name !== "ostrify-show").map(tag => [...tag]) ?? [];
+        for (const favorite of next) {
+          if (favorite.source === "nostr" && favorite.pubkey) tags.push(["p", favorite.pubkey]);
+          else if (favorite.source === "podcast-index" && favorite.feedUrl && !favorite.episode) tags.push(["url", favorite.feedUrl]);
+          if (favorite.episode) tags.push(["ostrify-episode", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.feedId ? String(favorite.feedId) : "", favorite.episodeId ? String(favorite.episodeId) : ""]);
+          else tags.push(["ostrify-show", favorite.id, favorite.title.slice(0, 300), favorite.publisher?.slice(0, 200) ?? "", favorite.image ?? "", favorite.identity ?? (favorite.source === "nostr" ? `nostr:${favorite.pubkey ?? ""}` : favorite.source === "fountain" ? `fountain:${favorite.feedGuid ?? ""}` : favorite.feedUrl ?? ""), favorite.feedId ? String(favorite.feedId) : ""]);
+        }
+        tags.unshift(["d", "favorite-podcasts"]);
+        const created_at = await nextLibraryTimestamp(existing?.created_at);
+        const event = await publish({ kind: PODCAST_FAVORITES_KIND, content: existing?.content ?? "", tags, created_at });
+        rememberLibraryWrite(event, 'favorite-podcasts');
+        const data = parsePodcastFavorites(event);
+        queryClient.setQueryData(queryKey, data);
+        const warning = libraryWriteWarning(result.partial);
+        if (warning) toast({ title: 'Library sync may be incomplete', description: warning });
+        return data;
+      });
     },
-    onSuccess: data => { if (user) queryClient.setQueryData(queryKey, data); },
+    onError: error => toast({ title: 'Could not save podcast', description: error.message, variant: 'destructive' }),
   });
 
   return { toggleFavorite, isReady: !!user };

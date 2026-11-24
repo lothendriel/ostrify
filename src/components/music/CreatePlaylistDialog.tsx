@@ -54,12 +54,13 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing, initialTrack
 
     if (isEditing) {
       updatePlaylist.mutate(
-        { id: editing.id, title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined, isListed },
+        { id: editing.id, expectedEventId: editing.event.id, title: title.trim(), description: description.trim() || undefined, image: image.trim() || undefined, isListed },
         {
           onSuccess: () => {
             toast({ title: "Playlist updated" });
             onOpenChange(false);
           },
+          onError: error => toast({ title: 'Could not update playlist', description: error.message, variant: 'destructive' }),
         },
       );
     } else {
@@ -74,6 +75,7 @@ export function CreatePlaylistDialog({ open, onOpenChange, editing, initialTrack
               navigate(`/playlist/${id}`);
             }
           },
+          onError: error => toast({ title: 'Could not create playlist', description: error.message, variant: 'destructive' }),
         },
       );
     }

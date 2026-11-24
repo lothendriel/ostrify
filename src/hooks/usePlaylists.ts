@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { useCurrentUser } from "./useCurrentUser";
 import { useAppContext } from "./useAppContext";
-import { useNostrPublish } from "./useNostrPublish";
+import { useLibraryPublish } from "./useNostrPublish";
 import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTrackUrl } from "./usePodcasts";
 import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, TUNESTR_FAVORITES_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { useToast } from './useToast';
-import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
 import { parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, rememberPlaylistVisibility, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
 import { getUserDataReadRelays } from '@/lib/appRelays';
 import { homeSessionQueryKey } from '@/lib/homeSession';
@@ -240,7 +240,7 @@ export function usePlaylistActions() {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
-  const { mutateAsync: publish } = useNostrPublish();
+  const { mutateAsync: publish } = useLibraryPublish();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -257,10 +257,13 @@ export function usePlaylistActions() {
     const previousPlaylist = id ? cachedPlaylists?.find(playlist => playlist.id === id) : undefined;
     const visibilityOverride = id ? readPlaylistVisibilityOverrides(user.pubkey)[`30003:${user.pubkey}:${id}`] : undefined;
     const previousTimestamp = Math.max(previousCreatedAt, previousPlaylist?.event.created_at ?? 0, visibilityOverride?.event.created_at ?? 0);
-    const event = await publish({ ...template, created_at: Math.max(Math.floor(Date.now() / 1000), previousTimestamp + 1) });
+    const created_at = await nextLibraryTimestamp(previousTimestamp);
+    const event = await publish({ ...template, created_at });
+    rememberLibraryWrite(event, id ?? '');
     await queryClient.cancelQueries({ queryKey: ['ostrify-public-playlists'] });
     const playlist = parsePlaylist(event);
     if (playlist) {
+      queryClient.setQueryData<Playlist[]>(cacheKey, current => [playlist, ...(current ?? []).filter(item => item.id !== playlist.id)]);
       queryClient.setQueriesData<Playlist[]>(
         { queryKey: ['playlists'], predicate: query => query.queryKey[0] === 'playlists' && query.queryKey[1] === user.pubkey },
         current => current ? [playlist, ...current.filter(item => item.id !== playlist.id)] : current,
@@ -279,149 +282,164 @@ export function usePlaylistActions() {
     return event;
   };
 
-  async function fetchExisting(id: string): Promise<Playlist | undefined> {
-    if (!user) return undefined;
-    // Prefer cache, fall back to network.
-    const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
-    const cached = queryClient.getQueryData<Playlist[]>(["playlists", user.pubkey, readRelayKey]);
-    const fromCache = cached?.find((p) => p.id === id);
-    if (fromCache) return fromCache;
-    const deletedAt = readPlaylistDeletionTombstones(user.pubkey)[playlistCoordinate(user.pubkey, id)];
-    if (deletedAt !== undefined) return undefined;
-    const events = await nostr.query(
-      [{ kinds: [PLAYLIST_KIND], authors: [user.pubkey], "#d": [id], limit: 1 }],
-      { signal: AbortSignal.timeout(4000) },
-    );
-    return events[0] ? parsePlaylist(events[0]) ?? undefined : undefined;
+  async function withPlaylistWrite<T>(id: string, action: (existing: Playlist | undefined) => Promise<T>): Promise<T> {
+    if (!user) throw new Error('Log in to change your library.');
+    return withLibraryWrite(user.pubkey, PLAYLIST_KIND, id, async () => {
+      const relays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user.pubkey, config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
+      const cached = queryClient.getQueryData<Playlist[]>(['playlists', user.pubkey, relays.join('|')])?.find(item => item.id === id);
+      const result = await readLibraryForWrite(nostr, relays, user.pubkey, PLAYLIST_KIND, id, cached?.event);
+      const deletedAt = readPlaylistDeletionTombstones(user.pubkey)[playlistCoordinate(user.pubkey, id)];
+      const existing = result.event && (deletedAt === undefined || result.event.created_at > deletedAt) ? parsePlaylist(result.event) ?? undefined : undefined;
+      const value = await action(existing);
+      const warning = libraryWriteWarning(result.partial);
+      if (warning) toast({ title: 'Library sync may be incomplete', description: warning });
+      return value;
+    });
   }
 
   const createPlaylist = useMutation({
     mutationFn: async (input: { title: string; description?: string; image?: string; id?: string; isListed?: boolean; trackIds?: string[] }) => {
       const id = input.id ?? `playlist-${crypto.randomUUID().slice(0, 8)}`;
-      const trackIds = [...new Set(input.trackIds ?? [])].filter(isSupportedPlaylistTrackId);
-      const event = buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds, isListed: input.isListed });
-      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event);
-      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
-      return id;
+      return withPlaylistWrite(id, async existing => {
+        if (existing) throw new Error('A playlist with this identifier already exists. Refresh and try again.');
+        const trackIds = [...new Set(input.trackIds ?? [])].filter(isSupportedPlaylistTrackId);
+        const event = buildPlaylistEvent({ id, title: input.title, description: input.description, image: input.image, trackIds, isListed: input.isListed });
+        if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+        await publishPlaylist(event);
+        void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+        return id;
+      });
     },
     onSuccess: invalidate,
   });
 
   const updatePlaylist = useMutation({
-    mutationFn: async (input: { id: string; title: string; description?: string; image?: string; isListed?: boolean }) => {
-      const existing = await fetchExisting(input.id);
-      if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
-      const playlist = {
-        event: existing.event,
-        id: input.id,
-        title: input.title,
-        description: input.description,
-        image: input.image,
-        trackIds: existing.trackIds,
-        isListed: input.isListed ?? existing.isListed,
-      };
-      const event = buildPlaylistEvent(playlist);
-      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event, existing.event.created_at);
-      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+    mutationFn: async (input: { id: string; title: string; description?: string; image?: string; isListed?: boolean; expectedEventId?: string }) => {
+      return withPlaylistWrite(input.id, async existing => {
+        if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
+        if (input.expectedEventId && existing.event.id !== input.expectedEventId) {
+          void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+          throw new Error('This playlist changed elsewhere. Refresh it before editing.');
+        }
+        const playlist = {
+          event: existing.event,
+          id: input.id,
+          title: input.title,
+          description: input.description,
+          image: input.image,
+          trackIds: existing.trackIds,
+          isListed: input.isListed ?? existing.isListed,
+        };
+        const event = buildPlaylistEvent(playlist);
+        if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+        await publishPlaylist(event, existing.event.created_at);
+        void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+      });
     },
     onSuccess: invalidate,
   });
 
   const addToPlaylist = useMutation({
     mutationFn: async (input: { playlistId: string; trackId: string }) => {
-      const existing = await fetchExisting(input.playlistId);
-      if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
-      const trackIds = existing.trackIds;
-      if (trackIds.includes(input.trackId)) return;
-      const playlist = {
-        event: existing.event,
-        id: input.playlistId,
-        title: existing.title,
-        description: existing?.description,
-        image: existing?.image,
-        trackIds: [...trackIds, input.trackId],
-        isListed: existing.isListed,
-      };
-      const event = buildPlaylistEvent(playlist);
-      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event, existing.event.created_at);
-      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+      return withPlaylistWrite(input.playlistId, async existing => {
+        if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
+        const trackIds = existing.trackIds;
+        if (trackIds.includes(input.trackId)) return;
+        const playlist = {
+          event: existing.event,
+          id: input.playlistId,
+          title: existing.title,
+          description: existing?.description,
+          image: existing?.image,
+          trackIds: [...trackIds, input.trackId],
+          isListed: existing.isListed,
+        };
+        const event = buildPlaylistEvent(playlist);
+        if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+        await publishPlaylist(event, existing.event.created_at);
+        void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+      });
     },
     onSuccess: invalidate,
   });
 
   const addTracksToPlaylist = useMutation({
     mutationFn: async (input: { playlistId: string; trackIds: string[] }) => {
-      const existing = await fetchExisting(input.playlistId);
-      if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
-      const uniqueTrackIds = [...new Set(input.trackIds)];
-      const supportedTrackIds = uniqueTrackIds.filter(isSupportedPlaylistTrackId);
-      const unsupportedCount = uniqueTrackIds.length - supportedTrackIds.length;
-      const trackIds = [...existing.trackIds];
-      const knownIds = new Set(trackIds);
-      for (const trackId of supportedTrackIds) {
-        if (knownIds.has(trackId)) continue;
-        knownIds.add(trackId);
-        trackIds.push(trackId);
-      }
-      const addedCount = trackIds.length - existing.trackIds.length;
-      const alreadyPresentCount = supportedTrackIds.length - addedCount;
-      if (addedCount === 0) return { addedCount, unsupportedCount, alreadyPresentCount };
-      const event = buildPlaylistEvent({
-        event: existing.event,
-        id: existing.id,
-        title: existing.title,
-        description: existing.description,
-        image: existing.image,
-        trackIds,
-        isListed: existing.isListed,
+      return withPlaylistWrite(input.playlistId, async existing => {
+        if (!existing) throw new Error('Playlist could not be loaded, so the edit was not published. Please retry.');
+        const uniqueTrackIds = [...new Set(input.trackIds)];
+        const supportedTrackIds = uniqueTrackIds.filter(isSupportedPlaylistTrackId);
+        const unsupportedCount = uniqueTrackIds.length - supportedTrackIds.length;
+        const trackIds = [...existing.trackIds];
+        const knownIds = new Set(trackIds);
+        for (const trackId of supportedTrackIds) {
+          if (knownIds.has(trackId)) continue;
+          knownIds.add(trackId);
+          trackIds.push(trackId);
+        }
+        const addedCount = trackIds.length - existing.trackIds.length;
+        const alreadyPresentCount = supportedTrackIds.length - addedCount;
+        if (addedCount === 0) return { addedCount, unsupportedCount, alreadyPresentCount };
+        const event = buildPlaylistEvent({
+          event: existing.event,
+          id: existing.id,
+          title: existing.title,
+          description: existing.description,
+          image: existing.image,
+          trackIds,
+          isListed: existing.isListed,
+        });
+        if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+        await publishPlaylist(event, existing.event.created_at);
+        void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+        return { addedCount, unsupportedCount, alreadyPresentCount };
       });
-      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event, existing.event.created_at);
-      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
-      return { addedCount, unsupportedCount, alreadyPresentCount };
     },
     onSuccess: invalidate,
   });
 
   const reorderPlaylist = useMutation({
-    mutationFn: async (input: { playlistId: string; trackIds: string[] }) => {
-      const existing = await fetchExisting(input.playlistId);
-      if (!existing) throw new Error('Playlist could not be loaded, so the reorder was not published. Please retry.');
-      const event = buildPlaylistEvent({
-        event: existing.event,
-        id: input.playlistId,
-        title: existing.title,
-        description: existing.description,
-        image: existing.image,
-        trackIds: input.trackIds,
-        isListed: existing.isListed,
+    mutationFn: async (input: { playlistId: string; trackIds: string[]; expectedEventId?: string }) => {
+      return withPlaylistWrite(input.playlistId, async existing => {
+        if (!existing) throw new Error('Playlist could not be loaded, so the reorder was not published. Please retry.');
+        if ((input.expectedEventId && existing.event.id !== input.expectedEventId) || input.trackIds.length !== existing.trackIds.length || input.trackIds.some(id => !existing.trackIds.includes(id))) {
+          void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+          throw new Error('This playlist changed elsewhere. Refresh it before reordering so no tracks are lost.');
+        }
+        const event = buildPlaylistEvent({
+          event: existing.event,
+          id: input.playlistId,
+          title: existing.title,
+          description: existing.description,
+          image: existing.image,
+          trackIds: input.trackIds,
+          isListed: existing.isListed,
+        });
+        if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+        await publishPlaylist(event, existing.event.created_at);
+        void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
       });
-      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event, existing.event.created_at);
-      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
     },
     onSuccess: invalidate,
   });
 
   const removeFromPlaylist = useMutation({
     mutationFn: async (input: { playlistId: string; trackId: string }) => {
-      const existing = await fetchExisting(input.playlistId);
-      if (!existing) return;
-      const playlist = {
-        event: existing.event,
-        id: input.playlistId,
-        title: existing.title,
-        description: existing.description,
-        image: existing.image,
-        trackIds: existing.trackIds.filter((t) => t !== input.trackId),
-        isListed: existing.isListed,
-      };
-      const event = buildPlaylistEvent(playlist);
-      if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
-      await publishPlaylist(event, existing.event.created_at);
+      return withPlaylistWrite(input.playlistId, async existing => {
+        if (!existing) throw new Error('Playlist could not be loaded. Refresh and try again.');
+        const playlist = {
+          event: existing.event,
+          id: input.playlistId,
+          title: existing.title,
+          description: existing.description,
+          image: existing.image,
+          trackIds: existing.trackIds.filter((t) => t !== input.trackId),
+          isListed: existing.isListed,
+        };
+        const event = buildPlaylistEvent(playlist);
+        if (!event.tags.some(([name, value]) => name === 't' && value === MUSIC_PLAYLIST_TOPIC)) event.tags.push(['t', MUSIC_PLAYLIST_TOPIC]);
+        await publishPlaylist(event, existing.event.created_at);
+      });
     },
     onSuccess: invalidate,
   });
@@ -430,33 +448,51 @@ export function usePlaylistActions() {
     mutationFn: async (input: { trackId: string; liked: boolean; playlistId?: string; title?: string }) => {
       const playlistId = input.playlistId ?? LIKED_SONGS_ID;
       const title = input.title ?? (playlistId === TUNESTR_FAVORITES_IDENTIFIER ? 'TuneStr Recordings' : 'Liked Songs');
-      const existing = await fetchExisting(playlistId);
-      const trackIds = existing?.trackIds ?? [];
-      const has = trackIds.includes(input.trackId);
-      let next = trackIds;
-      if (input.liked && !has) next = [...trackIds, input.trackId];
-      else if (!input.liked && has) next = trackIds.filter((t) => t !== input.trackId);
-      else return;
-      await publishPlaylist(
-        (() => {
-          const event = buildPlaylistEvent({
-            event: existing?.event,
-            id: playlistId,
-            title,
-            description: existing?.description ?? (playlistId === TUNESTR_FAVORITES_IDENTIFIER ? 'Your saved TuneStr recordings' : 'Your favorite tracks on Nostr'),
-            trackIds: next,
-            isListed: false,
-          });
-          if (playlistId === LIKED_SONGS_ID) event.tags = event.tags.filter(([name, value]) => name !== 't' || value !== MUSIC_PLAYLIST_TOPIC);
-          return event;
-        })(),
-        existing?.event.created_at ?? 0,
-      );
+      return withPlaylistWrite(playlistId, async existing => {
+        const trackIds = existing?.trackIds ?? [];
+        const has = trackIds.includes(input.trackId);
+        let next = trackIds;
+        if (input.liked && !has) next = [...trackIds, input.trackId];
+        else if (!input.liked && has) next = trackIds.filter((t) => t !== input.trackId);
+        else return;
+        await publishPlaylist(
+          (() => {
+            const event = buildPlaylistEvent({
+              event: existing?.event,
+              id: playlistId,
+              title,
+              description: existing?.description ?? (playlistId === TUNESTR_FAVORITES_IDENTIFIER ? 'Your saved TuneStr recordings' : 'Your favorite tracks on Nostr'),
+              trackIds: next,
+              isListed: false,
+            });
+            if (playlistId === LIKED_SONGS_ID) event.tags = event.tags.filter(([name, value]) => name !== 't' || value !== MUSIC_PLAYLIST_TOPIC);
+            return event;
+          })(),
+          existing?.event.created_at ?? 0,
+        );
+      });
     },
     onSuccess: invalidate,
   });
 
+  const deletePlaylist = useMutation({
+    mutationFn: async (input: { id: string; expectedEventId: string }) => withPlaylistWrite(input.id, async existing => {
+      if (!user || !existing) throw new Error('Playlist could not be loaded. Refresh and try again.');
+      if (existing.event.id !== input.expectedEventId) {
+        void queryClient.invalidateQueries({ queryKey: ['playlists'] });
+        throw new Error('This playlist changed elsewhere. Refresh it before deleting.');
+      }
+      const created_at = await nextLibraryTimestamp(existing.event.created_at);
+      const deletion = await publish({ kind: 5, content: 'Deleted playlist', created_at, tags: [['a', playlistCoordinate(user.pubkey, input.id)], ['e', existing.event.id]] });
+      rememberPlaylistDeletion(user.pubkey, input.id, deletion.created_at);
+      queryClient.setQueriesData<Playlist[]>({ queryKey: ['playlists'] }, current => current?.filter(item => item.id !== input.id));
+      void queryClient.invalidateQueries({ queryKey: ['ostrify-public-playlists'] });
+    }),
+    onSuccess: invalidate,
+  });
+
   return {
+    deletePlaylist,
     createPlaylist,
     updatePlaylist,
     addToPlaylist,

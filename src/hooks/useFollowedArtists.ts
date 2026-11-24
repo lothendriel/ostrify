@@ -2,10 +2,11 @@ import { useNostr } from "@nostrify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "./useCurrentUser";
 import { useAppContext } from "./useAppContext";
-import { useNostrPublish } from "./useNostrPublish";
+import { useLibraryPublish } from "./useNostrPublish";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { wavlakeArtistId, wavlakeArtistUrl } from "./useWavlake";
-import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, newestLibraryEvent, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { useToast } from '@/hooks/useToast';
 import { getUserDataReadRelays } from '@/lib/appRelays';
 import { homeSessionQueryKey } from '@/lib/homeSession';
 
@@ -47,9 +48,10 @@ export function useFollowedArtists(enabled = true, sessionScope?: string) {
         [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 1 }],
         signal,
       );
-      const event = events.filter(item => item.pubkey === user.pubkey && item.kind === FOLLOW_SET_KIND && item.tags.some(([name, value]) => name === 'd' && value === FOLLOWED_ARTISTS_ID)).sort((a, b) => b.created_at - a.created_at)[0];
+      const recent = recentLibraryEvent(user.pubkey, FOLLOW_SET_KIND, FOLLOWED_ARTISTS_ID);
+      const event = newestLibraryEvent([...events.filter(item => item.pubkey === user.pubkey && item.kind === FOLLOW_SET_KIND && item.tags.some(([name, value]) => name === 'd' && value === FOLLOWED_ARTISTS_ID)), ...(recent ? [recent] : [])]);
       const current = artistRefs(event);
-      if (!complete) {
+      if (!complete && !recent) {
         const cached = queryClient.getQueryData<string[]>(queryKey) ?? [];
         return [...new Set([...cached, ...current])];
       }
@@ -71,21 +73,12 @@ export function useFollowArtistActions() {
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
-  const { mutateAsync: publish } = useNostrPublish();
+  const { mutateAsync: publish } = useLibraryPublish();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["followed-artists", user?.pubkey ?? ""], refetchType: 'all' });
-
-  async function fetchCurrent(): Promise<NostrEvent | undefined> {
-    if (!user) throw new Error('Log in to follow artists');
-    const readRelays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user.pubkey, config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
-    const events = readRelays.length ? await nostr.query(
-      [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 10 }],
-      { signal: AbortSignal.timeout(5000), relays: readRelays },
-    ) : [];
-    return events.sort((a, b) => b.created_at - a.created_at)[0];
-  }
 
   async function save(pubkeys: string[], existing?: NostrEvent) {
     const tags = existing ? existing.tags.filter(([name, value]) =>
@@ -99,7 +92,9 @@ export function useFollowArtistActions() {
       else if (url) tags.push(['i', url]);
       else if (/^[0-9a-f]{64}$/i.test(ref)) tags.push(['p', ref]);
     }
-    const event = await publish({ kind: FOLLOW_SET_KIND, content: existing?.content ?? '', tags });
+    const created_at = await nextLibraryTimestamp(existing?.created_at);
+    const event = await publish({ kind: FOLLOW_SET_KIND, content: existing?.content ?? '', tags, created_at });
+    rememberLibraryWrite(event, FOLLOWED_ARTISTS_ID);
     if (user) {
       queryClient.setQueriesData<string[]>({ queryKey: ['followed-artists', user.pubkey] }, artistRefs(event));
       queryClient.invalidateQueries({ queryKey: ['followed-artists', user.pubkey] });
@@ -108,14 +103,21 @@ export function useFollowArtistActions() {
 
   const toggleFollow = useMutation({
     mutationFn: async (input: { pubkey: string; follow: boolean }) => {
-      const existing = await fetchCurrent();
-      const current = artistRefs(existing);
-      const has = current.includes(input.pubkey);
-      let next = current;
-      if (input.follow && !has) next = [...current, input.pubkey];
-      else if (!input.follow && has) next = current.filter((pk) => pk !== input.pubkey);
-      else return;
-      await save(next, existing);
+      if (!user) throw new Error('Log in to follow artists.');
+      return withLibraryWrite(user.pubkey, FOLLOW_SET_KIND, FOLLOWED_ARTISTS_ID, async () => {
+        const relays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user.pubkey, config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
+        const result = await readLibraryForWrite(nostr, relays, user.pubkey, FOLLOW_SET_KIND, FOLLOWED_ARTISTS_ID);
+        const existing = result.event;
+        const current = artistRefs(existing);
+        const has = current.includes(input.pubkey);
+        let next = current;
+        if (input.follow && !has) next = [...current, input.pubkey];
+        else if (!input.follow && has) next = current.filter((pk) => pk !== input.pubkey);
+        else return;
+        await save(next, existing);
+        const warning = libraryWriteWarning(result.partial);
+        if (warning) toast({ title: 'Library sync may be incomplete', description: warning });
+      });
     },
     onSuccess: invalidate,
   });
