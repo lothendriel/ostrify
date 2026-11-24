@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { useSeoMeta } from '@unhead/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import { Users, UserPlus, Radio, Disc3, X, Music2, Check, CheckCircle2, Copy, Play, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,7 @@ import { usePlayer } from '@/hooks/usePlayer';
 import { useProfilePrivacy } from '@/hooks/useProfilePrivacy';
 import { savedAlbumPath } from '@/lib/savedAlbums';
 import { useAppContext } from '@/hooks/useAppContext';
-import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { queryLibraryEvents, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, reconcileLibraryEvent } from '@/lib/libraryQuery';
 import { getUserRelayUrls } from '@/lib/appRelays';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
@@ -62,6 +62,7 @@ function ProfilePersonCard({ pubkey }: { pubkey: string }) {
 }
 
 function ProfileFollowers({ pubkey }: { pubkey: string }) {
+  const client = useQueryClient();
   const { nostr } = useNostr();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
@@ -69,19 +70,26 @@ function ProfileFollowers({ pubkey }: { pubkey: string }) {
     ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
     ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
   ])].sort();
+  const key = ['public-ostrify-followers', pubkey, readRelays.join('|')];
+  const coverage = useLibraryCoverage(key);
   const followers = useQuery({
-    queryKey: ['public-ostrify-followers', pubkey, readRelays.join('|')],
+    queryKey: key,
     enabled: readRelays.length > 0,
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
-      const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], '#p': [pubkey], limit: 500 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
-      return [...new Set(events.filter(event => event.kind === 30000 && event.pubkey !== pubkey && event.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people') && event.tags.some(([name, value]) => name === 'p' && value === pubkey)).map(event => event.pubkey))];
+      const result = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], '#p': [pubkey], limit: 500 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]), libraryReadRetryOptions(client, key));
+      saveLibraryCoverage(client, key, result);
+      const current = result.events.filter(event => event.kind === 30000 && event.pubkey !== pubkey && event.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people') && event.tags.some(([name, value]) => name === 'p' && value === pubkey)).map(event => event.pubkey);
+      const previous = result.complete ? [] : client.getQueryData<string[]>(key) ?? [];
+      return [...new Set([...previous, ...current])];
     },
   });
   if (followers.isLoading) return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="aspect-square w-full rounded-full" />)}</div>;
   if (followers.isError) return <p role="status" className="text-sm text-muted-foreground">Followers aren’t available from your relays right now.</p>;
-  if (!followers.data?.length) return <p className="text-sm text-muted-foreground">No Ostrify followers found on your read relays yet.</p>;
-  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{followers.data.map(follower => <ProfilePersonCard key={follower} pubkey={follower} />)}</div>;
+  return <div className="space-y-3">
+    {coverage && !coverage.complete && <p role="status" className="text-sm text-muted-foreground">Some relays did not finish; followers may be incomplete or out of date. <button type="button" className="underline" onClick={() => void followers.refetch()}>Try again</button></p>}
+    {!followers.data?.length ? <p className="text-sm text-muted-foreground">No Ostrify followers found in the relay responses received.</p> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{followers.data.map(follower => <ProfilePersonCard key={follower} pubkey={follower} />)}</div>}
+  </div>;
 }
 
 function FollowedPeopleList({ pubkey }: { pubkey: string }) {
@@ -105,6 +113,7 @@ function FollowedPeopleList({ pubkey }: { pubkey: string }) {
 
 
 function ProfileFriendAction({ pubkey, compact = false }: { pubkey: string; compact?: boolean }) {
+  const client = useQueryClient();
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
@@ -121,7 +130,7 @@ function ProfileFriendAction({ pubkey, compact = false }: { pubkey: string; comp
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
       const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], authors: [pubkey], '#d': ['ostrify-people'], limit: 20 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
-      const event = events.filter(item => item.kind === 30000 && item.pubkey === pubkey && item.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
+      const event = reconcileLibraryEvent(client, pubkey, 30000, 'ostrify-people', events);
       return (event?.tags ?? []).some(([name, value]) => name === 'p' && value === user?.pubkey);
     },
   });
@@ -257,7 +266,7 @@ function FriendsHome() {
 
   useEffect(() => {
     const oldFriendPubkeys = friends.data?.friends.map(friend => friend.pubkey) ?? [];
-    if (!user || !followedPeople.hasReadRelays || followedPeople.isLoading || followedPeople.isError || friends.isLoading || friends.isError || hasCheckedMigration || migrationStarted.current) return;
+    if (!user || !followedPeople.hasReadRelays || followedPeople.isLoading || followedPeople.isError || followedPeople.isPartial || friends.isLoading || friends.isError || hasCheckedMigration || migrationStarted.current) return;
     migrationStarted.current = true;
     setMigrationRunning(true);
     void followedPeople.mergePeople.mutateAsync(oldFriendPubkeys).then(() => {
@@ -266,7 +275,7 @@ function FriendsHome() {
       migrationStarted.current = false;
       toast({ title: 'Could not migrate existing friends', description: error instanceof Error ? error.message : 'Please retry from Friends.', variant: 'destructive' });
     }).finally(() => setMigrationRunning(false));
-  }, [user, followedPeople.hasReadRelays, followedPeople.isLoading, followedPeople.isError, hasCheckedMigration, followedPeople.mergePeople, friends.isLoading, friends.isError, friends.data, toast]);
+  }, [user, followedPeople.hasReadRelays, followedPeople.isLoading, followedPeople.isError, followedPeople.isPartial, hasCheckedMigration, followedPeople.mergePeople, friends.isLoading, friends.isError, friends.data, toast]);
 
   if (!user) return <div className="text-center py-20 space-y-4"><Users className="size-12 text-primary mx-auto" /><h1 className="text-3xl font-bold">Friends on Ostrify</h1><p className="text-muted-foreground">Log in to follow people on Ostrify and see their listening activity.</p><LoginArea className="max-w-60" /></div>;
   return <div className="space-y-8">
@@ -275,7 +284,8 @@ function FriendsHome() {
     {friends.isLoading && <p role="status" className="text-sm text-muted-foreground">Checking for existing friends to migrate…</p>}
     {friends.isError && <div role="status" className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Existing friends couldn’t be checked for migration. The new follow-based friends list is still available. {friends.error.message} <button type="button" className="underline" onClick={() => void friends.refetch()}>Retry migration check</button></div>}
     {followedPeople.isError && <div role="alert" className="rounded-lg border border-border p-4 text-sm text-destructive">Could not load your friends: {followedPeople.error.message} <button className="underline" onClick={() => void followedPeople.refetch()}>Try again</button></div>}
-    {followedPeople.hasReadRelays && !followedPeople.isLoading && !friends.isLoading && !friends.isError && !hasCheckedMigration && !migrationStarted.current && <p className="text-sm text-muted-foreground">Checking for existing friends to migrate…</p>}
+    {followedPeople.isPartial && !followedPeople.isLoading && <div role="status" className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Some selected relays did not finish. Your friends list may be incomplete or out of date; automatic migration is paused until the relay check completes. <button type="button" className="underline" onClick={() => void followedPeople.refetch()}>Try again</button></div>}
+    {followedPeople.hasReadRelays && !followedPeople.isLoading && !followedPeople.isPartial && !friends.isLoading && !friends.isError && !hasCheckedMigration && !migrationStarted.current && <p className="text-sm text-muted-foreground">Checking for existing friends to migrate…</p>}
     <section className="space-y-3 rounded-xl border border-border/60 bg-secondary/20 p-4 sm:p-5">
       <div><h2 className="text-xl font-semibold">Invite someone to follow you</h2><p className="mt-1 text-sm text-muted-foreground">Enter their Nostr npub to send a private Ostrify invite. They can review your profile and choose to follow you.</p></div>
       <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => {

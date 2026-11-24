@@ -25,13 +25,17 @@ export function useProfilePrivacy(pubkey?: string) {
   const sections = isOwner ? followedPeople.hiddenSections : remote.data;
   const isLoading = isOwner ? followedPeople.isLoading : remote.isLoading || !remote.isFetched;
   const isError = isOwner ? followedPeople.isError : remote.isError;
-  const privacyUnknown = !isOwner && (remote.isError || !remote.isFetched);
+  const privacyUnknown = isOwner
+    ? !followedPeople.hasReadRelays || followedPeople.isError || (followedPeople.isPartial && !followedPeople.data)
+    : remote.isError || !remote.isFetched;
 
   return {
     isOwner,
     hasReadRelays: followedPeople.hasReadRelays,
     isLoading,
     isError,
+    isPartial: isOwner && followedPeople.isPartial,
+    privacyUnknown,
     data: sections,
     error: remote.error,
     refetch: isOwner ? followedPeople.refetch : remote.refetch,

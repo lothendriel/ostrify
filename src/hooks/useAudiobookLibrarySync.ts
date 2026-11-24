@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -88,6 +88,7 @@ export function useAudiobookLibrarySync(enabled = true) {
   const { config } = useAppContext();
   const { mutateAsync: publish } = useNostrPublish();
   const { toast } = useToast();
+  const client = useQueryClient();
   const library = useAudiobookLibrary();
   const [syncRequested, setSyncRequested] = useState(false);
   const syncRequestedRef = useRef(false);
@@ -100,8 +101,9 @@ export function useAudiobookLibrarySync(enabled = true) {
     ...config.relayMetadata.relays.filter(relay => relay.write && !config.excludedUserRelayUrls.some(url => url.trim().replace(/\/+$/, '').toLowerCase() === relay.url.trim().replace(/\/+$/, '').toLowerCase())).map(relay => relay.url),
     ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'write', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
   ])].sort().join('|');
+  const queryKey = ['audiobook-library-remote', user?.pubkey ?? '', relayKey];
   const query = useQuery({
-    queryKey: ['audiobook-library-remote', user?.pubkey ?? '', relayKey],
+    queryKey,
     enabled: enabled && !!user && !!relayKey && syncRequested,
     staleTime: 0,
     retry: false,
@@ -114,6 +116,7 @@ export function useAudiobookLibrarySync(enabled = true) {
         relays,
         [{ kinds: [LIBRARY_KIND], authors: [user.pubkey], '#d': [LIBRARY_ID], limit: 10 }],
         AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+        { waitForAll: client.getQueryData<RemoteLibraryResult>(queryKey)?.complete === false },
       );
       const latest = events.filter(event => event.pubkey === user.pubkey && event.kind === LIBRARY_KIND && event.tags.some(([name, value]) => name === 'd' && value === LIBRARY_ID)).sort((left, right) => right.created_at - left.created_at)[0];
       if (!latest) return { library: null, complete };
@@ -156,7 +159,12 @@ export function useAudiobookLibrarySync(enabled = true) {
     if (!syncRequested || !query.isSuccess || !query.dataUpdatedAt || query.isError || (previousQueryResult.current.pubkey === user.pubkey && previousQueryResult.current.dataUpdatedAt === query.dataUpdatedAt)) return;
     const local = getAudiobookLibrarySnapshot();
     const savedBaseline = readSavedBaseline(user.pubkey);
-    if (query.data.library) {
+    if (!query.data.complete) {
+      // A partial read cannot safely establish the current remote baseline.
+      // Keep local data untouched and do not publish until all selected relays finish.
+      syncBaseline = serializeLibrary(local);
+      syncCanPublish = false;
+    } else if (query.data.library) {
       const remoteLibrary = query.data.library;
       const remoteLibrarySerialized = serializeLibrary(remoteLibrary);
       const localSerialized = serializeLibrary(local);
@@ -174,15 +182,11 @@ export function useAudiobookLibrarySync(enabled = true) {
       if (!savedBaseline) saveBaseline(user.pubkey, remoteLibrarySerialized);
       else if (localSerialized === savedBaseline) syncBaseline = remoteLibrarySerialized;
       syncCanPublish = true;
-    } else if (query.data.complete) {
-      // Only treat absence as authoritative when at least one relay completed its response.
+    } else {
+      // Absence is only used as a baseline after every selected relay completed.
       syncBaseline = serializeLibrary(EMPTY_LIBRARY);
       saveBaseline(user.pubkey, syncBaseline);
       syncCanPublish = true;
-    } else {
-      // Keep already-synced local data and suppress publishing while relay results are incomplete.
-      syncBaseline = serializeLibrary(getAudiobookLibrarySnapshot());
-      syncCanPublish = false;
     }
     const currentSerialized = serializeLibrary(getAudiobookLibrarySnapshot());
     if (!syncCanPublish || currentSerialized === syncBaseline || !writeRelayKey || !user.signer.nip44) {

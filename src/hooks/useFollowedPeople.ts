@@ -4,7 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLibraryPublish } from '@/hooks/useNostrPublish';
 import { useAppContext } from '@/hooks/useAppContext';
-import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, newestLibraryEvent, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, reconcileLibraryEvent, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
 import { useToast } from '@/hooks/useToast';
 import { getUserDataReadRelays } from '@/lib/appRelays';
 
@@ -17,11 +17,6 @@ export const PROFILE_SECTIONS = ['liked', 'artists', 'people', 'playlists', 'pod
 export type ProfileSection = typeof PROFILE_SECTIONS[number];
 const HEX = /^[0-9a-f]{64}$/;
 
-function newest(events: NostrEvent[], author: string): NostrEvent | null {
-  return events.filter(e => e.kind === 30000 && e.pubkey === author && e.tags.some(([name, value]) => name === 'd' && value === ID))
-    .sort((a, b) => b.created_at - a.created_at)[0] ?? null;
-}
-
 /** A public NIP-51 follow set separate from the user's NIP-02 follows and friends. */
 export function useFollowedPeople() {
   const { user } = useCurrentUser();
@@ -33,6 +28,7 @@ export function useFollowedPeople() {
   const readRelays = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
   const relayKey = readRelays.join('|');
   const key = ['ostrify-followed-people', user?.pubkey ?? '', relayKey];
+  const coverage = useLibraryCoverage(key);
   const query = useQuery({
     queryKey: key,
     enabled: !!user && !!relayKey,
@@ -42,10 +38,11 @@ export function useFollowedPeople() {
     retry: 1,
     queryFn: async ({ signal }) => {
       if (!user) return null;
-      const { events } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
-      const relay = newest(events, user.pubkey);
+      const result = await queryLibraryEvents(nostr, readRelays, [{ kinds: [30000], authors: [user.pubkey], '#d': [ID], limit: 20 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]), libraryReadRetryOptions(client, key));
+      saveLibraryCoverage(client, key, result);
       const recent = recentLibraryEvent(user.pubkey, 30000, ID);
-      return newestLibraryEvent([relay, recent].filter((event): event is NostrEvent => !!event)) ?? null;
+      const cached = client.getQueryData<NostrEvent | null>(key);
+      return reconcileLibraryEvent(client, user.pubkey, 30000, ID, [...result.events, recent, cached]) ?? null;
     },
   });
   const people = [...new Set((query.data?.tags ?? []).filter(([name, value]) => name === 'p' && HEX.test(value ?? '') && value !== user?.pubkey).map(([, value]) => value))];
@@ -131,5 +128,5 @@ export function useFollowedPeople() {
       window.dispatchEvent(new Event('ostrify-profile-privacy'));
     },
   });
-  return { ...query, people, hiddenSections, isHidden, setSectionVisibility, toggle, mergePeople, hasReadRelays: !!relayKey };
+  return { ...query, people, hiddenSections, isHidden, setSectionVisibility, toggle, mergePeople, hasReadRelays: !!relayKey, coverage, isPartial: !!coverage && !coverage.complete };
 }

@@ -18,7 +18,7 @@ type PlaylistSort = "original" | "title" | "artist";
 const LikedSongs = () => {
   useSeoMeta({ title: "Liked Songs — Ostrify" });
   const { user } = useCurrentUser();
-  const { data: playlist } = usePlaylist(LIKED_SONGS_ID);
+  const { data: playlist, isPartial, refetch: refetchLibrary } = usePlaylist(LIKED_SONGS_ID);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
   const { reorderPlaylist } = usePlaylistActions();
@@ -86,6 +86,7 @@ const LikedSongs = () => {
         tracks={sortedTracks}
       />
       <div className="px-3 sm:px-6">
+        {isPartial && <p role="status" className="mb-4 text-sm text-muted-foreground">Some selected relays did not finish. Liked Songs may be incomplete or out of date. <button type="button" className="underline" onClick={() => void refetchLibrary()}>Try again</button></p>}
         {tracks.length > 1 && <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-64">
@@ -120,7 +121,7 @@ const LikedSongs = () => {
               tracks={visibleTracks}
               isLoading={isLoading}
               onReorder={sort === "original" && !filter.trim() ? handleReorder : undefined}
-              emptyMessage={data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "Songs you like will show up here. Tap the heart on any track."}
+              emptyMessage={isPartial ? "Your Liked Songs may not be fully loaded from your relays yet." : data?.unavailable ? "Your saved songs couldn't be loaded. Try again in a moment." : "Songs you like will show up here. Tap the heart on any track."}
             />}
       </div>
     </div>

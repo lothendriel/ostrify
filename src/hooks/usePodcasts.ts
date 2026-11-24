@@ -7,7 +7,7 @@ import { sanitizeUrl } from "@/lib/sanitize";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useLibraryPublish } from "@/hooks/useNostrPublish";
-import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, newestLibraryEvent, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, reconcileLibraryEvent, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, useLibraryRevision, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
 import { useToast } from '@/hooks/useToast';
 import { captureDiscoveredAudioEvents } from '@/lib/audioCatalogCapture';
 import { getUserDataReadRelays, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
@@ -1248,6 +1248,8 @@ export function usePodcastFavorites() {
   const queryClient = useQueryClient();
   const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join("|");
   const queryKey = [PODCAST_LIBRARY_QUERY_KEY, user?.pubkey ?? "", readRelayKey];
+  const coverage = useLibraryCoverage(queryKey);
+  useLibraryRevision(user?.pubkey ?? '', PODCAST_FAVORITES_KIND, 'favorite-podcasts');
   const query = useQuery({
     queryKey,
     enabled: !!user && !!readRelayKey,
@@ -1258,25 +1260,21 @@ export function usePodcastFavorites() {
       previousQuery?.queryKey[1] === user?.pubkey ? previousData : undefined,
     queryFn: async ({ signal }) => {
       if (!user || !readRelayKey) return [] as PodcastFavorite[];
-      const { events, complete } = await queryLibraryEvents(
+      const result = await queryLibraryEvents(
         nostr,
         readRelayKey.split("|"),
         [{ kinds: [PODCAST_FAVORITES_KIND], authors: [user.pubkey], limit: 10 }],
         AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+        libraryReadRetryOptions(queryClient, queryKey),
       );
+      saveLibraryCoverage(queryClient, queryKey, result);
       const recent = recentLibraryEvent(user.pubkey, PODCAST_FAVORITES_KIND, 'favorite-podcasts');
-      const event = newestLibraryEvent([...events.filter(item => item.pubkey === user.pubkey && item.kind === PODCAST_FAVORITES_KIND), ...(recent ? [recent] : [])]);
-      const current = parsePodcastFavorites(event);
-      if (!complete && !recent) {
-        const cached = queryClient.getQueryData<PodcastFavorite[]>(queryKey) ?? [];
-        const byId = new Map(cached.map(favorite => [favorite.id, favorite]));
-        for (const favorite of current) byId.set(favorite.id, favorite);
-        return [...byId.values()];
-      }
-      return current;
+      const event = reconcileLibraryEvent(queryClient, user.pubkey, PODCAST_FAVORITES_KIND, 'favorite-podcasts', [...result.events, recent]);
+      if (!event && !result.complete) return queryClient.getQueryData<PodcastFavorite[]>(queryKey) ?? [];
+      return parsePodcastFavorites(event);
     },
   });
-  return { ...query, data: query.data ?? [], isEnabled: !!user, hasReadRelays: !!readRelayKey };
+  return { ...query, data: query.data ?? [], isEnabled: !!user, hasReadRelays: !!readRelayKey, coverage, isPartial: !!coverage && !coverage.complete };
 }
 
 export function useIsPodcastFavorite(id: string) {

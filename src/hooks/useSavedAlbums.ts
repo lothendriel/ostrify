@@ -5,17 +5,12 @@ import { useEffect } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useLibraryPublish } from '@/hooks/useNostrPublish';
-import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, reconcileLibraryEvent, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
 import { useToast } from '@/hooks/useToast';
 import { buildSavedAlbumsEvent, parseSavedAlbums, SAVED_ALBUMS_ID, type SavedAlbum } from '@/lib/savedAlbums';
 import { getUserDataReadRelays } from '@/lib/appRelays';
 
 const KIND = 30003;
-
-function newestSavedAlbumsEvent(events: NostrEvent[], pubkey: string): NostrEvent | undefined {
-  return events.filter(event => event.kind === KIND && event.pubkey === pubkey && event.tags.some(([name, value]) => name === 'd' && value === SAVED_ALBUMS_ID))
-    .sort((left, right) => right.created_at - left.created_at)[0];
-}
 
 export function useSavedAlbums() {
   const { nostr } = useNostr();
@@ -37,17 +32,13 @@ export function useSavedAlbums() {
     retry: 1,
     queryFn: async ({ signal }) => {
       if (!user) return { event: undefined, albums: [] as SavedAlbum[], complete: false };
-      const { events, complete } = await queryLibraryEvents(nostr, readRelays, [{ kinds: [KIND], authors: [user.pubkey], '#d': [SAVED_ALBUMS_ID], limit: 10 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]));
-      const relayEvent = newestSavedAlbumsEvent(events, user.pubkey);
+      const previous = client.getQueryData<{ event?: NostrEvent; albums: SavedAlbum[]; complete: boolean }>(queryKey);
+      const result = await queryLibraryEvents(nostr, readRelays, [{ kinds: [KIND], authors: [user.pubkey], '#d': [SAVED_ALBUMS_ID], limit: 10 }], AbortSignal.any([signal, AbortSignal.timeout(8000)]), { waitForAll: previous?.complete === false });
       const cached = client.getQueryData<{ event?: NostrEvent; albums: SavedAlbum[]; complete: boolean }>(queryKey);
-      const event = cached?.event && (!relayEvent || cached.event.created_at > relayEvent.created_at) ? cached.event : relayEvent;
-      const albums = parseSavedAlbums(event);
-      if (!complete && cached) {
-        const byId = new Map(cached.albums.map(album => [album.id, album]));
-        for (const album of albums) byId.set(album.id, album);
-        return { event, albums: [...byId.values()], complete: false };
-      }
-      return { event, albums, complete };
+      const recent = recentLibraryEvent(user.pubkey, KIND, SAVED_ALBUMS_ID);
+      const event = reconcileLibraryEvent(client, user.pubkey, KIND, SAVED_ALBUMS_ID, [...result.events, cached?.event, recent]);
+      const albums = !event && !result.complete && cached ? cached.albums : parseSavedAlbums(event);
+      return { event, albums, complete: result.complete, completedRelays: result.completedRelays, incompleteRelays: result.incompleteRelays };
     },
   });
 

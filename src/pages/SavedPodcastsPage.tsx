@@ -47,10 +47,11 @@ export default function SavedPodcastsPage() {
 
     {!favorites.isEnabled && <p className="rounded-lg border border-dashed p-6 text-muted-foreground">Log in with Nostr to save podcasts and sync them across your devices.</p>}
     {favorites.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load your saved podcasts. <button className="underline" onClick={() => void favorites.refetch()}>Try again</button></p>}
+    {favorites.isEnabled && favorites.isPartial && !favorites.isLoading && <p role="status" className="text-sm text-muted-foreground">Some selected relays did not finish. Saved podcasts may be incomplete or out of date. <button type="button" className="underline" onClick={() => void favorites.refetch()}>Try again</button></p>}
 
     <section className="space-y-3">
       <h2 className="flex items-center gap-2 text-2xl font-bold"><Mic className="size-5 text-primary" /> Shows</h2>
-      {favorites.isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-20 rounded-xl" />)}</div> : shows.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shows.map(show => <SavedShowCard key={show.id} show={show} onRemove={() => remove(show)} pending={actions.toggleFavorite.isPending} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">No shows saved yet. Find a show in Discover Podcasts and choose Save show.</p>}
+      {favorites.isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-20 rounded-xl" />)}</div> : shows.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{shows.map(show => <SavedShowCard key={show.id} show={show} onRemove={() => remove(show)} pending={actions.toggleFavorite.isPending} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">{favorites.isPartial ? 'No saved shows were found in the responses received so far.' : 'No shows saved yet. Find a show in Discover Podcasts and choose Save show.'}</p>}
     </section>
 
     <section className="space-y-3">
@@ -59,7 +60,7 @@ export default function SavedPodcastsPage() {
         const track = episode.episodeId ? tracksById.get(`podcast-index:episode:id:${episode.episodeId}`) : undefined;
         const playableTrack = track ? { ...track, artist: track.artist ?? episode.publisher } : undefined;
         return <article key={episode.id} className="flex items-center gap-3 rounded-xl bg-secondary/40 p-3"><div className="size-12 shrink-0 overflow-hidden rounded-md bg-secondary">{episode.image && <img src={episode.image} alt="" className="size-full object-cover" />}</div><button type="button" className="min-w-0 flex-1 text-left" disabled={!playableTrack} onClick={() => { if (playableTrack) player.playQueue([playableTrack]); }}><span className="line-clamp-2 break-words font-semibold hover:text-primary">{track?.title ?? episode.title}</span><span className="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">{episode.publisher ?? track?.artist ?? 'Podcast episode'}</span></button>{playableTrack && <QueueActionsMenu track={playableTrack} />}<Button type="button" variant="ghost" size="icon" aria-label={`Remove ${episode.title} from saved episodes`} disabled={actions.toggleFavorite.isPending} onClick={() => remove(episode)}><Trash2 className="size-4" /></Button></article>;
-      })}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">No episodes saved yet. Save an episode from a show’s page.</p>}
+      })}</div> : <p className="rounded-lg border border-dashed p-6 text-muted-foreground">{favorites.isPartial ? 'No saved episodes were found in the responses received so far.' : 'No episodes saved yet. Save an episode from a show’s page.'}</p>}
       {!!episodes.data?.unavailable && <p className="text-sm text-muted-foreground">{episodes.data.unavailable} saved episode(s) couldn’t be loaded from Podcast Index.</p>}
     </section>
   </div>;

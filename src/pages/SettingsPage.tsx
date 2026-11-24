@@ -229,6 +229,7 @@ const SettingsPage = () => {
           {privacy.isLoading && <p role="status" className="text-sm text-muted-foreground">Loading privacy preferences…</p>}
           {!privacy.isLoading && privacy.hasReadRelays === false && user && <p className="text-sm text-muted-foreground">Enable a read relay to load profile privacy settings.</p>}
           {privacy.isError && <p role="alert" className="text-sm text-destructive">Could not load Ostrify privacy preferences. Retry before changing visibility.</p>}
+          {user && privacy.isPartial && !privacy.isLoading && <p role="status" className="text-sm text-muted-foreground">Some relays did not finish. Your profile settings may be incomplete or out of date. Retry or review your read relays in the Relays tab. <button type="button" className="underline" onClick={() => void privacy.refetch()}>Try again</button></p>}
           {([
             ['liked', 'Liked songs', Heart],
             ['artists', 'Followed artists', Music2],
@@ -237,8 +238,8 @@ const SettingsPage = () => {
             ['podcasts', 'Saved podcasts', Mic],
             ['albums', 'Saved albums', Disc3],
           ] as const).map(([section, label, Icon]) => <div key={section} className="flex items-center justify-between gap-4 rounded-lg border border-border/60 p-3">
-            <div className="flex items-center gap-3"><Icon className="size-5 text-muted-foreground" /><div><p className="font-medium">{label}</p><p className="text-xs text-muted-foreground">{privacy.isHidden(section) ? 'Private on your profile' : 'Visible on your profile'}</p></div></div>
-            <div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">Private</span><Switch aria-label={`Show ${label} on profile`} checked={!privacy.isHidden(section)} disabled={!user || privacy.isSaving || privacy.isLoading || privacy.isError || !privacy.hasReadRelays} onCheckedChange={visible => privacy.setVisibility.mutate({ section, visible }, { onSuccess: () => toast({ title: `${label} ${visible ? 'shown on' : 'hidden from'} your profile` }), onError: error => toast({ title: 'Could not update profile privacy', description: error.message, variant: 'destructive' }) })} /><span className="text-xs text-muted-foreground">Public</span></div>
+            <div className="flex items-center gap-3"><Icon className="size-5 text-muted-foreground" /><div><p className="font-medium">{label}</p><p className="text-xs text-muted-foreground">{privacy.privacyUnknown ? 'Visibility could not be confirmed' : privacy.isHidden(section) ? 'Private on your profile' : 'Visible on your profile'}</p></div></div>
+            <div className="flex items-center gap-2"><span className="text-xs text-muted-foreground">Private</span><Switch aria-label={`Show ${label} on profile`} checked={!privacy.isHidden(section)} disabled={!user || privacy.isSaving || privacy.isLoading || privacy.isError || privacy.privacyUnknown || !privacy.hasReadRelays} onCheckedChange={visible => privacy.setVisibility.mutate({ section, visible }, { onSuccess: () => toast({ title: `${label} ${visible ? 'shown on' : 'hidden from'} your profile` }), onError: error => toast({ title: 'Could not update profile privacy', description: error.message, variant: 'destructive' }) })} /><span className="text-xs text-muted-foreground">Public</span></div>
           </div>)}
           {!user && <p className="text-sm text-muted-foreground">Log in to manage profile privacy.</p>}
           {user && !privacy.hasReadRelays && <p className="text-sm text-muted-foreground">Enable a read relay to check your saved preferences and publish changes.</p>}

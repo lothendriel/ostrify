@@ -1,23 +1,24 @@
 # Ostrify Code Audit
 
-**Last updated:** 2026-11-24 against commit `25f6865` (before this report update). The original re-audit reviewed commit `305d88a`; this update records the subsequent library-write changes and their remaining limitations.
+**Last updated:** 2026-11-24 after the library-read completeness changes following commit `ebb8ec1`. The original re-audit reviewed commit `305d88a`; subsequent updates record the library-write and library-read improvements.
 
-**Scope:** A targeted, read-only review of the previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a live relay, signer, cross-device, accessibility, or performance test. Statuses describe what the code currently shows; they do not establish when a change was made or guarantee behavior in every environment. No application code was changed in this report update.
+**Scope:** A targeted review of previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a comprehensive signer, cross-device, accessibility, or performance test. Statuses describe the reviewed implementation and its known limitations; completion of a relay query does not prove that a relay has all events.
 
 **Status key:** **Done** = the specific earlier recommendation is present in the reviewed code; **Partial** = some improvements are present but meaningful follow-up remains; **Open** = the issue or recommendation remains; **Review** = an opportunity requiring measurement or broader verification rather than a confirmed defect.
 
 ## Remaining work, in priority order
 
 1. **Secure video embeds and review external URLs.** Restrict supported iframe hosts, provide a safe fallback, and review CSP and other untrusted URL sinks. See §1.
-2. **Improve library-read completeness.** Distinguish a response from one relay from all selected relays responding, and prevent stale or partial display reads from incorrectly replacing useful cached data. See the library-completeness observation below.
-3. **Finish consistent replaceable-event selection.** Use the NIP-01 tie-break and author/identifier checks across the remaining read paths. The write reconciliation helper already uses the tie-break. See §5.
-4. **Harden playback.** Test and improve queue restoration, track removal, end-of-queue behavior, rapid changes, and autoplay rejection; clarify the Next button. See §11.
-5. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
-6. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
-7. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
-8. **Improve notification and relay transparency.** Explain notification limitations and measure polling and TuneStr relay request costs before optimizing. See §§7–8.
-9. **Finish external-data and sharing review.** Validate remaining catalog URL and metadata handling, then confirm the intended canonical domain and social sharing previews. See §9 and the sharing-metadata observation below.
-10. **Clean up cache-key and maintainability issues.** Review Home-session cache behavior, shared key helpers, and compressed JSX. The duplicate podcast guard is already fixed. See §§10 and 14.
+2. **Finish consistent replaceable-event selection.** Use the NIP-01 tie-break and author/identifier checks across remaining read paths; library reconciliation already uses the tie-break. See §5.
+3. **Harden playback.** Test and improve queue restoration, track removal, end-of-queue behavior, rapid changes, and autoplay rejection; clarify the Next button. See §11.
+4. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
+5. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
+6. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
+7. **Improve notification and relay transparency.** Explain notification limitations and measure polling and TuneStr relay request costs before optimizing. See §§7–8.
+8. **Finish external-data and sharing review.** Validate remaining catalog URL and metadata handling, then confirm the intended canonical domain and social sharing previews. See §9 and the sharing-metadata observation below.
+9. **Clean up cache-key and maintainability issues.** Review Home-session cache behavior, shared key helpers, and compressed JSX. The duplicate podcast guard is already fixed. See §§10 and 14.
+
+**Completed library-read improvement:** Per-relay response coverage, cached-revision reconciliation, and partial-result notices are implemented. The remaining limitations and verification needs are documented in the library-completeness section below.
 
 **Follow-up on library writes:** The requested safeguards have been implemented, but authenticated, cross-tab, and multi-device validation is still needed, and conflicts cannot be eliminated completely. Review private audiobook sync separately. See §6.
 
@@ -31,6 +32,7 @@
 | External catalog validation | **Partial** | The specifically cited audiobook covers and metadata now have meaningful checks; other catalog paths still need a systematic review. |
 | Notification baseline and polling | **Partial** | The UI mentions device-local storage and known followers are retained across refreshes. Initial omissions and polling costs still merit review. |
 | Cache-key mismatches | **Partial** | Normal playlist, artist, and podcast update paths account for relay-scoped keys; Home-session keys and consistency still need review. |
+| Library-read relay completeness | **Done** | Per-relay EOSE coverage is reported, incomplete results are surfaced, and the reviewed library reads retain the newest known revisions. Relay data can still be missing or stale. |
 | URL validation and iframe origins | **Open** | Stream URLs are HTTPS-validated but arbitrary HTTPS hosts can still be embedded; CSP allows HTTPS frames. |
 | Replaceable-event selection | **Partial** | Library-write reconciliation uses the NIP-01 timestamp and event-ID tie-break; several other read paths still sort only by timestamp. |
 | Concurrent replaceable-list writes | **Partial** | Public library writes now use local coordination, relay reconciliation, and delivery warnings; cross-device conflicts remain possible and authenticated testing is outstanding. |
@@ -69,7 +71,7 @@ Further review should consider application-specific replay, ordering, timestamp 
 
 The library-write reconciliation path in `src/lib/libraryQuery.ts` now selects the newest matching event using the NIP-01 timestamp and event-ID tie-break, with author, kind, and addressable identifier checks. Recent locally published public events can also be considered by the affected read paths.
 
-Other read paths are not yet consistent: `useProfilePrivacy.ts`, `useFollowedPeople.ts`'s initial relay selection, and `useFriendLibrary.ts` still select some kind-30000 events by timestamp only. `useFollowedArtists.ts` still requests `limit: 1` per relay for display reads. Apply the comparator consistently and review whether requesting additional candidates improves convergence. No client can retrieve versions that no responding relay supplies.
+The artist, podcast, followed-people, and saved-album library reads now reconcile whole event revisions using this comparator; playlist display reconciliation uses it too. Other read paths are not yet consistent: `useProfilePrivacy.ts` for another person's profile and `useFriendLibrary.ts` still select some kind-30000 events by timestamp only. `useFollowedArtists.ts` still requests `limit: 1` per relay for display reads. Apply the comparator consistently and review whether requesting additional candidates improves convergence. No client can retrieve versions that no responding relay supplies.
 
 ### 6. Concurrent replaceable-list writes — Partial
 
@@ -85,7 +87,7 @@ Other read paths are not yet consistent: `useProfilePrivacy.ts`, `useFollowedPeo
 
 - Nostr has no atomic compare-and-swap. Other devices, browsers, clients, and tabs without Web Locks can still publish concurrent replacements. A read can be incomplete or become stale between checking and publishing. Some relay reads may be incomplete and the write can still proceed with a warning; an accepting relay may not retain the event.
 - Validate the safeguards with authenticated signers and controlled relays: simultaneous same-tab and cross-tab changes, delayed or missing relay responses, partial and unconfirmed writes, stale playlist edits and deletions, same-second updates, storage failure, and account switching. Also test real cross-device conflicts and clarify recovery where necessary. These scenarios have not been verified by the preview used for the implementation.
-- Private audiobook sync uses its separate `useAudiobookLibrarySync.ts` flow; it was not moved to this public-library write coordinator. Review its concurrent-update and deletion/merge behavior separately without storing decrypted private library content in the public-event cache.
+- Private audiobook sync uses its separate `useAudiobookLibrarySync.ts` flow; it was not moved to this public-library write coordinator. It now pauses remote reconciliation and publication when any selected relay fails to finish. Review its concurrent-update and deletion/merge behavior separately without storing decrypted private library content in the public-event cache.
 
 ### 7. Notifications and polling — Partial / Review
 
@@ -126,11 +128,18 @@ Some structured loading states still use `aria-label` on non-live containers, fo
 
 ## Additional observations from this review
 
-### Library completeness can overstate cross-relay coverage — Review
+### Library-read completeness across relays — Done, with limitations
 
-The fast display helper `queryLibraryEvents()` in `src/lib/libraryQuery.ts` still sets `complete = true` when **one** relay sends EOSE, then gives other relays a 700 ms grace period. This flag does not mean that all selected relays responded or that the newest version was retrieved. For example, `useFollowedArtists.ts` can replace its displayed list after a fast but stale or empty response; it now also considers a locally remembered recent write, but that does not cover every remote update.
+**Implemented:**
 
-The new **write-specific** `readLibraryForWrite()` is separate: it waits up to four seconds per relay in parallel, requires at least one completed response, and reports partial responses. It still cannot prove it saw every remote update. Consider reporting per-relay completion for display queries too and making cache decisions reflect the intended trade-off between speed and completeness. A live-relay reproduction was not performed.
+- `queryLibraryEvents()` now deduplicates selected relays and records which relays reached EOSE and which did not. `complete` is true only when every selected relay finished, rather than when the first relay responded. The initial query uses a 1.6-second grace period after the first EOSE and a five-second overall limit; after an incomplete check, subsequent library retries wait up to the full five seconds for slower relays. Slow, failed, or stopped subscriptions are reported as incomplete. Events received before a relay stops are still considered.
+- Followed artists, saved podcasts, followed people, and saved albums reconcile the newest known **whole signed revision** with new relay results and recent local writes. This protects known newer lists from an empty or stale partial response without automatically unioning incompatible revisions and resurrecting removed entries. Playlist reads retain cached entries and honor known deletion events; their event comparison now includes the tie-break.
+- Library views, including Liked Songs, followed artists, saved podcasts, saved albums, friends, playlist pages, and profile settings, report incomplete relay responses or preserve an existing partial-state warning. Users can retry. If no privacy preference event is known and the read is partial, Ostrify treats profile visibility as unconfirmed instead of assuming it is public.
+- Private audiobook sync keeps local data unchanged and pauses remote reconciliation and publication when any selected relay did not finish; the audiobook library provides retry and relay-settings controls. Automatic friend migration is also paused on a partial follow-list read.
+
+**Limits and follow-up:** EOSE only confirms that a relay finished this bounded query; it does not prove the relay retained every event, delivered the latest revision, or returned results beyond query limits. The short grace period deliberately favors responsiveness and can classify slow relays as incomplete. Cached remote revisions are retained in the current app query cache; this is not a durable backup or cross-device sync. With unavailable selected relays, private audiobook sync and automatic friend migration remain paused until a full check succeeds. Check real-world relay responsiveness and, if necessary, refine retry or relay-selection guidance. Cross-device conflicts, write delivery, other public-profile queries, and broader replaceable-event consistency remain separate follow-up work.
+
+Browser checks with simulated relay responses exercised complete, delayed, and failed responses, duplicate relay URLs, longer retries, cached newer revisions, mismatched authors, and timestamp ties. A signed-in preview also showed partial-result notices and retry controls with live relays. These checks do not replace automated tests or full cross-device testing.
 
 ### Sharing metadata points to a different host — Review
 
@@ -144,4 +153,4 @@ The new **write-specific** `readLibraryForWrite()` is separate: it waits up to f
 
 - The original re-audit compared previous findings to source and reviewed NIP-17 and NIP-59 for the wrapper/seal author correction. Its review was static; it did not exercise live signers, relays, multiple devices, playback, screen readers, or performance.
 - For library-write commit `25f6865`, `tsc --noEmit` and Shakespeare's `build_project` passed. The signed-out library and like flows rendered in preview. Authenticated writes, relay failures, and cross-device conflicts were not exercised. `npm test` and a direct Vitest attempt could not run because the necessary commands/packages were unavailable in that environment.
-- This report update reviewed the changed source and commit. `tsc --noEmit` and Shakespeare's `build_project` passed, and Home rendered in preview. `npm test` could not run because `npm` is unavailable; no new authenticated or cross-device testing was performed.
+- The library-read update was checked with simulated relay responses in the preview and a temporary signed-in preview account for partial notices, privacy controls, and retry controls. `tsc --noEmit` and Shakespeare's build passed. `npm test` and a direct Vitest attempt could not run because `npm` and Vitest are unavailable in this environment. No live cross-device conflict test or automated test suite was performed for this update; see the library-completeness section for the checks and their limits.

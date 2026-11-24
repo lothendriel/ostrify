@@ -5,7 +5,7 @@ import { useAppContext } from "./useAppContext";
 import { useLibraryPublish } from "./useNostrPublish";
 import type { NostrEvent } from "@nostrify/nostrify";
 import { wavlakeArtistId, wavlakeArtistUrl } from "./useWavlake";
-import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, newestLibraryEvent, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, recentLibraryEvent, reconcileLibraryEvent, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, useLibraryRevision, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
 import { useToast } from '@/hooks/useToast';
 import { getUserDataReadRelays } from '@/lib/appRelays';
 import { homeSessionQueryKey } from '@/lib/homeSession';
@@ -34,7 +34,9 @@ export function useFollowedArtists(enabled = true, sessionScope?: string) {
     ["followed-artists", user?.pubkey ?? "", readRelayKey],
   );
 
-  return useQuery({
+  const coverage = useLibraryCoverage(queryKey);
+  useLibraryRevision(user?.pubkey ?? '', FOLLOW_SET_KIND, FOLLOWED_ARTISTS_ID);
+  const query = useQuery({
     queryKey,
     staleTime: sessionScope ? Infinity : 60_000,
     placeholderData: (previousData: string[] | undefined, previousQuery) =>
@@ -42,23 +44,22 @@ export function useFollowedArtists(enabled = true, sessionScope?: string) {
     queryFn: async (c) => {
       if (!user || !readRelayKey) return [] as string[];
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
-      const { events, complete } = await queryLibraryEvents(
+      const result = await queryLibraryEvents(
         nostr,
         readRelayKey.split("|"),
         [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 1 }],
         signal,
+        libraryReadRetryOptions(queryClient, queryKey),
       );
+      saveLibraryCoverage(queryClient, queryKey, result);
       const recent = recentLibraryEvent(user.pubkey, FOLLOW_SET_KIND, FOLLOWED_ARTISTS_ID);
-      const event = newestLibraryEvent([...events.filter(item => item.pubkey === user.pubkey && item.kind === FOLLOW_SET_KIND && item.tags.some(([name, value]) => name === 'd' && value === FOLLOWED_ARTISTS_ID)), ...(recent ? [recent] : [])]);
-      const current = artistRefs(event);
-      if (!complete && !recent) {
-        const cached = queryClient.getQueryData<string[]>(queryKey) ?? [];
-        return [...new Set([...cached, ...current])];
-      }
-      return current;
+      const event = reconcileLibraryEvent(queryClient, user.pubkey, FOLLOW_SET_KIND, FOLLOWED_ARTISTS_ID, [...result.events, recent]);
+      if (!event && !result.complete) return queryClient.getQueryData<string[]>(queryKey) ?? [];
+      return artistRefs(event);
     },
     enabled: enabled && !!user && !!readRelayKey,
   });
+  return { ...query, coverage, isPartial: !!coverage && !coverage.complete };
 }
 
 /** Whether the current user follows a given artist. */

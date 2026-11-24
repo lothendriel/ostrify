@@ -1,56 +1,86 @@
 import { NSet, type NPool, type NostrEvent, type NostrFilter } from '@nostrify/nostrify';
 import { verifyEvent } from 'nostr-tools';
+import { useQuery, type QueryClient, type QueryKey } from '@tanstack/react-query';
 
-const LIBRARY_EOSE_TIMEOUT_MS = 700;
+const LIBRARY_EOSE_GRACE_MS = 1600;
+const LIBRARY_READ_TIMEOUT_MS = 5000;
 
-export interface LibraryQueryResult {
-  events: NostrEvent[];
+export interface LibraryCoverage {
   complete: boolean;
+  completedRelays: string[];
+  incompleteRelays: string[];
 }
 
-/** Query user-owned replaceable library events with a short, library-only relay grace period. */
+export interface LibraryQueryResult extends LibraryCoverage {
+  events: NostrEvent[];
+}
+
+function coverageKey(queryKey: QueryKey): QueryKey {
+  return ['library-read-coverage', ...queryKey];
+}
+
+/** Subscribe to the coverage of a library query without changing its data shape. */
+export function useLibraryCoverage(queryKey: QueryKey): LibraryCoverage | undefined {
+  return useQuery<LibraryCoverage>({ queryKey: coverageKey(queryKey), enabled: false, staleTime: Infinity }).data;
+}
+
+export function libraryReadRetryOptions(client: QueryClient, queryKey: QueryKey): { waitForAll: boolean } {
+  return { waitForAll: client.getQueryData<LibraryCoverage>(coverageKey(queryKey))?.complete === false };
+}
+
+export function saveLibraryCoverage(client: QueryClient, queryKey: QueryKey, result: LibraryCoverage): void {
+  client.setQueryData<LibraryCoverage>(coverageKey(queryKey), {
+    complete: result.complete,
+    completedRelays: result.completedRelays,
+    incompleteRelays: result.incompleteRelays,
+  });
+}
+
+/** Collect relay responses within a bounded grace period. EOSE is per relay, not global completeness. */
 export async function queryLibraryEvents(
   nostr: NPool,
   relays: string[],
   filters: NostrFilter[],
   signal: AbortSignal,
+  options: { waitForAll?: boolean } = {},
 ): Promise<LibraryQueryResult> {
-  if (!relays.length) return { events: [], complete: false };
+  const targets = [...new Set(relays)];
+  if (!targets.length) return { events: [], complete: false, completedRelays: [], incompleteRelays: [] };
+  if (signal.aborted) throw signal.reason;
 
   const controller = new AbortController();
   const relaySignal = AbortSignal.any([signal, controller.signal]);
   const events = new NSet();
-  let completedRelays = 0;
-  let complete = false;
+  const completed = new Set<string>();
   let graceTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = setTimeout(() => controller.abort(), LIBRARY_READ_TIMEOUT_MS);
 
-  const requests = relays.map(async (url) => {
-    try {
-      for await (const message of nostr.relay(url).req(filters, { signal: relaySignal })) {
-        if (message[0] === 'EVENT') {
-          events.add(message[2]);
-        } else if (message[0] === 'EOSE') {
-          completedRelays += 1;
-          // One completed relay is enough to establish that the query returned a
-          // complete response; other selected relays may be offline or slow.
-          complete = true;
-          if (completedRelays === relays.length) {
-            if (graceTimer) clearTimeout(graceTimer);
-            controller.abort();
-          } else if (completedRelays === 1) {
-            graceTimer = setTimeout(() => controller.abort(), LIBRARY_EOSE_TIMEOUT_MS);
+  try {
+    await Promise.all(targets.map(async url => {
+      try {
+        for await (const message of nostr.relay(url).req(filters, { signal: relaySignal })) {
+          if (message[0] === 'EVENT') events.add(message[2]);
+          else if (message[0] === 'EOSE') {
+            completed.add(url);
+            if (completed.size === targets.length) controller.abort();
+            else if (completed.size === 1 && !options.waitForAll) graceTimer = setTimeout(() => controller.abort(), LIBRARY_EOSE_GRACE_MS);
+            break;
           }
-          break;
         }
+      } catch {
+        // Events received before an interrupted subscription remain useful, but
+        // without EOSE this relay is not counted as having finished the query.
       }
-    } catch {
-      // Failed or timed-out relays contribute whatever events they returned.
-    }
-  });
-
-  await Promise.all(requests);
-  if (graceTimer) clearTimeout(graceTimer);
-  return { events: [...events], complete };
+    }));
+    if (signal.aborted) throw signal.reason;
+    const completedRelays = targets.filter(url => completed.has(url));
+    const incompleteRelays = targets.filter(url => !completed.has(url));
+    return { events: [...events], complete: incompleteRelays.length === 0, completedRelays, incompleteRelays };
+  } finally {
+    clearTimeout(deadline);
+    if (graceTimer) clearTimeout(graceTimer);
+    controller.abort();
+  }
 }
 
 // Library writes need a longer, independent read than the quick display query.
@@ -84,12 +114,27 @@ export async function withLibraryWrite<T>(pubkey: string, kind: number, identifi
   }
 }
 
+/** Keep the revision cache observed for as long as its library view is mounted. */
+export function useLibraryRevision(pubkey: string, kind: number, identifier: string): NostrEvent | undefined {
+  return useQuery<NostrEvent>({ queryKey: ['library-read-event', coordinate(pubkey, kind, identifier)], enabled: false, staleTime: Infinity }).data;
+}
+
 function matchesCoordinate(event: NostrEvent, pubkey: string, kind: number, identifier: string): boolean {
   return event.pubkey === pubkey && event.kind === kind && (kind < 30000 || event.tags.some(([name, value]) => name === 'd' && value === identifier));
 }
 
 export function newestLibraryEvent(events: NostrEvent[]): NostrEvent | undefined {
   return events.reduce<NostrEvent | undefined>((latest, event) => !latest || event.created_at > latest.created_at || (event.created_at === latest.created_at && event.id < latest.id) ? event : latest, undefined);
+}
+
+/** Keep a whole signed revision, rather than unioning incompatible replaceable lists. */
+export function reconcileLibraryEvent(client: QueryClient, pubkey: string, kind: number, identifier: string, candidates: (NostrEvent | null | undefined)[]): NostrEvent | undefined {
+  const key = ['library-read-event', coordinate(pubkey, kind, identifier)];
+  const cached = client.getQueryData<NostrEvent>(key);
+  const valid = [cached, ...candidates].filter((event): event is NostrEvent => !!event && matchesCoordinate(event, pubkey, kind, identifier));
+  const latest = newestLibraryEvent(valid);
+  if (latest && latest.id !== cached?.id) client.setQueryData(key, latest);
+  return latest;
 }
 
 /** Remember only signed public library events; no signer secrets or private data. */
@@ -149,6 +194,8 @@ export async function nextLibraryTimestamp(previousCreatedAt = 0): Promise<numbe
   if (previousCreatedAt >= now) throw new Error('Please wait a moment and try again.');
   return now;
 }
+
+
 
 export function libraryWriteWarning(partial: boolean): string | undefined {
   const noCrossTabLock = typeof navigator === 'undefined' || !navigator.locks?.request;

@@ -8,7 +8,7 @@ import { wavlakeTrackId, wavlakeTrackUrl } from "./useWavlake";
 import { fountainTrackId, fountainTrackUrl, podcastIndexTrackId, podcastIndexTrackUrl } from "./usePodcasts";
 import { isOstrifyMusicPlaylist, MUSIC_PLAYLIST_TOPIC, LIKED_TRACKS_IDENTIFIER, TUNESTR_FAVORITES_IDENTIFIER, PLAYLIST_VISIBILITY_TAG } from '@/lib/musicPlaylists';
 import { useToast } from './useToast';
-import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
+import { queryLibraryEvents, withLibraryWrite, readLibraryForWrite, rememberLibraryWrite, newestLibraryEvent, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, nextLibraryTimestamp, libraryWriteWarning } from '@/lib/libraryQuery';
 import { parsePublicMusicPlaylist, readPlaylistVisibilityOverrides, rememberPlaylistVisibility, type PublicMusicPlaylistDiscovery } from '@/lib/publicMusicPlaylists';
 import { getUserDataReadRelays } from '@/lib/appRelays';
 import { homeSessionQueryKey } from '@/lib/homeSession';
@@ -94,7 +94,8 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
     ["playlists", user?.pubkey ?? "", readRelayKey],
   );
 
-  return useQuery<Playlist[]>({
+  const coverage = useLibraryCoverage(queryKey);
+  const query = useQuery<Playlist[]>({
     queryKey,
     enabled: enabled && !!user && !!readRelayKey,
     select: (playlists: Playlist[]) => {
@@ -121,7 +122,7 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
       if (!user) return [] as Playlist[];
       if (!readRelayKey) return [] as Playlist[];
       const signal = AbortSignal.any([c.signal, AbortSignal.timeout(8000)]);
-      const { events, complete } = await queryLibraryEvents(
+      const result = await queryLibraryEvents(
         nostr,
         readRelayKey.split("|"),
         [
@@ -129,9 +130,11 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
           { kinds: [5], authors: [user.pubkey], limit: 200 },
         ],
         signal,
+        libraryReadRetryOptions(queryClient, queryKey),
       );
+      saveLibraryCoverage(queryClient, queryKey, result);
       const tombstones = readPlaylistDeletionTombstones(user.pubkey);
-      const deletionEvents = events.filter(event => event.kind === 5 && event.pubkey === user.pubkey);
+      const deletionEvents = result.events.filter(event => event.kind === 5 && event.pubkey === user.pubkey);
       const cache = new Map((queryClient.getQueryData<Playlist[]>(queryKey) ?? []).map(playlist => [playlist.id, playlist]));
       for (const deletion of deletionEvents) {
         for (const [name, value] of deletion.tags) {
@@ -152,14 +155,14 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
           }
         }
       }
-      const relayEvents = events.filter(event => event.pubkey === user.pubkey && event.kind === PLAYLIST_KIND && isOstrifyMusicPlaylist(event));
+      const relayEvents = result.events.filter(event => event.pubkey === user.pubkey && event.kind === PLAYLIST_KIND && isOstrifyMusicPlaylist(event));
       const newerRelayEvents = new Map<string, NostrEvent>();
       for (const event of relayEvents) {
         const id = event.tags.find(([name]) => name === 'd')?.[1];
         if (!id) continue;
         const cachedEvent = cache.get(id)?.event;
         const current = newerRelayEvents.get(id);
-        const newest = [event, current, cachedEvent].filter((candidate): candidate is NostrEvent => !!candidate).sort((left, right) => right.created_at - left.created_at)[0];
+        const newest = newestLibraryEvent([event, current, cachedEvent].filter((candidate): candidate is NostrEvent => !!candidate));
         if (newest) newerRelayEvents.set(id, newest);
       }
       for (const [id, cached] of cache) {
@@ -172,7 +175,7 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
         return deletedAt === undefined || event.created_at > deletedAt;
       }).map(parsePlaylist).filter((playlist): playlist is Playlist => playlist !== null);
       const visiblePlaylists = new Map(playlists.map(playlist => [playlist.id, playlist]));
-      if (!complete) {
+      if (!result.complete) {
         for (const [id, cached] of cache) {
           const deletedAt = tombstones[playlistCoordinate(user.pubkey, id)];
           if (!visiblePlaylists.has(id) && (deletedAt === undefined || cached.event.created_at > deletedAt)) visiblePlaylists.set(id, cached);
@@ -190,6 +193,7 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
       return finalPlaylists;
     },
   });
+  return { ...query, coverage, isPartial: !!coverage && !coverage.complete };
 }
 
 /** Fetch a single playlist by its d-tag for the current user. */

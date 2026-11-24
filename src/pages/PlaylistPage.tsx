@@ -29,7 +29,7 @@ type PlaylistSort = "original" | "title" | "artist";
 
 const PlaylistPage = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: playlist, isLoading: playlistLoading } = usePlaylist(id);
+  const { data: playlist, isLoading: playlistLoading, isPartial, refetch: refetchLibrary } = usePlaylist(id);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
   const { removeFromPlaylist, reorderPlaylist, deletePlaylist } = usePlaylistActions();
@@ -97,7 +97,8 @@ const PlaylistPage = () => {
   if (!playlistLoading && !playlist) {
     return (
       <div className="py-24 text-center">
-        <p className="text-muted-foreground">Playlist not found.</p>
+        <p className="text-muted-foreground">{isPartial ? 'Some relays did not finish, so this playlist may not have loaded yet.' : 'Playlist not found.'}</p>
+        {isPartial && <Button type="button" variant="link" onClick={() => void refetchLibrary()}>Retry relay check</Button>}
       </div>
     );
   }
@@ -138,6 +139,7 @@ const PlaylistPage = () => {
         }
       />
       <div className="px-3 sm:px-6">
+        {isPartial && <p role="status" className="mb-4 text-sm text-muted-foreground">Some selected relays did not finish. This playlist may be incomplete or out of date. <button type="button" className="underline" onClick={() => void refetchLibrary()}>Try again</button></p>}
         {tracks.length > 1 && <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-64">

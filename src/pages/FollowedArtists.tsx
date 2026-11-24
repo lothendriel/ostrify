@@ -51,7 +51,7 @@ function WavlakeArtistTile({ artistId }: { artistId: string }) {
 const FollowedArtists = () => {
   useSeoMeta({ title: "Followed Artists — Ostrify" });
   const { user } = useCurrentUser();
-  const { data: artists = [], isLoading } = useFollowedArtists();
+  const { data: artists = [], isLoading, isPartial, refetch } = useFollowedArtists();
 
   if (!user) {
     return (
@@ -69,6 +69,7 @@ const FollowedArtists = () => {
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Followed Artists</h1>
+      {isPartial && !isLoading && <p role="status" className="text-sm text-muted-foreground">Some selected relays did not finish. Your followed artists may be incomplete or out of date. <button type="button" className="underline" onClick={() => void refetch()}>Try again</button></p>}
 
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
@@ -82,7 +83,7 @@ const FollowedArtists = () => {
       ) : artists.length === 0 ? (
         <div className="border border-dashed border-border rounded-lg py-16 px-8 text-center">
           <p className="text-muted-foreground max-w-sm mx-auto">
-            You're not following any artists yet. Open an artist's page and tap Follow.
+            {isPartial ? 'No followed artists were found in the responses received so far.' : "You're not following any artists yet. Open an artist's page and tap Follow."}
           </p>
         </div>
       ) : (

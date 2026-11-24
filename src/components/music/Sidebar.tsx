@@ -36,7 +36,7 @@ const navItems = [
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
-  const { data: playlists, isLoading } = usePlaylists();
+  const { data: playlists, isLoading, isPartial: playlistsPartial, refetch: refetchPlaylists } = usePlaylists();
   const audiobookLibrary = useAudiobookLibrary();
   const podcastFavorites = usePodcastFavorites();
   const savedAlbums = useSavedAlbums();
@@ -108,6 +108,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <ScrollArea type="always" className="flex-1 min-h-0 px-2 pb-2">
           {!user ? <p className="px-3 py-4 text-sm text-muted-foreground">Log in to create playlists and like songs.</p> : (
             <div className="space-y-1">
+              {(playlistsPartial || podcastFavorites.isPartial || savedAlbums.data?.complete === false) && <p role="status" className="px-3 py-2 text-xs text-muted-foreground">Some relays did not finish. Your library may be incomplete. <button type="button" className="underline" onClick={() => { void refetchPlaylists(); void podcastFavorites.refetch(); void savedAlbums.refetch(); }}>Retry</button></p>}
               <NavLink to="/artists" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
                 <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0"><Users className="size-5 text-white" /></div>
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
