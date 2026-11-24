@@ -17,7 +17,7 @@ interface AccountSwitcherProps {
 }
 
 export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
-  const { currentUser, otherUsers, isLoading, setLogin, removeLogin } = useLoggedInAccounts();
+  const { currentUser, otherUsers, isLoading, isFetching, setLogin, removeLogin } = useLoggedInAccounts();
 
   if (!currentUser) return null;
 
@@ -27,7 +27,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
 
   // While the metadata query is in-flight and we don't yet have a name,
   // we don't want to flash a generated animal name / its first letter.
-  const isCurrentUserPending = isLoading && !currentUser.metadata.name;
+  const isCurrentUserPending = (isLoading || isFetching) && !currentUser.metadata.name;
 
   return (
     <DropdownMenu modal={false}>
@@ -75,7 +75,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           </Link>
         </DropdownMenuItem>
         {otherUsers.map((user) => {
-          const isPending = isLoading && !user.metadata.name;
+          const isPending = (isLoading || isFetching) && !user.metadata.name;
           return (
             <DropdownMenuItem
               key={user.id}

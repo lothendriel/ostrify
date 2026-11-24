@@ -25,12 +25,36 @@ function Avatar({
 
 function AvatarImage({
   className,
+  onLoadingStatusChange,
+  src,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+  const [retryKey, setRetryKey] = React.useState(0)
+  const retryCount = React.useRef(0)
+  const retryTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  React.useEffect(() => {
+    retryCount.current = 0
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current)
+    }
+  }, [src])
+
+  const handleLoadingStatusChange: React.ComponentProps<typeof AvatarPrimitive.Image>['onLoadingStatusChange'] = (status) => {
+    onLoadingStatusChange?.(status)
+    if (status !== "error" || !src || retryCount.current > 0) return
+
+    retryCount.current += 1
+    retryTimer.current = setTimeout(() => setRetryKey((key) => key + 1), 600)
+  }
+
   return (
     <AvatarPrimitive.Image
+      key={retryKey}
       data-slot="avatar-image"
       className={cn("aspect-square size-full", className)}
+      src={src}
+      onLoadingStatusChange={handleLoadingStatusChange}
       {...props}
     />
   )
