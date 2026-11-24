@@ -1,28 +1,29 @@
 import { useNostr } from '@nostrify/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { reconcileLibraryEvent, useLibraryRevision } from '@/lib/libraryQuery';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollowedPeople, PROFILE_SECTIONS, PROFILE_HIDDEN_TAG, type ProfileSection } from '@/hooks/useFollowedPeople';
 
-const EMPTY_SECTIONS: ProfileSection[] = [];
-
 export function useProfilePrivacy(pubkey?: string) {
   const { nostr } = useNostr();
+  const client = useQueryClient();
   const { user } = useCurrentUser();
   const followedPeople = useFollowedPeople();
   const target = pubkey ?? user?.pubkey;
   const isOwner = !!user && target === user.pubkey;
+  const revision = useLibraryRevision(target ?? '', 30000, 'ostrify-people');
   const remote = useQuery({
     queryKey: ['ostrify-profile-privacy', target ?? ''],
     enabled: !!target && !isOwner,
     staleTime: 60_000,
     queryFn: async ({ signal }) => {
-      if (!target) return EMPTY_SECTIONS;
-      const events = await nostr.query([{ kinds: [30000], authors: [target], '#d': ['ostrify-people'], limit: 5 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
-      const event = events.filter(item => item.pubkey === target && item.kind === 30000 && item.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
-      return [...new Set((event?.tags ?? []).filter(([name, value]) => name === PROFILE_HIDDEN_TAG && PROFILE_SECTIONS.includes(value as ProfileSection)).map(([, value]) => value as ProfileSection))];
+      if (!target) return null;
+      const events = await nostr.query([{ kinds: [30000], authors: [target], '#d': ['ostrify-people'], limit: 20 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
+      return reconcileLibraryEvent(client, target, 30000, 'ostrify-people', events) ?? null;
     },
   });
-  const sections = isOwner ? followedPeople.hiddenSections : remote.data;
+  const remoteSections = [...new Set((revision?.tags ?? remote.data?.tags ?? []).filter(([name, value]) => name === PROFILE_HIDDEN_TAG && PROFILE_SECTIONS.includes(value as ProfileSection)).map(([, value]) => value as ProfileSection))];
+  const sections = isOwner ? followedPeople.hiddenSections : remoteSections;
   const isLoading = isOwner ? followedPeople.isLoading : remote.isLoading || !remote.isFetched;
   const isError = isOwner ? followedPeople.isError : remote.isError;
   const privacyUnknown = isOwner

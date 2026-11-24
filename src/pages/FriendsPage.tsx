@@ -28,7 +28,7 @@ import { usePlayer } from '@/hooks/usePlayer';
 import { useProfilePrivacy } from '@/hooks/useProfilePrivacy';
 import { savedAlbumPath } from '@/lib/savedAlbums';
 import { useAppContext } from '@/hooks/useAppContext';
-import { queryLibraryEvents, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, reconcileLibraryEvent } from '@/lib/libraryQuery';
+import { queryLibraryEvents, saveLibraryCoverage, libraryReadRetryOptions, useLibraryCoverage, reconcileLibraryEvent, useLibraryRevision } from '@/lib/libraryQuery';
 import { getUserRelayUrls } from '@/lib/appRelays';
 
 function Person({ pubkey, children }: { pubkey: string; children?: React.ReactNode }) {
@@ -94,20 +94,22 @@ function ProfileFollowers({ pubkey }: { pubkey: string }) {
 
 function FollowedPeopleList({ pubkey }: { pubkey: string }) {
   const { nostr } = useNostr();
+  const client = useQueryClient();
   const privacy = useProfilePrivacy(pubkey);
+  const revision = useLibraryRevision(pubkey, 30000, 'ostrify-people');
   const people = useQuery({
     queryKey: ['public-ostrify-followed-people', pubkey],
     queryFn: async ({ signal }) => {
-      const events = await nostr.query([{ kinds: [30000], authors: [pubkey], '#d': ['ostrify-people'], limit: 5 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
-      const event = events.filter(item => item.pubkey === pubkey && item.kind === 30000 && item.tags.some(([name, value]) => name === 'd' && value === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
-      return [...new Set((event?.tags ?? []).filter(([name, value]) => name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '')).map(([, value]) => value))];
+      const events = await nostr.query([{ kinds: [30000], authors: [pubkey], '#d': ['ostrify-people'], limit: 20 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
+      return reconcileLibraryEvent(client, pubkey, 30000, 'ostrify-people', events) ?? null;
     },
   });
+  const followedPubkeys = [...new Set((revision?.tags ?? people.data?.tags ?? []).filter(([name, value]) => name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '')).map(([, value]) => value))];
   if (privacy.isLoading || people.isLoading) return <Skeleton className="h-20 w-full" />;
   if (privacy.isError || people.isError) return <p role="status" className="text-sm text-muted-foreground">Followed users aren’t available from your relays right now.</p>;
   if (privacy.isHidden('people')) return <p className="text-sm text-muted-foreground">This person has hidden their friends list.</p>;
-  if (!people.data?.length) return <p className="text-sm text-muted-foreground">No public followed users found.</p>;
-  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{people.data.map(pubkey => <ProfilePersonCard key={pubkey} pubkey={pubkey} />)}</div>;
+  if (!followedPubkeys.length) return <p className="text-sm text-muted-foreground">No public followed users found.</p>;
+  return <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{followedPubkeys.map(pubkey => <ProfilePersonCard key={pubkey} pubkey={pubkey} />)}</div>;
 }
 
 

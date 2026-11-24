@@ -6,7 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useAudiobookLibrary, getAudiobookLibrarySnapshot, parseAudiobookLibrary, replaceAudiobookLibrary, type AudiobookLibraryState } from '@/hooks/useAudiobookLibrary';
-import { queryLibraryEvents } from '@/lib/libraryQuery';
+import { newestEventForCoordinate, queryLibraryEvents } from '@/lib/libraryQuery';
 import { getUserDataReadRelays, getUserRelayUrls } from '@/lib/appRelays';
 import { useToast } from '@/hooks/useToast';
 
@@ -118,7 +118,7 @@ export function useAudiobookLibrarySync(enabled = true) {
         AbortSignal.any([signal, AbortSignal.timeout(8000)]),
         { waitForAll: client.getQueryData<RemoteLibraryResult>(queryKey)?.complete === false },
       );
-      const latest = events.filter(event => event.pubkey === user.pubkey && event.kind === LIBRARY_KIND && event.tags.some(([name, value]) => name === 'd' && value === LIBRARY_ID)).sort((left, right) => right.created_at - left.created_at)[0];
+      const latest = newestEventForCoordinate(events, user.pubkey, LIBRARY_KIND, LIBRARY_ID);
       if (!latest) return { library: null, complete };
       return { library: await parseRemoteLibrary(latest, user.pubkey, (peer, ciphertext) => user.signer.nip44!.decrypt(peer, ciphertext)), complete };
     },

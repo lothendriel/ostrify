@@ -3,6 +3,7 @@ import { useNostrLogin } from '@nostrify/react/login';
 import { useQuery } from '@tanstack/react-query';
 import { NSchema as n, type NostrEvent, type NostrMetadata } from '@nostrify/nostrify';
 import { sanitizeUrl } from '@/lib/sanitize';
+import { isNewerReplaceableEvent } from '@/lib/libraryQuery';
 
 const PROFILE_CACHE_PREFIX = 'ostrify:avatar-profile:v1:';
 const PROFILE_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -87,8 +88,9 @@ export function useLoggedInAccounts() {
       );
       const latestEvents = new Map<string, NostrEvent>();
       for (const event of events) {
+        if (event.kind !== 0 || !logins.some(login => login.pubkey === event.pubkey)) continue;
         const previous = latestEvents.get(event.pubkey);
-        if (!previous || event.created_at > previous.created_at) latestEvents.set(event.pubkey, event);
+        if (!previous || isNewerReplaceableEvent(event, previous)) latestEvents.set(event.pubkey, event);
       }
 
       const validProfiles = new Set<string>();

@@ -18,6 +18,7 @@ import { useCategoryTracks } from '@/hooks/useCategoryTracks';
 import { useWavlakeGenreCatalog, type WavlakeRelease } from '@/hooks/useWavlake';
 import { CATEGORIES, tracksInCategory } from '@/lib/categories';
 import { RESULTS_PER_PAGE } from '@/lib/pagination';
+import { isNewerReplaceableEvent } from '@/lib/libraryQuery';
 
 function PublisherCard({ pubkey, podcast, compact = false }: { pubkey: string; podcast: boolean; compact?: boolean }) {
   const { data } = useAuthor(pubkey);
@@ -34,9 +35,15 @@ function PublisherCard({ pubkey, podcast, compact = false }: { pubkey: string; p
 
 type PublisherMetadata = { name?: string; displayName?: string };
 
-function parsePublisherMetadata(events: NostrEvent[]): Map<string, PublisherMetadata> {
-  const metadataByPubkey = new Map<string, PublisherMetadata>();
+function parsePublisherMetadata(events: NostrEvent[], authors: string[]): Map<string, PublisherMetadata> {
+  const latest = new Map<string, NostrEvent>();
   for (const event of events) {
+    if (event.kind !== 0 || !authors.includes(event.pubkey)) continue;
+    const previous = latest.get(event.pubkey);
+    if (!previous || isNewerReplaceableEvent(event, previous)) latest.set(event.pubkey, event);
+  }
+  const metadataByPubkey = new Map<string, PublisherMetadata>();
+  for (const event of latest.values()) {
     try {
       const metadata: unknown = JSON.parse(event.content);
       if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) continue;
@@ -231,8 +238,8 @@ export function NostrCollectionsPage({ type }: { type: 'publishers' | 'albums' }
     enabled: type === 'publishers' && publisherKeys.length > 0,
     staleTime: 5 * 60 * 1000,
     queryFn: async ({ signal }) => {
-      const events = await nostr.query([{ kinds: [0], authors: publisherKeys, limit: publisherKeys.length }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
-      return parsePublisherMetadata(events);
+      const events = await nostr.query([{ kinds: [0], authors: publisherKeys, limit: publisherKeys.length * 3 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]) });
+      return parsePublisherMetadata(events, publisherKeys);
     },
   });
   const publishers = useMemo(() => {

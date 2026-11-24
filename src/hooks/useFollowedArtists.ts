@@ -47,7 +47,7 @@ export function useFollowedArtists(enabled = true, sessionScope?: string) {
       const result = await queryLibraryEvents(
         nostr,
         readRelayKey.split("|"),
-        [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 1 }],
+        [{ kinds: [FOLLOW_SET_KIND], authors: [user.pubkey], "#d": [FOLLOWED_ARTISTS_ID], limit: 20 }],
         signal,
         libraryReadRetryOptions(queryClient, queryKey),
       );

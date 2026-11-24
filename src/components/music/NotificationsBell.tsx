@@ -8,6 +8,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { getUserRelayUrls } from '@/lib/appRelays';
+import { isNewerReplaceableEvent } from '@/lib/libraryQuery';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { Button } from '@/components/ui/button';
@@ -107,12 +108,12 @@ function useNotificationsModel() {
       );
       const latestSetsByAuthor = new Map<string, Map<string, NostrEvent>>();
       for (const event of currentSets) {
-        if (event.kind !== 30000) continue;
-        const setId = event.tags.find(([name, value]) => name === 'd' && OSTRIFY_FOLLOW_SET_IDS.includes(value ?? ''))?.[1];
-        if (!setId) continue;
+        if (event.kind !== 30000 || !candidateAuthors.includes(event.pubkey)) continue;
+        const setId = event.tags.find(([name]) => name === 'd')?.[1];
+        if (!setId || !OSTRIFY_FOLLOW_SET_IDS.includes(setId)) continue;
         const sets = latestSetsByAuthor.get(event.pubkey) ?? new Map<string, NostrEvent>();
         const existing = sets.get(setId);
-        if (!existing || event.created_at > existing.created_at) sets.set(setId, event);
+        if (!existing || isNewerReplaceableEvent(event, existing)) sets.set(setId, event);
         latestSetsByAuthor.set(event.pubkey, sets);
       }
       const currentFollowers = [...latestSetsByAuthor].flatMap(([author, sets]) =>

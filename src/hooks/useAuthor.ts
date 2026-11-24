@@ -1,6 +1,7 @@
 import { type NostrEvent, type NostrMetadata, NSchema as n } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
+import { newestEventForCoordinate } from '@/lib/libraryQuery';
 
 export function useAuthor(pubkey: string | undefined, options: { persistForPublicArtistPage?: boolean } = {}) {
   const { nostr } = useNostr();
@@ -15,10 +16,11 @@ export function useAuthor(pubkey: string | undefined, options: { persistForPubli
         return {};
       }
 
-      const [event] = await nostr.query(
-        [{ kinds: [0], authors: [pubkey!], limit: 1 }],
+      const events = await nostr.query(
+        [{ kinds: [0], authors: [pubkey], limit: 10 }],
         { signal: AbortSignal.timeout(1500) },
       );
+      const event = newestEventForCoordinate(events, pubkey, 0);
 
       if (!event) {
         throw new Error('No event found');

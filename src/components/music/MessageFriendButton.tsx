@@ -11,6 +11,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/sanitize';
 import { useToast } from '@/hooks/useToast';
+import { newestEventForCoordinate } from '@/lib/libraryQuery';
 
 class Nip44EncryptionError extends Error {}
 
@@ -53,7 +54,7 @@ function safeRelay(value: string | undefined): string | undefined {
 
 async function relaysFrom(nostr: ReturnType<typeof useNostr>['nostr'], pubkey: string, kind: 10002 | 10050): Promise<string[]> {
   const events = await nostr.query([{ kinds: [kind], authors: [pubkey], limit: 10 }], { signal: AbortSignal.timeout(8000) });
-  const newest = events.filter(event => event.kind === kind && event.pubkey === pubkey).sort((a, b) => b.created_at - a.created_at)[0];
+  const newest = newestEventForCoordinate(events, pubkey, kind);
   const urls = (newest?.tags ?? []).flatMap(tag => {
     if (kind === 10050 && tag[0] === 'relay') {
       const relay = safeRelay(tag[1]);

@@ -3,6 +3,7 @@ import { useNostr } from '@nostrify/react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { finalizeEvent, generateSecretKey, getEventHash, nip19, nip44, verifyEvent } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
+import { newestEventForCoordinate } from '@/lib/libraryQuery';
 
 const APP_TAG = 'ostrify-friends-v1';
 const HEX = /^[0-9a-f]{64}$/;
@@ -41,7 +42,7 @@ function isAction(value: string | undefined): value is Action {
 
 async function inboxRelays(nostr: ReturnType<typeof useNostr>['nostr'], pubkey: string, signal: AbortSignal): Promise<string[]> {
   const events = await nostr.query([{ kinds: [10050], authors: [pubkey], limit: 10 }], { signal });
-  const newest = events.sort((a, b) => b.created_at - a.created_at)[0];
+  const newest = newestEventForCoordinate(events, pubkey, 10050);
   return [...new Set((newest?.tags ?? []).filter(([name]) => name === 'relay').map(([, url]) => {
     try { const parsed = new URL(url); return parsed.protocol === 'wss:' && !parsed.username && !parsed.password ? parsed.href : ''; } catch { return ''; }
   }).filter(Boolean))].slice(0, 5);
@@ -248,7 +249,7 @@ export function useNostrFollows() {
     queryFn: async ({ signal }) => {
       if (!user) return [] as string[];
       const events = await nostr.query([{ kinds: [3], authors: [user.pubkey], limit: 5 }], { signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]) });
-      const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
+      const latest = newestEventForCoordinate(events, user.pubkey, 3);
       return [...new Set((latest?.tags ?? []).filter(([n, p]) => n === 'p' && HEX.test(p)).map(([, p]) => p))].slice(0, 200);
     },
   });

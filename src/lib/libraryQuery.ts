@@ -120,11 +120,21 @@ export function useLibraryRevision(pubkey: string, kind: number, identifier: str
 }
 
 function matchesCoordinate(event: NostrEvent, pubkey: string, kind: number, identifier: string): boolean {
-  return event.pubkey === pubkey && event.kind === kind && (kind < 30000 || event.tags.some(([name, value]) => name === 'd' && value === identifier));
+  return event.pubkey === pubkey && event.kind === kind && (kind < 30000 || event.tags.find(([name]) => name === 'd')?.[1] === identifier);
+}
+
+/** NIP-01: newest timestamp wins; at equal timestamps the lowest event ID wins. */
+export function isNewerReplaceableEvent(candidate: Pick<NostrEvent, 'created_at' | 'id'>, current: Pick<NostrEvent, 'created_at' | 'id'>): boolean {
+  return candidate.created_at > current.created_at || (candidate.created_at === current.created_at && candidate.id < current.id);
 }
 
 export function newestLibraryEvent(events: NostrEvent[]): NostrEvent | undefined {
-  return events.reduce<NostrEvent | undefined>((latest, event) => !latest || event.created_at > latest.created_at || (event.created_at === latest.created_at && event.id < latest.id) ? event : latest, undefined);
+  return events.reduce<NostrEvent | undefined>((latest, event) => !latest || isNewerReplaceableEvent(event, latest) ? event : latest, undefined);
+}
+
+/** Only compare events belonging to the same trusted coordinate. */
+export function newestEventForCoordinate(events: NostrEvent[], pubkey: string, kind: number, identifier = ''): NostrEvent | undefined {
+  return newestLibraryEvent(events.filter(event => matchesCoordinate(event, pubkey, kind, identifier)));
 }
 
 /** Keep a whole signed revision, rather than unioning incompatible replaceable lists. */

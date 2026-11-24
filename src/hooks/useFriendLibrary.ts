@@ -4,6 +4,7 @@ import { wavlakeTrackUrl, wavlakeArtistId } from '@/hooks/useWavlake';
 import { isOstrifyMusicPlaylist, playlistTrackRefs } from '@/lib/musicPlaylists';
 import { eventToTrack } from '@/lib/music';
 import { parseSavedAlbums, SAVED_ALBUMS_ID } from '@/lib/savedAlbums';
+import { isNewerReplaceableEvent, newestEventForCoordinate } from '@/lib/libraryQuery';
 
 /** Public library content is always queried for the specific profile owner. */
 export function useFriendLibrary(pubkey: string | undefined) {
@@ -20,7 +21,7 @@ export function useFriendLibrary(pubkey: string | undefined) {
       const byId = new Map<string, typeof events[number]>();
       for (const event of events.filter(e => e.pubkey === pubkey && e.kind === 30003)) {
         const d = event.tags.find(([n]) => n === 'd')?.[1];
-        if (d && (!byId.has(d) || byId.get(d)!.created_at < event.created_at)) byId.set(d, event);
+        if (d && (!byId.has(d) || isNewerReplaceableEvent(event, byId.get(d)!))) byId.set(d, event);
       }
       const candidates = [...byId.entries()];
       const savedAlbumsEvent = candidates.find(([id]) => id === SAVED_ALBUMS_ID)?.[1];
@@ -51,13 +52,13 @@ export function useFriendLibrary(pubkey: string | undefined) {
         if (!known && !tracks.length) return [];
         return [{ id, title: event.tags.find(([n]) => n === 'title')?.[1] || (id === 'nostr-tunes-liked' ? 'Liked Songs' : 'Playlist'), tracks }];
       });
-      const artistEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey && e.tags.some(([n, d]) => n === 'd' && d === 'ostrify-artists')).sort((a, b) => b.created_at - a.created_at)[0];
+      const artistEvent = newestEventForCoordinate(events, pubkey, 30000, 'ostrify-artists');
       const artists = artistEvent?.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'artists') ? [] : (artistEvent?.tags ?? []).flatMap(([name, value]) => {
         if (name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '')) return [value];
         const artistId = name === 'i' && value ? wavlakeArtistId(value) : undefined;
         return artistId ? [`wavlake:${artistId}`] : [];
       });
-      const peopleEvent = events.filter(e => e.kind === 30000 && e.pubkey === pubkey && e.tags.some(([n, d]) => n === 'd' && d === 'ostrify-people')).sort((a, b) => b.created_at - a.created_at)[0];
+      const peopleEvent = newestEventForCoordinate(events, pubkey, 30000, 'ostrify-people');
       const people = peopleEvent?.tags.some(([name, value]) => name === 'ostrify-hide' && value === 'people') ? [] : [...new Set((peopleEvent?.tags ?? []).filter(([name, value]) => name === 'p' && /^[0-9a-f]{64}$/.test(value ?? '') && value !== pubkey).map(([, value]) => value))];
       return { playlists, artists, people, albums, otherListsUnverified };
     },
@@ -71,7 +72,11 @@ export function useFriendStatuses(pubkeys: string[], refetchInterval: number | f
     queryFn: async ({ signal }) => {
       const events = await nostr.query([{ kinds: [30315], authors: pubkeys, '#d': ['music'], limit: Math.max(50, pubkeys.length * 3) }], { signal: AbortSignal.any([signal, AbortSignal.timeout(6000)]) });
       const latest = new Map<string, typeof events[number]>();
-      for (const event of events) if (pubkeys.includes(event.pubkey) && (!latest.has(event.pubkey) || latest.get(event.pubkey)!.created_at < event.created_at)) latest.set(event.pubkey, event);
+      for (const event of events) {
+        if (event.kind !== 30315 || !pubkeys.includes(event.pubkey) || event.tags.find(([name]) => name === 'd')?.[1] !== 'music') continue;
+        const previous = latest.get(event.pubkey);
+        if (!previous || isNewerReplaceableEvent(event, previous)) latest.set(event.pubkey, event);
+      }
       return [...latest.values()].filter(e => {
         const expiry = Number(e.tags.find(([name]) => name === 'expiration')?.[1]);
         return !!e.content && Number.isFinite(expiry) && expiry > Date.now() / 1000;
