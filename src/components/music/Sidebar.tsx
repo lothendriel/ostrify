@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3, Video } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
@@ -21,10 +21,6 @@ import { parseN94Stream, parseTunestrStreamEvent } from '@/hooks/useTunestrStrea
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 import { useSavedAlbums } from '@/hooks/useSavedAlbums';
 import { useWavlakeRelease } from '@/hooks/useWavlake';
-import { useQueryClient } from '@tanstack/react-query';
-import { useAppContext } from '@/hooks/useAppContext';
-import { getUserDataReadRelays } from '@/lib/appRelays';
-import type { LibraryCoverage } from '@/lib/libraryQuery';
 import { groupIntoAlbums, useArtistTracks } from '@/hooks/useArtistTracks';
 import type { SavedAlbum } from '@/lib/savedAlbums';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -41,14 +37,7 @@ const navItems = [
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
-  const { data: playlists, isLoading, isPartial: playlistsPartial, coverage: playlistsCoverage, refetch: refetchPlaylists } = usePlaylists();
-  const queryClient = useQueryClient();
-  const { config } = useAppContext();
-  const { toast } = useToast();
-  const retryDescriptionId = useId();
-  const [retrying, setRetrying] = useState(false);
-  const [retryResult, setRetryResult] = useState<'partial' | 'failed' | null>(null);
-  const retryInFlight = useRef(false);
+  const { data: playlists, isLoading } = usePlaylists();
   const audiobookLibrary = useAudiobookLibrary();
   const podcastFavorites = usePodcastFavorites();
   const savedAlbums = useSavedAlbums();
@@ -63,44 +52,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const likedPlaylist = liked ?? { id: LIKED_SONGS_ID, title: "Liked Songs", trackIds: [] };
   const tunestrFavorites = playlists?.find(playlist => playlist.isTunestrFavorites) ?? { id: TUNESTR_FAVORITES_IDENTIFIER, title: 'TuneStr Recordings', trackIds: [] };
   const regular = (playlists ?? []).filter((p) => !p.isLiked && !p.isTunestrFavorites);
-  const incompleteRelays = [...new Set([
-    ...(playlistsCoverage?.incompleteRelays ?? []),
-    ...(podcastFavorites.coverage?.incompleteRelays ?? []),
-    ...(savedAlbums.data?.incompleteRelays ?? []),
-  ])];
-
-  const readRelayKey = getUserDataReadRelays(config.appRelayMetadata, config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', config.excludedUserRelayUrls, config.excludedUserRelayPubkey).join('|');
-
-  const retryLibrary = async () => {
-    if (retryInFlight.current || !user) return;
-    retryInFlight.current = true;
-    setRetrying(true);
-    setRetryResult(null);
-    try {
-      const results = await Promise.all([
-        refetchPlaylists({ cancelRefetch: true }),
-        podcastFavorites.refetch({ cancelRefetch: true }),
-        savedAlbums.refetch({ cancelRefetch: true }),
-      ]);
-      const playlistCoverage = queryClient.getQueryData<LibraryCoverage>(['library-read-coverage', 'playlists', user.pubkey, readRelayKey]);
-      const podcastCoverage = queryClient.getQueryData<LibraryCoverage>(['library-read-coverage', 'podcast-favorites', user.pubkey, readRelayKey]);
-      if (results.some(result => result.isError) || !playlistCoverage || !podcastCoverage || !results[2].data) {
-        setRetryResult('failed');
-        toast({ title: 'Library retry failed', description: 'Check your read relay connections and try again.' });
-      } else if (!playlistCoverage.complete || !podcastCoverage.complete || !results[2].data.complete) {
-        setRetryResult('partial');
-        toast({ title: 'Some relays still did not respond', description: 'Your library may still be incomplete. Check your relay settings.' });
-      } else {
-        toast({ title: 'Library retry complete', description: 'Your read relays responded.' });
-      }
-    } catch {
-      setRetryResult('failed');
-      toast({ title: 'Library retry failed', description: 'Check your read relay connections and try again.' });
-    } finally {
-      retryInFlight.current = false;
-      setRetrying(false);
-    }
-  };
 
   return (
     <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
@@ -158,16 +109,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <ScrollArea type="always" className="flex-1 min-h-0 px-2 pb-2">
           {!user ? <p className="px-3 py-4 text-sm text-muted-foreground">Log in to create playlists and like songs.</p> : (
             <div className="space-y-1">
-              {(retrying || retryResult || playlistsPartial || podcastFavorites.isPartial || savedAlbums.data?.complete === false) && (
-                <div className="space-y-1 px-3 py-2 text-xs text-muted-foreground">
-                  <p id={retryDescriptionId} role="status" aria-live="polite">{retrying ? 'Retrying your library relays…' : retryResult === 'failed' ? 'Library retry failed. Check your relay settings.' : retryResult === 'partial' ? 'Retry complete. Some relays still did not finish; your library may be incomplete.' : 'Some relays did not finish. Your library may be incomplete.'}</p>
-                  {!retrying && incompleteRelays.length > 0 && <p>Did not finish library requests: {incompleteRelays.join(', ')}</p>}
-                  <button type="button" onClick={() => void retryLibrary()} disabled={retrying} aria-describedby={retryDescriptionId} className="inline-flex min-h-8 cursor-pointer items-center rounded-md px-2 font-semibold text-primary underline underline-offset-4 hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60">
-                    {retrying ? 'Retrying…' : 'Retry library relays'}
-                  </button>
-                  {!retrying && <NavLink to="/settings?tab=relays" onClick={onNavigate} className="inline-flex min-h-8 items-center rounded-md px-2 text-foreground underline underline-offset-4 hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Relay settings</NavLink>}
-                </div>
-              )}
               <NavLink to="/artists" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
                 <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0"><Users className="size-5 text-white" /></div>
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
