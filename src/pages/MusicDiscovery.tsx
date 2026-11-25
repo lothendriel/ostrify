@@ -147,7 +147,7 @@ export default function MusicDiscovery() {
       </TabsContent>
       <TabsContent value="tunestr" className="mt-0">
         <div className="space-y-8">
-          <div><p className="text-sm text-muted-foreground">NIP-53 streams and recordings published on Nostr. A Cloudflare HLS manifest is video, so it must play in a video player; the raw .m3u8 URL is not a normal web page.</p></div>
+          <div><p className="text-sm text-muted-foreground">NIP-53 streams and recordings published on Nostr. HLS streams and supported video files play in Ostrify when the publisher’s server and your browser allow it.</p></div>
           {!supportedRelayCount && <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Add read relays in Settings to discover TuneStr shows.</div>}
           {tunestr.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">TuneStr shows couldn’t be loaded. <button className="underline" onClick={() => void tunestr.refetch()}>Try again</button></div>}
           {tunestr.data?.pages.some(page => page.failed.length > 0 || page.unconfirmed) ? <p role="status" className="text-sm text-muted-foreground">Some relays or current stream revisions could not be checked. Results may be incomplete or out of date.</p> : null}

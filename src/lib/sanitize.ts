@@ -24,6 +24,21 @@ export function cloudflareStreamEmbed(url: string | undefined | null): string | 
   return match ? `https://${parsed.hostname}/${match[1].toLowerCase()}/iframe` : undefined;
 }
 
+export type StreamPlaybackSource =
+  | { type: 'hls' | 'video' | 'embed'; url: string }
+  | { type: 'unsupported' };
+
+/** Classify HTTPS media by URL path, never by query string or a loose hostname match. */
+export function classifyStreamPlayback(url: string | undefined | null): StreamPlaybackSource {
+  const safeUrl = sanitizeUrl(url);
+  if (!safeUrl) return { type: 'unsupported' };
+  const parsed = new URL(safeUrl);
+  if (/\.m3u8$/i.test(parsed.pathname)) return { type: 'hls', url: safeUrl };
+  if (/\.(mp4|m4v|webm|ogv)$/i.test(parsed.pathname)) return { type: 'video', url: safeUrl };
+  const embed = cloudflareStreamEmbed(safeUrl);
+  return embed ? { type: 'embed', url: embed } : { type: 'unsupported' };
+}
+
 /** Generate a short, friendly fallback name from a pubkey. */
 export function genUserName(pubkey: string): string {
   return `User ${pubkey.slice(0, 8)}`;

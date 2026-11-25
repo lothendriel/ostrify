@@ -3,7 +3,7 @@ import { ExternalLink, Maximize2, Minimize2, PictureInPicture2, ShieldAlert, X }
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { cloudflareStreamEmbed, sanitizeUrl } from '@/lib/sanitize';
+import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
 
@@ -39,43 +39,63 @@ export function useTunestrPlayer() {
 function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isZapClubHls = stream.url === 'https://stream.zapclub.io/live/basement.m3u8';
-  const embedUrl = cloudflareStreamEmbed(stream.url);
-  const sourceUrl = sanitizeUrl(stream.externalUrl);
+  const source = classifyStreamPlayback(stream.url);
+  const sourceType = source.type;
+  const sourceUrl = source.type === 'unsupported' ? undefined : source.url;
+  const externalUrl = sanitizeUrl(stream.externalUrl);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !isZapClubHls) return;
+    if (!video || sourceType !== 'hls' || !sourceUrl) return;
     setError(null);
 
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = stream.url;
-      return;
-    }
-
+    // Prefer hls.js when MSE is available; some browsers claim native HLS
+    // support but cannot decode every live playlist. Safari falls back to native.
     let disposed = false;
     let player: import('hls.js').default | undefined;
     void import('hls.js').then(({ default: Hls }) => {
       if (disposed) return;
       if (!Hls.isSupported()) {
-        setError('This browser does not support HLS video playback. Open the stream source in a new tab.');
+        if (video.canPlayType('application/vnd.apple.mpegurl')) video.src = sourceUrl;
+        else setError('This browser does not support HLS video playback. Open the stream source in a new tab.');
         return;
       }
-      player = new Hls({ enableWorker: false, lowLatencyMode: true });
-      player.loadSource(stream.url);
+      player = new Hls({
+        enableWorker: false,
+        lowLatencyMode: true,
+        // HLS manifests can reference other resources; only request HTTPS URLs.
+        xhrSetup: (xhr, url) => {
+          const safe = sanitizeUrl(url);
+          // Throwing alone is insufficient: hls.js retries setup after opening
+          // the request. Abort it explicitly and do not throw on the retry.
+          if (!safe) {
+            xhr.abort();
+            if (!disposed) setError('This stream referenced an unsafe URL and was blocked.');
+            return;
+          }
+          xhr.open('GET', safe, true);
+          xhr.withCredentials = false;
+        },
+        fetchSetup: (context, init) => {
+          const safe = sanitizeUrl(context.url);
+          if (!safe) throw new Error('The stream referenced an unsafe URL.');
+          return new Request(safe, { ...init, credentials: 'omit', referrerPolicy: 'no-referrer' });
+        },
+      });
+      player.loadSource(sourceUrl);
       player.attachMedia(video);
       player.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal) return;
+        if (!data.fatal || disposed) return;
         setError('The live stream could not be loaded. Please try opening the stream source directly.');
         player?.destroy();
       });
-    }).catch(() => setError('The HLS player could not be loaded. Open the stream source in a new tab.'));
-    return () => { disposed = true; player?.destroy(); };
-  }, [isZapClubHls, stream.id, stream.url]);
+    }).catch(() => { if (!disposed) setError('The HLS player could not be loaded. Open the stream source in a new tab.'); });
+    return () => { disposed = true; player?.destroy(); video.pause(); video.removeAttribute('src'); video.load(); };
+  }, [sourceType, sourceUrl, stream.id]);
 
-  if (!isZapClubHls && embedUrl) return <iframe
+  if (source.type === 'embed') return <iframe
     key={stream.id}
-    src={embedUrl}
+    src={source.url}
     title={stream.title}
     sandbox="allow-scripts allow-same-origin"
     referrerPolicy="no-referrer"
@@ -84,15 +104,15 @@ function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
     className="aspect-video w-full border-0 bg-black"
   />;
 
-  if (!isZapClubHls) return <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-black px-6 text-center text-white">
+  if (source.type === 'unsupported') return <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-black px-6 text-center text-white">
     <ShieldAlert className="size-8 text-white/70" aria-hidden="true" />
     <p className="font-semibold">This source can’t be embedded safely</p>
-    <p className="max-w-md text-sm text-white/75">{sourceUrl ? 'Open the publisher’s site only if you trust it. External sites are not controlled by Ostrify.' : 'No valid HTTPS source is available for this stream.'}</p>
-    {sourceUrl && <><p className="max-w-full break-all text-xs text-white/75">Source: {new URL(sourceUrl).hostname}</p><Button asChild variant="secondary" className="rounded-full"><a href={sourceUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4 shrink-0" /> Open source in a new tab</a></Button></>}
+    <p className="max-w-md text-sm text-white/75">{externalUrl ? 'Open the publisher’s site only if you trust it. External sites are not controlled by Ostrify.' : 'No valid HTTPS source is available for this stream.'}</p>
+    {externalUrl && <><p className="max-w-full break-all text-xs text-white/75">Source: {new URL(externalUrl).hostname}</p><Button asChild variant="secondary" className="rounded-full"><a href={externalUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4 shrink-0" /> Open source in a new tab</a></Button></>}
   </div>;
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} controls autoPlay playsInline className="size-full" aria-label={stream.title} />
+    <video ref={videoRef} src={source.type === 'video' ? source.url : undefined} controls autoPlay playsInline crossOrigin="anonymous" className="size-full" aria-label={stream.title} onError={() => setError('This video could not be loaded. Check the source or try again.')} />
     {error && <div role="status" className="absolute inset-x-3 bottom-14 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
   </div>;
 }
@@ -107,7 +127,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   const playerRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const sourceUrl = sanitizeUrl(stream.externalUrl);
-  const hasEmbeddedPlayer = stream.format === 'n94' && !!stream.event && !!stream.variant || stream.url === 'https://stream.zapclub.io/live/basement.m3u8' || !!cloudflareStreamEmbed(stream.url);
+  const hasEmbeddedPlayer = stream.format === 'n94' && !!stream.event && !!stream.variant || classifyStreamPlayback(stream.url).type !== 'unsupported';
 
   useEffect(() => {
     const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerRef.current);

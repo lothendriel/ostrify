@@ -4,7 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { cloudflareStreamEmbed, sanitizeUrl } from '@/lib/sanitize';
+import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
 import { getUserRelayUrls, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 import { isOriginalSoundTitle, type Track } from '@/lib/music';
@@ -41,18 +41,6 @@ export interface TunestrStream {
   event?: NostrEvent;
   variant?: string;
   track: Track;
-}
-
-function streamPlaybackUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === 'stream.zapclub.io' && parsed.pathname === '/live/basement.m3u8') {
-      return 'https://stream.zapclub.io/live/basement.m3u8';
-    }
-    return cloudflareStreamEmbed(url) ?? url;
-  } catch {
-    return url;
-  }
 }
 
 function tagValue(event: { tags: string[][] }, name: string): string | undefined {
@@ -156,7 +144,7 @@ export function parseTunestrStreamEvent(event: NostrEvent): TunestrStream | null
 
   const isLive = eventStatus === 'live' && event.created_at >= Date.now() / 1000 - 60 * 60;
   const sourceUrl = isLive ? streamingUrl || recordingUrl : recordingUrl || streamingUrl;
-  const url = sourceUrl ? streamPlaybackUrl(sourceUrl) : undefined;
+  const url = sourceUrl;
   if (!url || !sourceUrl) return null;
 
   const summary = tagValue(event, 'summary');
