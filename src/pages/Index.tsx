@@ -9,7 +9,6 @@ import { useNearViewport } from "@/hooks/useNearViewport";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useFollowedArtists } from "@/hooks/useFollowedArtists";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useAppContext } from "@/hooks/useAppContext";
 import { usePlaylists } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { Shelf } from "@/components/music/Shelf";
@@ -25,11 +24,28 @@ import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
 import type { Track } from "@/lib/music";
 import { useHomeSessionScope } from '@/contexts/HomeSessionContext';
+import { isSessionMusicTrack, readHomeSessionSnapshot, writeHomeSessionSnapshot } from '@/lib/homeSession';
 
 const HOME_SHELF_CATEGORIES = CATEGORIES.filter(category => category.id !== "bitcoin");
 const HOME_WAVLAKE_GENRES = [...new Set(HOME_SHELF_CATEGORIES.flatMap(category => category.wavlakeGenres ?? []))];
 type HomeCategoryShelves = { category: typeof CATEGORIES[number]; tracks: Track[] }[];
-let homeShelfSessionSnapshot: { scope: string; shelves: HomeCategoryShelves } | null = null;
+function isSavedCategoryShelves(value: unknown): value is Record<string, Track[]> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const shelves = value as Record<string, unknown>;
+  return HOME_SHELF_CATEGORIES.every(category => {
+    const tracks = shelves[category.id];
+    return Array.isArray(tracks) && tracks.every(isSessionMusicTrack);
+  });
+}
+
+function readCategoryShelves(scope: string): HomeCategoryShelves | null {
+  const saved = readHomeSessionSnapshot(`genres:${scope}`, isSavedCategoryShelves);
+  return saved ? HOME_SHELF_CATEGORIES.map(category => ({ category, tracks: saved[category.id] })) : null;
+}
+
+function saveCategoryShelves(scope: string, shelves: HomeCategoryShelves) {
+  writeHomeSessionSnapshot(`genres:${scope}`, Object.fromEntries(shelves.map(({ category, tracks }) => [category.id, tracks])));
+}
 
 function groupHomeTracksByCategory(allMusic: Track[], genreCatalogTracksByGenre: Map<string, Track[]>): Map<string, Track[]> {
   const groups = new Map(HOME_SHELF_CATEGORIES.map(category => [category.id, [] as Track[]]));
@@ -92,9 +108,8 @@ const Index = () => {
   const { ref: discoveryTriggerRef, isNearViewport: discoveryEnabled } = useNearViewport<HTMLDivElement>("100px 0px");
   const { ref: featuredAudiobooksRef, isNearViewport: featuredAudiobooksEnabled } = useNearViewport<HTMLDivElement>("300px 0px");
   const { user } = useCurrentUser();
-  const { config } = useAppContext();
   const homeAccountScope = useHomeSessionScope();
-  const shelfSessionScope = `${homeAccountScope ?? user?.pubkey ?? "public"}:${config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url).sort().join("|")}`;
+  const shelfSessionScope = user?.pubkey ?? "public";
   const homeTracksQuery = useHomeTracks(discoveryEnabled, homeAccountScope);
   const tracks = homeTracksQuery.data?.tracks ?? [];
   const tracksLoading = homeTracksQuery.isLoading;
@@ -113,7 +128,6 @@ const Index = () => {
   const player = usePlayer();
   const followedArtists = useFollowedArtists(discoveryEnabled, homeAccountScope);
   const [pageSeed] = useState(() => crypto.randomUUID());
-  const [shelfVariation, setShelfVariation] = useState(0);
   const [genreShelfVariations, setGenreShelfVariations] = useState<Record<string, number>>({});
   const pendingGenreRefresh = useRef(new Set<string>());
   const recentShelfHistory = useRef(readHomeShelfHistory());
@@ -146,8 +160,13 @@ const Index = () => {
       return { category, tracks: selected };
     });
   }, [allMusic, genreCatalogTracksByGenre, genreShelfVariations, pageSeed, player.history, likedTracks, followedArtists.data]);
-  const [displayShelves, setDisplayShelves] = useState<{ scope: string; shelves: HomeCategoryShelves } | null>(() => homeShelfSessionSnapshot);
-  const visibleCategoryShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : categoryShelves;
+  const [displayShelves, setDisplayShelves] = useState<{ scope: string; shelves: HomeCategoryShelves } | null>(() => {
+    const shelves = readCategoryShelves(shelfSessionScope);
+    return shelves ? { scope: shelfSessionScope, shelves } : null;
+  });
+  const savedCategoryShelves = useMemo(() => readCategoryShelves(shelfSessionScope), [shelfSessionScope]);
+  const sessionCategoryShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : savedCategoryShelves;
+  const visibleCategoryShelves = sessionCategoryShelves ?? categoryShelves;
   const orderedCategoryShelves = useMemo(() => [
     ...visibleCategoryShelves.filter(shelf => shelf.tracks.length > 0),
     ...visibleCategoryShelves.filter(shelf => shelf.tracks.length === 0),
@@ -159,18 +178,13 @@ const Index = () => {
   });
 
   useEffect(() => {
-    const hasTracksToRestore = categoryShelves.some(shelf => shelf.tracks.length > 0);
-    const savedShelvesAreEmpty = displayShelves?.scope === shelfSessionScope && !displayShelves.shelves.some(shelf => shelf.tracks.length > 0);
-    const snapshotIsForAnotherScope = displayShelves?.scope !== shelfSessionScope;
-    const shouldRefreshSnapshot = !displayShelves
-      || snapshotIsForAnotherScope
-      || (savedShelvesAreEmpty && hasTracksToRestore);
+    const shouldRefreshSnapshot = !sessionCategoryShelves;
     const refreshedCategoryIds = pendingGenreRefresh.current;
 
     // Disabled queries report isLoading=false, so don't freeze the initially empty
     // shelves before the deferred Home discovery queries have even started.
     if (discoveryEnabled && !baseSourcesLoading && !personalizedInputsLoading && !neededCatalogStillLoading && (shouldRefreshSnapshot || refreshedCategoryIds.size > 0)) {
-      const existingShelves = displayShelves?.scope === shelfSessionScope ? displayShelves.shelves : categoryShelves;
+      const existingShelves = sessionCategoryShelves ?? categoryShelves;
       const shelves = refreshedCategoryIds.size
         ? existingShelves.map(shelf => refreshedCategoryIds.has(shelf.category.id)
           ? categoryShelves.find(candidate => candidate.category.id === shelf.category.id) ?? shelf
@@ -178,14 +192,14 @@ const Index = () => {
         : categoryShelves;
       const snapshot = { scope: shelfSessionScope, shelves };
       pendingGenreRefresh.current = new Set();
-      homeShelfSessionSnapshot = snapshot;
+      saveCategoryShelves(shelfSessionScope, shelves);
       setDisplayShelves(snapshot);
     }
-  }, [displayShelves, categoryShelves, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope, discoveryEnabled]);
+  }, [sessionCategoryShelves, categoryShelves, baseSourcesLoading, personalizedInputsLoading, neededCatalogStillLoading, shelfSessionScope, discoveryEnabled]);
 
   useEffect(() => {
-    if (!homeTracksQuery.data && !wavlake.data && !genreCatalogTracks.length) return;
     currentShelves.current = visibleCategoryShelves.map(({ category, tracks: shelfTracks }) => ({ categoryId: category.id, tracks: shelfTracks }));
+    if (!sessionCategoryShelves) return;
     const nextHistory = { ...recentShelfHistory.current };
     for (const { categoryId, tracks: shelfTracks } of currentShelves.current) {
       if (!shelfTracks.length) continue;
@@ -193,7 +207,7 @@ const Index = () => {
     }
     recentShelfHistory.current = nextHistory;
     writeHomeShelfHistory(nextHistory);
-  }, [visibleCategoryShelves]);
+  }, [visibleCategoryShelves, sessionCategoryShelves]);
 
   const refreshGenreShelf = (categoryId: string) => {
     const currentShelf = currentShelves.current.find(shelf => shelf.categoryId === categoryId);
@@ -240,7 +254,7 @@ const Index = () => {
       <div ref={featuredAudiobooksRef}>
         <FeaturedAudiobooks enabled={featuredAudiobooksEnabled} />
       </div>
-      <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={tracksLoading || wavlake.isLoading || !near} active={near} variation={shelfVariation} onRefresh={() => setShelfVariation(value => value + 1)} sessionScope={homeAccountScope} />}</DeferredHomeSection>
+      <DeferredHomeSection title="Discover something new">{near => <DailyDiscoverySection candidates={allMusic} isLoading={!discoveryEnabled || baseSourcesLoading || neededCatalogStillLoading || !near} active={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
 
       <DeferredHomeSection title="Music news">{near => <MusicNewsSection enabled={near} home sessionScope={homeAccountScope} />}</DeferredHomeSection>
       <DeferredHomeSection title="Fresh on Nostr">{near => <HomeFreshTracks candidates={tracks} enabled={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
