@@ -119,7 +119,7 @@ function PickCard({ book }: { book: FeaturedBook }) {
   return (
     <article className={`flex min-w-0 flex-col items-center gap-1 rounded-xl border px-1.5 py-2 text-center transition-colors sm:px-2 ${isPlaying ? "border-emerald-300 bg-emerald-950/60" : "border-white/15 bg-black/15 hover:bg-black/25"}`}>
       <Link to={audiobookPath(book)} className="flex min-w-0 flex-col items-center gap-1 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-300">
-        <span className="relative"><AudiobookCover key={book.id} book={book} className="h-28 w-20 shrink-0 rounded-lg border border-white/20 bg-white/10 shadow-md sm:h-32 sm:w-24" /><span className="absolute left-1 top-1 rounded-full bg-black/80 px-1.5 py-1 text-[9px] font-semibold leading-none text-white">{isPlaying ? "Playing" : "Audiobook"}</span></span>
+        <span className="relative"><AudiobookCover key={book.id} book={book} className="h-28 w-20 shrink-0 rounded-lg border border-white/20 bg-white/10 shadow-md sm:h-32 sm:w-24" /><span className="absolute right-1 top-1 rounded-full bg-black/80 px-1.5 py-1 text-[9px] font-semibold leading-none text-white">{isPlaying ? "Playing" : "Audiobook"}</span></span>
         <span className="line-clamp-2 min-h-9 max-w-full text-sm font-semibold leading-tight text-white hover:underline">{book.title}</span>
       </Link>
       <p className="max-w-full truncate text-xs leading-tight text-white/75">{book.author}</p>

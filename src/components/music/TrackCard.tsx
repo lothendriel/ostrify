@@ -38,7 +38,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
       <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} title={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="group/play block w-full cursor-pointer rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
         <div className={cn("relative", compact ? "mb-2" : "mb-3")}>
           <TrackArtwork track={track} className="w-full aspect-square" rounded="rounded-lg" />
-          <span className="absolute left-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[10px] font-semibold leading-none text-white">{formatLabel}</span>
+          <span className="ostrify-card-label">{formatLabel}</span>
           {isPlaying && <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/85 px-2 py-1 text-[10px] font-semibold leading-none text-white"><AudioLines aria-hidden="true" className="size-3 text-emerald-300" /> Playing</span>}
           <span
             aria-hidden="true"

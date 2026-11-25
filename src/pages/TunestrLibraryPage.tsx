@@ -36,7 +36,7 @@ export default function TunestrLibraryPage() {
       return <article key={stream.id} className="overflow-hidden rounded-xl border border-border/70 bg-secondary/30">
         <button type="button" className="group relative block aspect-video w-full bg-black/80 text-white focus-visible:outline-2 focus-visible:outline-primary" onClick={() => openStream(stream)} aria-label={`Watch recording: ${stream.title}`}>
           {image ? <img src={image} alt="" loading="lazy" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <span className="flex size-full items-center justify-center"><Video className="size-10" /></span>}
-          <span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold">Recording</span>
+          <span className="absolute right-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold">Recording</span>
           <span className="absolute bottom-3 left-3 inline-flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-sm font-semibold"><Video className="size-4" /> Watch in Ostrify</span>
         </button>
         <div className="flex items-start justify-between gap-2 p-4"><div className="min-w-0"><h2 className="truncate font-semibold">{stream.title}</h2>{stream.summary && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{stream.summary}</p>}</div><LikeButton trackId={stream.track.id} collection="tunestr" /></div>

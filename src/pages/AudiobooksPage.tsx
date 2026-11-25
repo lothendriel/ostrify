@@ -28,7 +28,7 @@ function BookCard({ book, sourceLabel }: { book: LibriVoxBook | GutenbergAudiobo
   const isPlaying = player.isPlaying && player.current?.kind === 'audiobook' && player.current.id.startsWith(`${book.id}:`);
   return <article data-playing={isPlaying} className="ostrify-audio-card min-w-0 rounded-xl p-3">
     <Link to={audiobookPath(book)} className="group block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-      <div className="relative mb-3"><AudiobookCover book={book} className="aspect-square rounded-lg bg-gradient-to-br from-teal-800 to-emerald-950" /><span className="absolute left-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[10px] font-semibold leading-none text-white">Audiobook</span>{isPlaying && <span className="absolute bottom-2 left-2 rounded-full bg-black/85 px-2 py-1 text-[10px] font-semibold leading-none text-white">Playing</span>}</div>
+      <div className="relative mb-3"><AudiobookCover book={book} className="aspect-square rounded-lg bg-gradient-to-br from-teal-800 to-emerald-950" /><span className="ostrify-card-label">Audiobook</span>{isPlaying && <span className="absolute bottom-2 left-2 rounded-full bg-black/85 px-2 py-1 text-[10px] font-semibold leading-none text-white">Playing</span>}</div>
       <p className="truncate font-semibold group-hover:underline">{book.title}</p>
       <p className="mt-1 truncate text-sm text-muted-foreground">{book.author}</p>
       <p className="mt-1 text-xs text-muted-foreground">{sourceLabel}</p>
