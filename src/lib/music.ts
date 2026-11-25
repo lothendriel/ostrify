@@ -26,6 +26,8 @@ export interface Track {
   podcastIndexEpisodeId?: number;
   /** Direct audio URL (https). */
   url: string;
+  /** Alternate URLs published for the same audio file, in preference order. */
+  fallbackUrls?: string[];
   /** Audio MIME type, if known. */
   mimeType?: string;
   /** Title of the track / episode. */
@@ -146,6 +148,22 @@ function parseImeta(tag: string[]): { url?: string; mime?: string; image?: strin
   return out;
 }
 
+/** Keep only distinct, bounded HTTPS alternatives from untrusted metadata. */
+export function sanitizeAudioFallbacks(value: unknown, primaryUrl?: string): string[] {
+  if (!Array.isArray(value)) return [];
+  const primary = sanitizeUrl(primaryUrl);
+  const seen = new Set(primary ? [primary] : []);
+  const result: string[] = [];
+  for (const item of value.slice(0, 50)) {
+    const url = typeof item === "string" && item.length <= 2048 ? sanitizeUrl(item) : undefined;
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    result.push(url);
+    if (result.length === 5) break;
+  }
+  return result;
+}
+
 function isAudio(url: string | undefined, mime: string | undefined): boolean {
   if (mime?.toLowerCase().startsWith("audio/")) return true;
   if (url && AUDIO_EXT_RE.test(url)) return true;
@@ -185,6 +203,7 @@ export function parseFileMetadataTrack(event: NostrEvent): Track | null {
     id: event.id,
     event,
     url,
+    fallbackUrls: sanitizeAudioFallbacks(allTagValues(event, "fallback"), url),
     mimeType: mime,
     title,
     artist,
@@ -376,6 +395,7 @@ export function parseAudioTrackEvent(event: NostrEvent): Track | null {
     id: event.id,
     event,
     url: safeUrl,
+    fallbackUrls: sanitizeAudioFallbacks(allTagValues(event, "fallback"), safeUrl),
     mimeType: mime,
     title: trackTitle,
     artist,

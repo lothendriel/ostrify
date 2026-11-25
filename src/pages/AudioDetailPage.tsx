@@ -18,7 +18,7 @@ import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
 import { fetchPodcastIndexEpisodes, fountainTrackUrl, useFountainRssEpisodes, useFountainShow, usePodcastIndexEpisodes, usePodcastIndexFeed } from "@/hooks/usePodcasts";
 import { fetchWavlakeTrack, wavlakeTrackUrl } from "@/hooks/useWavlake";
-import { fountainShowGuid, formatDuration, type Track } from "@/lib/music";
+import { fountainShowGuid, formatDuration, sanitizeAudioFallbacks, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { decodeAudioDetailFallback } from "@/lib/audioDetail";
@@ -145,6 +145,7 @@ export default function AudioDetailPage() {
       artistPubkey: /^[0-9a-f]{64}$/i.test(searchParams.get("artistPubkey") ?? "") ? searchParams.get("artistPubkey")!.toLowerCase() : undefined,
       showId: searchParams.get("showId")?.slice(0, 256) || undefined,
       url,
+      fallbackUrls: sanitizeAudioFallbacks(searchParams.getAll("audioFallback"), url),
       title,
       artist: searchParams.get("artist")?.slice(0, 300) || undefined,
       album: searchParams.get("album")?.slice(0, 300) || undefined,

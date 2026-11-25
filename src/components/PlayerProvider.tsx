@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Track } from "@/lib/music";
+import { sanitizeAudioFallbacks, type Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
 import { recordListeningSeconds, recordListeningStart } from "@/lib/listeningAnalytics";
 import { sanitizeUrl } from "@/lib/sanitize";
@@ -84,6 +84,7 @@ function restoreTrack(value: unknown): Track | undefined {
       ? value.podcastIndexEpisodeId
       : undefined,
     url: safeUrl,
+    fallbackUrls: sanitizeAudioFallbacks(value.fallbackUrls, safeUrl),
     mimeType: optionalString(value.mimeType),
     title: title.trim(),
     artist: optionalString(value.artist),
@@ -127,6 +128,7 @@ function writeSavedHistory(owner: string, history: Track[]): void {
       showId: track.showId,
       podcastIndexEpisodeId: track.podcastIndexEpisodeId,
       url: track.url,
+      fallbackUrls: sanitizeAudioFallbacks(track.fallbackUrls, track.url),
       mimeType: track.mimeType,
       title: track.title,
       artist: track.artist,
@@ -208,6 +210,7 @@ function writeSavedPlayerState(owner: string, state: SavedPlayerState | undefine
         showId: track.showId,
         podcastIndexEpisodeId: track.podcastIndexEpisodeId,
         url: track.url,
+        fallbackUrls: sanitizeAudioFallbacks(track.fallbackUrls, track.url),
         mimeType: track.mimeType,
         title: track.title,
         artist: track.artist,
@@ -261,6 +264,10 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playAttemptRef = useRef(0);
   const autoplayEpochRef = useRef(0);
+  const wantsPlaybackRef = useRef(false);
+  const sourceRef = useRef<{ urls: string[]; index: number }>({ urls: [], index: 0 });
+  const fallbackSeekRef = useRef(0);
+  const playAudioRef = useRef<(audio: HTMLAudioElement) => void>(() => {});
   if (audioRef.current === null && typeof Audio !== "undefined") {
     audioRef.current = new Audio();
   }
@@ -328,37 +335,61 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   queueRef.current = queue;
   indexRef.current = index;
   autoplayRef.current = autoplay;
+  const handlePlaybackFailure = useCallback((audio: HTMLAudioElement, blocked = false) => {
+    const sources = sourceRef.current;
+    const activeSource = sources.urls[sources.index];
+    const track = queueRef.current[indexRef.current];
+    if (audioRef.current !== audio || !track || sanitizeUrl(track.url) !== sources.urls[0] || !activeSource || sanitizeUrl(audio.src) !== activeSource) return;
+    playAttemptRef.current++;
+    if (!blocked && sources.index + 1 < sources.urls.length) {
+      const position = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const shouldPlay = wantsPlaybackRef.current;
+      sources.index++;
+      if (position > 0) fallbackSeekRef.current = position;
+      audio.src = sources.urls[sources.index];
+      audio.load();
+      if (shouldPlay) playAudioRef.current(audio);
+      return;
+    }
+    wantsPlaybackRef.current = false;
+    pendingAutoplayRef.current = false;
+    setIsPlaying(false);
+    setPlaybackError(blocked ? "Playback was blocked. Press Play to try again." : sources.urls.length > 1 ? "Audio unavailable from its source and backups." : "Audio source unavailable. Press Play to retry.");
+    const currentQueue = queueRef.current;
+    const currentIndex = indexRef.current;
+    if (currentQueue[currentIndex]) {
+      const position = restoredStateRef.current ? pendingSeekRef.current : (Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
+      const preferences = playerPreferencesRef.current;
+      lastSavedStateRef.current = { queue: currentQueue, index: currentIndex, progressBucket: Math.floor(position), isPlaying: false, ...preferences };
+      writeSavedPlayerState(owner, { queue: currentQueue, index: currentIndex, progress: position, isPlaying: false, ...preferences });
+    }
+  }, [owner]);
   const playAudio = useCallback((audio: HTMLAudioElement) => {
     const attempt = ++playAttemptRef.current;
-    const intendedUrl = sanitizeUrl(queueRef.current[indexRef.current]?.url);
+    const intendedUrl = sourceRef.current.urls[sourceRef.current.index];
     if (!intendedUrl || sanitizeUrl(audio.src) !== intendedUrl) {
+      wantsPlaybackRef.current = false;
       setIsPlaying(false);
       setPlaybackError("This audio source is not a safe HTTPS URL.");
       return;
     }
+    wantsPlaybackRef.current = true;
     setPlaybackError(undefined);
-    const fail = () => {
+    const fail = (error: unknown) => {
       if (playAttemptRef.current !== attempt || audioRef.current !== audio) return;
-      pendingAutoplayRef.current = false;
-      setIsPlaying(false);
-      setPlaybackError("Playback failed. Press Play to retry.");
-      const currentQueue = queueRef.current;
-      const currentIndex = indexRef.current;
-      if (currentQueue[currentIndex]) {
-        const position = restoredStateRef.current ? pendingSeekRef.current : (Number.isFinite(audio.currentTime) ? audio.currentTime : 0);
-        const preferences = playerPreferencesRef.current;
-        lastSavedStateRef.current = { queue: currentQueue, index: currentIndex, progressBucket: Math.floor(position), isPlaying: false, ...preferences };
-        writeSavedPlayerState(owner, { queue: currentQueue, index: currentIndex, progress: position, isPlaying: false, ...preferences });
-      }
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      const blocked = error instanceof DOMException && error.name === "NotAllowedError";
+      handlePlaybackFailure(audio, blocked);
     };
     try {
       void audio.play().then(() => {
         if (playAttemptRef.current === attempt && audioRef.current === audio && !audio.paused) setIsPlaying(true);
       }).catch(fail);
-    } catch {
-      fail();
+    } catch (error) {
+      fail(error);
     }
-  }, [owner]);
+  }, [handlePlaybackFailure]);
+  playAudioRef.current = playAudio;
   const commitQueue = useCallback((nextQueue: Track[], nextIndex: number) => {
     queueRef.current = nextQueue;
     indexRef.current = nextIndex;
@@ -379,6 +410,9 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     if (!audio) return;
     if (!current) {
       playAttemptRef.current++;
+      wantsPlaybackRef.current = false;
+      sourceRef.current = { urls: [], index: 0 };
+      fallbackSeekRef.current = 0;
       audio.pause();
       audio.removeAttribute("src");
       pendingAutoplayRef.current = false;
@@ -393,6 +427,9 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     setPlaybackError(undefined);
     setDuration(0);
     const safeUrl = sanitizeUrl(current.url);
+    fallbackSeekRef.current = 0;
+    sourceRef.current = { urls: safeUrl ? [safeUrl, ...sanitizeAudioFallbacks(current.fallbackUrls, safeUrl)] : [], index: 0 };
+    wantsPlaybackRef.current = restoredStateRef.current ? pendingAutoplayRef.current : true;
     if (!safeUrl) {
       audio.pause();
       audio.removeAttribute("src");
@@ -521,6 +558,8 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     restoredStateRef.current = false;
     pendingSeekRef.current = 0;
     pendingAutoplayRef.current = false;
+    wantsPlaybackRef.current = false;
+    fallbackSeekRef.current = 0;
     setProgress(0);
     setPlaybackError(undefined);
     commitQueue(nextQueue, nextIndex);
@@ -612,7 +651,16 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       lastAnalyticsTime = position;
       setProgress(position);
     };
-    const onDuration = () => setDuration(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0);
+    const onDuration = () => {
+      if (fallbackSeekRef.current > 0 && Number.isFinite(audio.duration) && audio.duration > 0) {
+        try { audio.currentTime = Math.min(fallbackSeekRef.current, Math.max(0, audio.duration - 0.25)); } catch { /* The source may not be seekable. */ }
+        fallbackSeekRef.current = 0;
+      }
+      setDuration(Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0);
+    };
+    const onError = () => {
+      if (wantsPlaybackRef.current && audio.error && audio.error.code !== MediaError.MEDIA_ERR_ABORTED) handlePlaybackFailure(audio);
+    };
     const onPlay = () => {
       if (audio.paused) return;
       setPlaybackError(undefined);
@@ -648,6 +696,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     };
 
     audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("error", onError);
     audio.addEventListener("loadedmetadata", onDuration);
     audio.addEventListener("durationchange", onDuration);
     audio.addEventListener("play", onPlay);
@@ -656,13 +705,14 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     return () => {
       flushAnalytics();
       audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("error", onError);
       audio.removeEventListener("loadedmetadata", onDuration);
       audio.removeEventListener("durationchange", onDuration);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [current, recordPlayedTrack, continueWithAutoplay, pickNextIndex, selectQueueIndex, playAudio]);
+  }, [current, recordPlayedTrack, continueWithAutoplay, pickNextIndex, selectQueueIndex, playAudio, handlePlaybackFailure]);
 
   const playQueue = useCallback((tracks: Track[], startIndex = 0) => {
     if (tracks.length === 0) return;
@@ -792,6 +842,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       playAudio(audio);
     } else {
       pendingAutoplayRef.current = false;
+      wantsPlaybackRef.current = false;
       playAttemptRef.current++;
       audio.pause();
       setIsPlaying(false);

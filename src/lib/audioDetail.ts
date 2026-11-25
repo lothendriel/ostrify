@@ -1,5 +1,5 @@
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from "lz-string";
-import type { Track } from "@/lib/music";
+import { sanitizeAudioFallbacks, type Track } from "@/lib/music";
 import { sanitizeUrl } from "@/lib/sanitize";
 
 /** Create a source-agnostic route with a safe metadata fallback if a source is offline. */
@@ -12,6 +12,8 @@ export function encodeAudioDetailFallback(track: Track): string | undefined {
     ...track,
     event: undefined,
     url,
+    fallbackUrls: sanitizeAudioFallbacks(track.fallbackUrls, url),
+    topics: track.topics.filter(topic => /^[a-z0-9_-]{1,50}$/i.test(topic)).slice(0, 12),
     image: sanitizeUrl(track.image),
     artistImage: sanitizeUrl(track.artistImage),
   };
@@ -49,6 +51,7 @@ export function decodeAudioDetailFallback(value: string | null): Track | undefin
       showId: typeof candidate.showId === "string" ? candidate.showId.slice(0, 256) : undefined,
       podcastIndexEpisodeId: Number.isInteger(candidate.podcastIndexEpisodeId) ? candidate.podcastIndexEpisodeId : undefined,
       url,
+      fallbackUrls: sanitizeAudioFallbacks(candidate.fallbackUrls, url),
       mimeType: typeof candidate.mimeType === "string" ? candidate.mimeType.slice(0, 100) : undefined,
       title: candidate.title,
       artist: typeof candidate.artist === "string" ? candidate.artist.slice(0, 300) : undefined,
@@ -70,10 +73,11 @@ export function decodeAudioDetailFallback(value: string | null): Track | undefin
   }
 }
 
-export function audioDetailPath(track: Pick<Track, "id" | "url" | "title" | "artist" | "pubkey" | "artistId" | "artistPubkey" | "album" | "showId" | "image" | "duration" | "kind" | "source" | "topics" | "createdAt" | "eventKind" | "event">): string {
+export function audioDetailPath(track: Pick<Track, "id" | "url" | "title" | "artist" | "pubkey" | "artistId" | "artistPubkey" | "album" | "showId" | "image" | "duration" | "kind" | "source" | "topics" | "createdAt" | "eventKind" | "event" | "fallbackUrls">): string {
   const params = new URLSearchParams({ track: track.id.slice(0, 2048) });
   const url = sanitizeUrl(track.url);
   if (url && url.length <= 2048) params.set("url", url);
+  for (const fallback of sanitizeAudioFallbacks(track.fallbackUrls, url)) params.append("audioFallback", fallback);
   params.set("title", track.title.slice(0, 500));
   params.set("kind", track.kind);
   const eventKind = track.event?.kind ?? track.eventKind ?? (/^[0-9a-f]{64}$/i.test(track.id) ? track.kind === "podcast" ? 54 : track.kind === "music" ? 1 : undefined : undefined);
