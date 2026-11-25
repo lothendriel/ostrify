@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { BookOpen, Disc3, ExternalLink, Mic, Music2, UserRound } from 'lucide-react';
+import { ArrowUpRight, AudioLines, Bitcoin, BookOpen, Disc3, ExternalLink, Guitar, Headphones, Leaf, Mic, Music2, Piano, Radio, Sparkles, UserRound, Waves } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useTracks } from '@/hooks/useTracks';
 import { usePodcastEpisodes, usePodcastIndexEpisodeSearch, usePodcastIndexSearch, type PodcastShow } from '@/hooks/usePodcasts';
 import { useWavlakeSearch, type CatalogItem } from '@/hooks/useWavlake';
@@ -10,12 +11,38 @@ import { useLibriVoxCatalog, type LibriVoxBook } from '@/hooks/useLibriVox';
 import { useGutenbergAudiobookCatalog, type GutenbergAudiobook } from '@/hooks/useGutenbergAudiobooks';
 import { useOstrifyDirectory, type DirectoryPerson } from '@/hooks/useOstrifyDirectory';
 import { audiobookPath, getAudiobookLibrarySnapshot, subscribeAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
-import { CATEGORIES, categoryColor } from '@/lib/categories';
+import { CATEGORIES } from '@/lib/categories';
 import { TrackList } from '@/components/music/TrackList';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Track } from '@/lib/music';
 import { nip19 } from 'nostr-tools';
 import { sanitizeUrl } from '@/lib/sanitize';
+
+const BROWSE_STYLES: Record<string, { icon: LucideIcon; caption: string; color: string; position: string }> = {
+  audiobooks: { icon: BookOpen, caption: 'Stories & voices', color: '#643934', position: '15% 65%' },
+  podcasts: { icon: Mic, caption: 'Conversations & ideas', color: '#334a78', position: '70% 30%' },
+  rock: { icon: Guitar, caption: 'Loud & electric', color: '#742c46', position: '30% 75%' },
+  electronic: { icon: AudioLines, caption: 'Beats & frequencies', color: '#27566b', position: '75% 50%' },
+  hiphop: { icon: Headphones, caption: 'Rhymes & rhythm', color: '#594078', position: '25% 35%' },
+  jazz: { icon: Radio, caption: 'Soulful sounds', color: '#36557a', position: '45% 60%' },
+  classical: { icon: Piano, caption: 'Timeless compositions', color: '#514078', position: '65% 20%' },
+  folk: { icon: Leaf, caption: 'Roots & stories', color: '#485f45', position: '10% 50%' },
+  pop: { icon: Sparkles, caption: 'Catch the melody', color: '#793653', position: '80% 75%' },
+  ambient: { icon: Waves, caption: 'Slow down & drift', color: '#365e5c', position: '55% 45%' },
+  bitcoin: { icon: Bitcoin, caption: 'Open culture', color: '#535c2a', position: '90% 50%' },
+  general: { icon: Music2, caption: 'More to explore', color: '#42466d', position: '40% 80%' },
+};
+
+function BrowseTile({ id, label, to }: { id: string; label: string; to: string }) {
+  const { icon: Icon, caption, color, position } = BROWSE_STYLES[id] ?? BROWSE_STYLES.general;
+  return <Link to={to} aria-label={label} className="group relative flex min-h-36 min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-white/15 p-4 text-white shadow-sm transition-shadow hover:shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:min-h-40 sm:p-5" style={{ backgroundColor: color }}>
+    <span aria-hidden="true" className="absolute inset-0 bg-cover opacity-60 transition-transform duration-500 motion-safe:group-hover:scale-105 motion-reduce:transition-none" style={{ backgroundImage: "url('/browse-texture.webp')", backgroundPosition: position }} />
+    <span aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-black/30" />
+    <span aria-hidden="true" className="absolute -right-3 -top-3 flex size-24 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white/80 sm:size-28"><Icon className="size-11 sm:size-12" strokeWidth={1.25} /></span>
+    <span className="relative text-[10px] font-semibold uppercase tracking-[0.14em] text-white">{caption}</span>
+    <span className="relative flex items-end justify-between gap-2"><span className="max-w-[85%] text-lg font-bold leading-tight sm:text-xl">{label}</span><ArrowUpRight aria-hidden="true" className="size-4 shrink-0 text-white/90 transition-transform motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:translate-x-0.5" /></span>
+  </Link>;
+}
 
 function useDebouncedValue(value: string, delay: number): string {
   const [debounced, setDebounced] = useState(value);
@@ -144,12 +171,12 @@ const SearchPage = () => {
   const noResults = !nostrAudio.length && !wavlakeTrackResults.length && !catalogLinks.length && !audiobookBooks.length && !podcastShows.length && !podcastEpisodeResults.length && !matchingAuthors.length;
 
   return <div className="space-y-8 p-4 sm:p-6">
-    {query.length < 2 ? <section className="space-y-3">
-      <h2 className="text-xl font-bold">Browse all</h2>
+    {query.length < 2 ? <section className="space-y-5" aria-labelledby="browse-heading">
+      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand-violet">Find your frequency</p><h1 id="browse-heading" className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">Browse all</h1><p className="mt-1 text-sm text-muted-foreground">Discover sounds and stories for every mood.</p></div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <Link to="/audiobooks" className="relative flex h-28 items-end overflow-hidden rounded-lg p-4 text-lg font-bold text-white shadow-md transition-transform hover:scale-[1.02]" style={{ background: categoryColor('audiobooks') }}>Audiobooks</Link>
-        <Link to="/podcasts" className="relative flex h-28 items-end overflow-hidden rounded-lg p-4 text-lg font-bold text-white shadow-md transition-transform hover:scale-[1.02]" style={{ background: categoryColor('podcasts') }}>Podcasts</Link>
-        {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="relative flex h-28 items-end overflow-hidden rounded-lg p-4 text-lg font-bold text-white shadow-md transition-transform hover:scale-[1.02]" style={{ background: categoryColor(category.id) }}>{category.label}</Link>)}
+        <BrowseTile id="audiobooks" label="Audiobooks" to="/audiobooks" />
+        <BrowseTile id="podcasts" label="Podcasts" to="/podcasts" />
+        {CATEGORIES.map(category => <BrowseTile key={category.id} id={category.id} label={category.label} to={`/category/${category.id}`} />)}
       </div>
     </section> : <>
       <header className="space-y-2">
