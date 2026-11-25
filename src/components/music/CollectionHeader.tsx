@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { Track } from "@/lib/music";
 import { usePlayer } from "@/hooks/usePlayer";
+import { sanitizeUrl } from "@/lib/sanitize";
 
 interface CollectionHeaderProps {
   title: string;
@@ -26,6 +27,7 @@ export function CollectionHeader({
   actions,
 }: CollectionHeaderProps) {
   const player = usePlayer();
+  const safeImage = sanitizeUrl(image);
   const isThisPlaying =
     player.isPlaying && tracks.some((t) => t.id === player.current?.id);
 
@@ -49,8 +51,8 @@ export function CollectionHeader({
         }}
       >
         <div className="size-44 rounded-md shadow-2xl overflow-hidden shrink-0 bg-black/20 flex items-center justify-center">
-          {image ? (
-            <img src={image} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+          {safeImage ? (
+            <img src={safeImage} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             icon
           )}

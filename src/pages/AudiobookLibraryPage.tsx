@@ -5,12 +5,14 @@ import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { audiobookPath, useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
+import { sanitizeUrl } from '@/lib/sanitize';
 
 function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; onRemove?: () => void; removeLabel?: string }) {
+  const cover = sanitizeUrl(book.covers[0]);
   return <article className="group flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3 hover:bg-secondary/60">
     <Link to={audiobookPath(book)} className="flex min-w-0 flex-1 items-center gap-3 focus-visible:outline-2 focus-visible:outline-primary">
       <div className="size-14 shrink-0 overflow-hidden rounded-md bg-secondary">
-        {book.covers[0] ? <img src={book.covers[0]} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><BookOpen className="size-6 text-muted-foreground" /></div>}
+        {cover ? <img src={cover} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><BookOpen className="size-6 text-muted-foreground" /></div>}
       </div>
       <div className="min-w-0"><h3 className="truncate font-semibold group-hover:underline">{book.title}</h3><p className="truncate text-sm text-muted-foreground">{book.author}</p><p className="text-xs text-muted-foreground">{book.sectionCount} chapters{book.language ? ` · ${book.language}` : ''}</p></div>
     </Link>

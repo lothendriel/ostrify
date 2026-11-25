@@ -330,6 +330,12 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   autoplayRef.current = autoplay;
   const playAudio = useCallback((audio: HTMLAudioElement) => {
     const attempt = ++playAttemptRef.current;
+    const intendedUrl = sanitizeUrl(queueRef.current[indexRef.current]?.url);
+    if (!intendedUrl || sanitizeUrl(audio.src) !== intendedUrl) {
+      setIsPlaying(false);
+      setPlaybackError("This audio source is not a safe HTTPS URL.");
+      return;
+    }
     setPlaybackError(undefined);
     const fail = () => {
       if (playAttemptRef.current !== attempt || audioRef.current !== audio) return;
@@ -386,8 +392,19 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     setIsPlaying(false);
     setPlaybackError(undefined);
     setDuration(0);
-    if (audio.src !== current.url) {
-      audio.src = current.url;
+    const safeUrl = sanitizeUrl(current.url);
+    if (!safeUrl) {
+      audio.pause();
+      audio.removeAttribute("src");
+      restoredStateRef.current = false;
+      pendingAutoplayRef.current = false;
+      pendingSeekRef.current = 0;
+      setProgress(0);
+      setPlaybackError("This audio source is not a safe HTTPS URL.");
+      return;
+    }
+    if (audio.src !== safeUrl) {
+      audio.src = safeUrl;
       audio.load();
     } else if (!restoredStateRef.current) {
       try { audio.currentTime = 0; } catch { /* The source may not be seekable. */ }

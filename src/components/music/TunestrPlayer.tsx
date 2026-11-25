@@ -1,8 +1,9 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Maximize2, Minimize2, PictureInPicture2, X } from 'lucide-react';
+import { ExternalLink, Maximize2, Minimize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cloudflareStreamEmbed, sanitizeUrl } from '@/lib/sanitize';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
 
@@ -39,6 +40,8 @@ function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isZapClubHls = stream.url === 'https://stream.zapclub.io/live/basement.m3u8';
+  const embedUrl = cloudflareStreamEmbed(stream.url);
+  const sourceUrl = sanitizeUrl(stream.externalUrl);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -70,14 +73,23 @@ function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
     return () => { disposed = true; player?.destroy(); };
   }, [isZapClubHls, stream.id, stream.url]);
 
-  if (!isZapClubHls) return <iframe
+  if (!isZapClubHls && embedUrl) return <iframe
     key={stream.id}
-    src={stream.url}
+    src={embedUrl}
     title={stream.title}
-    allow="accelerometer; gyroscope; autoplay; encrypted-media; fullscreen; picture-in-picture"
+    sandbox="allow-scripts allow-same-origin"
+    referrerPolicy="no-referrer"
+    allow="autoplay; fullscreen; picture-in-picture"
     allowFullScreen
     className="aspect-video w-full border-0 bg-black"
   />;
+
+  if (!isZapClubHls) return <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-black px-6 text-center text-white">
+    <ShieldAlert className="size-8 text-white/70" aria-hidden="true" />
+    <p className="font-semibold">This source can’t be embedded safely</p>
+    <p className="max-w-md text-sm text-white/75">{sourceUrl ? 'Open the publisher’s site only if you trust it. External sites are not controlled by Ostrify.' : 'No valid HTTPS source is available for this stream.'}</p>
+    {sourceUrl && <><p className="max-w-full break-all text-xs text-white/75">Source: {new URL(sourceUrl).hostname}</p><Button asChild variant="secondary" className="rounded-full"><a href={sourceUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="size-4 shrink-0" /> Open source in a new tab</a></Button></>}
+  </div>;
 
   return <div className="relative aspect-video w-full bg-black">
     <video ref={videoRef} controls autoPlay playsInline className="size-full" aria-label={stream.title} />
@@ -94,6 +106,8 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
 }) {
   const playerRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const sourceUrl = sanitizeUrl(stream.externalUrl);
+  const hasEmbeddedPlayer = stream.format === 'n94' && !!stream.event && !!stream.variant || stream.url === 'https://stream.zapclub.io/live/basement.m3u8' || !!cloudflareStreamEmbed(stream.url);
 
   useEffect(() => {
     const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerRef.current);
@@ -155,7 +169,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
         {stream.format === 'n94' && stream.event && stream.variant
           ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} /></Suspense>
           : <TunestrVideoSurface stream={stream} />}
-        {!docked && <div className="p-4 pt-0"><a href={stream.externalUrl} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a><span className="ml-2 text-xs text-muted-foreground">If playback is unavailable here, open the stream on its source site.</span></div>}
+        {!docked && hasEmbeddedPlayer && sourceUrl && <div className="p-4 pt-0"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a><span className="ml-2 text-xs text-muted-foreground">If playback is unavailable here, open the stream on its source site.</span></div>}
       </div>
     </DialogContent>
   </Dialog>;

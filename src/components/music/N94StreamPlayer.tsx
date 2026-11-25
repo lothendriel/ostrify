@@ -8,13 +8,65 @@ import { getUserRelayUrls } from '@/lib/appRelays';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_RELAYS } from '@/hooks/useTunestrStreams';
 
-type StreamPlayerConfig = mpegts.Config & { nostr: NPool; relays: string[]; variant: string };
-type Segment = { index: number; url: string; loaded: boolean };
+type StreamPlayerConfig = mpegts.Config & { nostr: NPool; relays: string[]; variant: string; author: string };
+type Segment = { index: number; url: string; hash: string; loaded: boolean };
+const MAX_SEGMENT_BYTES = 16 * 1024 * 1024;
+
+/** Bound memory use and verify the signed NIP-94 content hash before decoding. */
+async function readVerifiedSegment(response: Response, expectedHash: string): Promise<ArrayBuffer> {
+  const length = Number(response.headers.get('content-length'));
+  if (Number.isFinite(length) && length > MAX_SEGMENT_BYTES) throw new Error('Video segment is too large.');
+  const reader = response.body?.getReader();
+  let chunk: ArrayBuffer;
+  if (!reader) {
+    chunk = await response.arrayBuffer();
+    if (chunk.byteLength > MAX_SEGMENT_BYTES) throw new Error('Video segment is too large.');
+  } else {
+    const parts: Uint8Array[] = [];
+    let size = 0;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_SEGMENT_BYTES) {
+          await reader.cancel();
+          throw new Error('Video segment is too large.');
+        }
+        parts.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const part of parts) { bytes.set(part, offset); offset += part.byteLength; }
+    chunk = bytes.buffer;
+  }
+  if (!globalThis.crypto?.subtle) throw new Error('This browser cannot verify video segments.');
+  const digest = await crypto.subtle.digest('SHA-256', chunk);
+  const hash = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  if (hash !== expectedHash) throw new Error('Video segment failed its integrity check.');
+  return chunk;
+}
+
+function parseN94Segment(event: NostrEvent, streamId: string, author: string, expectedVariant: string): Segment | undefined {
+  const indexTag = event.tags.find(([name]) => name === 'index')?.[1];
+  const index = indexTag && /^\d{1,16}$/.test(indexTag) ? Number(indexTag) : NaN;
+  const url = sanitizeUrl(event.tags.find(([name]) => name === 'url')?.[1]);
+  const parent = event.tags.some(([name, value]) => name === 'e' && value === streamId);
+  const variant = event.tags.find(([name]) => name === 'd')?.[1];
+  const hash = event.tags.find(([name]) => name === 'x')?.[1];
+  const mime = event.tags.find(([name]) => name === 'm')?.[1]?.toLowerCase();
+  if (event.kind !== 1063 || event.pubkey !== author || !parent || variant !== expectedVariant || !Number.isSafeInteger(index) || index < 0 || !url || !hash || !/^[0-9a-f]{64}$/i.test(hash) || mime !== 'video/mp2t') return undefined;
+  return { index, url, hash: hash.toLowerCase(), loaded: false };
+}
 
 class N94SegmentLoader implements mpegts.BaseLoader {
   private readonly nostr: NPool;
   private readonly relays: string[];
   private readonly variant: string;
+  private readonly author: string;
   private readonly controller = new AbortController();
   private readonly segments = new Map<number, Segment>();
   private byteOffset = 0;
@@ -36,6 +88,7 @@ class N94SegmentLoader implements mpegts.BaseLoader {
     this.nostr = streamConfig.nostr;
     this.relays = streamConfig.relays;
     this.variant = streamConfig.variant;
+    this.author = streamConfig.author;
   }
 
   get _status(): number { return this.loaderStatus; }
@@ -52,9 +105,9 @@ class N94SegmentLoader implements mpegts.BaseLoader {
       this.fail('Enable a read relay in Settings to play this TuneStr stream.');
       return;
     }
-    const filter: NostrFilter = { kinds: [1063], '#e': [streamId], '#d': [this.variant], limit: 200 };
+    const filter: NostrFilter = { kinds: [1063], authors: [this.author], '#e': [streamId], '#d': [this.variant], limit: 200 };
     this.readyTimer = setTimeout(() => {
-      if (!this.destroyed && this.segments.size === 0) this.fail('No video segments were found for this TuneStr stream.');
+      if (!this.destroyed && this.segments.size === 0) this.fail('No verified video segments were found. This stream may use an unsupported publisher or segment format.');
     }, 12000);
     this.initialFlushTimer = setTimeout(() => {
       this.initialQueryReady = true;
@@ -68,14 +121,9 @@ class N94SegmentLoader implements mpegts.BaseLoader {
       for await (const message of this.nostr.relay(url).req([filter], { signal: this.controller.signal })) {
         if (this.destroyed) return;
         if (message[0] === 'EVENT') {
-          const event = message[2];
-          const indexTag = event.tags.find(([name]) => name === 'index')?.[1];
-          const index = indexTag ? Number(indexTag) : NaN;
-          const segmentUrl = sanitizeUrl(event.tags.find(([name]) => name === 'url')?.[1]);
-          const parent = event.tags.some(([name, value]) => name === 'e' && value === streamId);
-          const variant = event.tags.find(([name]) => name === 'd')?.[1];
-          if (event.kind !== 1063 || !parent || variant !== this.variant || !Number.isSafeInteger(index) || index < 0 || !segmentUrl) continue;
-          if (!this.segments.has(index)) this.segments.set(index, { index, url: segmentUrl, loaded: false });
+          const segment = parseN94Segment(message[2], streamId, this.author, this.variant);
+          if (!segment) continue;
+          if (!this.segments.has(segment.index)) this.segments.set(segment.index, segment);
           if (this.readyTimer) clearTimeout(this.readyTimer);
           this.loaderStatus = 2;
           if (this.initialQueryReady) void this.flushSegments();
@@ -107,9 +155,10 @@ class N94SegmentLoader implements mpegts.BaseLoader {
       if (this.destroyed) break;
       segment.loaded = true;
       try {
-        const response = await fetch(segment.url, { signal: this.controller.signal });
+        const response = await fetch(segment.url, { signal: this.controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
         if (!response.ok) throw new Error(`Video segment returned HTTP ${response.status}`);
-        const chunk = await response.arrayBuffer();
+        const chunk = await readVerifiedSegment(response, segment.hash);
+        if (this.destroyed || this.controller.signal.aborted) break;
         if (!chunk.byteLength) continue;
         this.onDataArrival(chunk, this.byteOffset, chunk.byteLength);
         this.byteOffset += chunk.byteLength;
@@ -151,9 +200,12 @@ export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant
   const eventRelays = event.tags.flatMap(([name, ...values]) => {
     if (name !== 'relays') return [];
     return values.filter(value => {
-      try { return new URL(value).protocol === 'wss:'; } catch { return false; }
+      try {
+        const relay = new URL(value);
+        return relay.protocol === 'wss:' && !relay.username && !relay.password;
+      } catch { return false; }
     });
-  });
+  }).slice(0, 10);
   const relays = [...new Set([
     ...config.relayMetadata.relays.filter(relay => relay.read).map(relay => relay.url),
     ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user?.pubkey ?? '', 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
@@ -174,7 +226,7 @@ export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant
     setError(null);
     const player = new mpegts.MSEPlayer(
       { type: 'mse', isLive: true, url: event.id },
-      { nostr, relays, variant, customLoader: N94SegmentLoader } as unknown as mpegts.Config,
+      { nostr, relays, variant, author: event.pubkey, customLoader: N94SegmentLoader } as unknown as mpegts.Config,
     );
     player.on(mpegts.Events.ERROR, (_type, detail) => {
       setError(typeof detail === 'string' ? detail : 'The TuneStr stream could not be played.');

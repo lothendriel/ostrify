@@ -1,5 +1,6 @@
 import type { NostrEvent } from "@nostrify/nostrify";
 import type { BlossomServerMetadata } from "@/contexts/AppContext";
+import { sanitizeUrl } from "@/lib/sanitize";
 
 /** Normalize a Blossom server URL for deduplication (lowercase, strip trailing slashes). */
 function normalizeUrl(url: string): string {
@@ -8,17 +9,10 @@ function normalizeUrl(url: string): string {
 
 /** Parse a kind 10063 Blossom server list event into validated server URLs. */
 export function parseBlossomServerList(event: NostrEvent): string[] {
-  return event.tags
-    .filter(([name]) => name === "server")
-    .map(([, url]) => url)
-    .filter((url) => {
-      try {
-        new URL(url);
-        return true;
-      } catch {
-        return false;
-      }
-    });
+  return event.tags.flatMap(([name, url]) => {
+    const safe = name === "server" ? sanitizeUrl(url) : undefined;
+    return safe ? [safe] : [];
+  });
 }
 
 /**
@@ -53,10 +47,12 @@ export function getEffectiveBlossomServers(
   const merged: string[] = [];
 
   for (const url of [...APP_BLOSSOM_SERVERS.servers, ...userMeta.servers]) {
-    const normalized = normalizeUrl(url);
+    const safe = sanitizeUrl(url);
+    if (!safe) continue;
+    const normalized = normalizeUrl(safe);
     if (!seen.has(normalized)) {
       seen.add(normalized);
-      merged.push(url);
+      merged.push(safe);
     }
   }
 
@@ -68,10 +64,12 @@ function deduplicateServers(servers: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
   for (const url of servers) {
-    const normalized = normalizeUrl(url);
+    const safe = sanitizeUrl(url);
+    if (!safe) continue;
+    const normalized = normalizeUrl(safe);
     if (!seen.has(normalized)) {
       seen.add(normalized);
-      result.push(url);
+      result.push(safe);
     }
   }
   return result;

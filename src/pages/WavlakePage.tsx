@@ -14,13 +14,14 @@ import { useRadio } from '@/hooks/useRadio';
 import { useWavlakeCatalog, useWavlakeCatalogReleases, useWavlakeRelease, useWavlakeSearch, useWavlakeRankedReleases, type CatalogItem, type WavlakeRelease } from '@/hooks/useWavlake';
 import type { Track } from '@/lib/music';
 import { RESULTS_PER_PAGE } from '@/lib/pagination';
+import { sanitizeUrl } from '@/lib/sanitize';
 
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
   if (!items.length) return null;
   return <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{items.map(item => (
     <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
       <div className="aspect-square rounded-md bg-muted overflow-hidden mb-3 flex items-center justify-center">
-        {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
+        {sanitizeUrl(item.image) ? <img src={sanitizeUrl(item.image)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
       </div>
       <div className="font-semibold truncate">{item.title}</div>
       <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : item.type === 'artist' ? 'Artist' : 'Album'}</div>
@@ -33,7 +34,7 @@ function ReleaseLinks({ items }: { items: WavlakeRelease[] }) {
   return <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{items.map(item => (
     <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
       <div className="aspect-square rounded-md bg-muted overflow-hidden mb-3 flex items-center justify-center">
-        {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
+        {sanitizeUrl(item.image) ? <img src={sanitizeUrl(item.image)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
       </div>
       <div className="font-semibold truncate">{item.title}</div>
       <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : 'Artist'}</div>
@@ -81,7 +82,7 @@ function CatalogTracks({ artistId, onTracksChange }: { artistId?: string; onTrac
 function RankedReleaseCard({ item }: { item: CatalogItem }) {
   return <Link to={`/wavlake/${item.type}/${item.id}`} className="group min-w-0 rounded-lg bg-secondary/50 p-3 transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
     <div className="mb-3 flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-muted">
-      {item.image ? <img src={item.image} alt="" loading="lazy" decoding="async" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <Music className="size-10 text-muted-foreground" />}
+      {sanitizeUrl(item.image) ? <img src={sanitizeUrl(item.image)} alt="" loading="lazy" decoding="async" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <Music className="size-10 text-muted-foreground" />}
     </div>
     <div className="truncate font-semibold">{item.title}</div>
     <div className="truncate text-sm text-muted-foreground">{item.type === 'album' && item.artist ? item.artist : 'Artist'}</div>
@@ -203,7 +204,8 @@ function Release({ type, itemId }: { type: 'artist' | 'album'; itemId?: string }
   const updateCatalogTracks = useCallback((tracks: Track[]) => setCatalogTracks(tracks), []);
   if (release.isLoading && !release.data) return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   if (!release.data) return <div className="p-6" role="alert">Unable to load this Wavlake {type}. </div>;
-  const { title, artist, image, albums, tracks } = release.data;
+  const { title, artist, albums, tracks } = release.data;
+  const image = sanitizeUrl(release.data.image);
   return <div className="p-4 sm:p-6 space-y-8">
     <div className="flex flex-col sm:flex-row items-start sm:items-end gap-6"><div className="size-40 sm:size-48 rounded-lg bg-secondary overflow-hidden shrink-0 flex items-center justify-center">{image ? <img src={image} alt="" fetchPriority="high" decoding="async" className="size-full object-cover" /> : <Music className="size-16 text-muted-foreground" />}</div><div><p className="text-sm uppercase text-primary font-semibold">Wavlake {type}</p><h1 className="text-4xl sm:text-5xl font-bold mt-2">{title}</h1>{artist && <p className="text-muted-foreground mt-2">{artist}</p>}</div></div>
     {itemId && <SharePageButton title={title} pagePath={`/wavlake/${type}/${encodeURIComponent(itemId)}`} pageType={type === 'artist' ? 'artist' : 'album'} />}

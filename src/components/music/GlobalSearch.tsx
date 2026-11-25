@@ -9,6 +9,7 @@ import { audiobookPath, useAudiobookLibrary, type SavedAudiobook } from '@/hooks
 import { usePlayer } from '@/hooks/usePlayer';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { sanitizeUrl } from '@/lib/sanitize';
 
 type SuggestionKind = 'Song' | 'Podcast episode' | 'Audiobook' | 'Artist' | 'User' | 'Publisher';
 interface Suggestion {
@@ -29,7 +30,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isTrack(value: unknown): value is Track {
   if (!isRecord(value)) return false;
   return typeof value.id === 'string' && typeof value.title === 'string' &&
-    typeof value.url === 'string' && (value.kind === 'music' || value.kind === 'podcast' || value.kind === 'audiobook');
+    typeof value.url === 'string' && !!sanitizeUrl(value.url) && typeof value.pubkey === 'string' &&
+    Array.isArray(value.topics) && value.topics.every(topic => typeof topic === 'string') &&
+    (value.kind === 'music' || value.kind === 'podcast' || value.kind === 'audiobook');
 }
 
 function cachedTracks(value: unknown): Track[] {
@@ -356,6 +359,7 @@ export function GlobalSearch() {
       {showDropdown && createPortal(<div id="global-search-suggestions" role="listbox" aria-label="Quick search suggestions" className="fixed z-[100] max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-xl" style={dropdownStyle}>
         {suggestions.map((suggestion, index) => {
           const Icon = ICONS[suggestion.kind];
+          const image = sanitizeUrl(suggestion.image);
           const groupHeading = index === 0 || suggestion.kind !== suggestions[index - 1]?.kind;
           return <div key={suggestion.id}>
             {groupHeading && <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{suggestion.kind}s</p>}
@@ -369,7 +373,7 @@ export function GlobalSearch() {
             onClick={() => openSuggestion(suggestion)}
             className={cn('flex w-full min-w-0 items-center gap-3 rounded-lg p-2 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary', activeIndex === index && 'bg-accent')}
           >
-            <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">{suggestion.image ? <img src={suggestion.image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" />}</div>
+            <div className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-secondary">{image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" />}</div>
             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{suggestion.title}</span><span className="block truncate text-xs text-muted-foreground">{suggestion.subtitle}</span></span>
             <span className="shrink-0 text-[11px] text-muted-foreground">{suggestion.kind}</span>
             </button>

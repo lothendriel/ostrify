@@ -16,11 +16,14 @@ import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
 import { Input } from '@/components/ui/input';
 import { LikeButton } from '@/components/music/LikeButton';
 import { RESULTS_PER_PAGE } from '@/lib/pagination';
+import { sanitizeUrl } from '@/lib/sanitize';
 
 function cloudflareThumbnail(url: string): string | undefined {
   try {
-    const parsed = new URL(url);
-    if (!parsed.hostname.endsWith('.cloudflarestream.com')) return undefined;
+    const safeUrl = sanitizeUrl(url);
+    if (!safeUrl) return undefined;
+    const parsed = new URL(safeUrl);
+    if (parsed.port || !/^customer-[a-z0-9]{1,48}\.cloudflarestream\.com$/.test(parsed.hostname)) return undefined;
     const match = parsed.pathname.match(/^\/([a-f0-9]{32})\/(?:manifest\/video\.m3u8|iframe|watch|thumbnails\/thumbnail\.jpg)$/i);
     const videoId = match?.[1] ?? parsed.pathname.match(/^\/([a-f0-9]{32})\//i)?.[1];
     if (!videoId) return undefined;
@@ -35,7 +38,8 @@ function cloudflareThumbnail(url: string): string | undefined {
 
 function TunestrStreamCard({ stream, onSelect }: { stream: TunestrStream; onSelect: (stream: TunestrStream) => void }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const imageUrl = stream.image ? cloudflareThumbnail(stream.image) ?? stream.image : undefined;
+  const safeImage = sanitizeUrl(stream.image);
+  const imageUrl = safeImage ? cloudflareThumbnail(safeImage) ?? safeImage : undefined;
   const thumbnail = imageUrl || cloudflareThumbnail(stream.thumbnailSourceUrl ?? stream.url);
   return <article className="overflow-hidden rounded-xl border border-border/70 bg-secondary/30 transition hover:bg-secondary">
     <button type="button" className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(stream)} aria-label={`${stream.isLive ? 'Watch live stream' : 'Watch recording'}: ${stream.title}`}>

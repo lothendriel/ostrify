@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Music, Mic, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Track } from "@/lib/music";
+import { sanitizeUrl } from "@/lib/sanitize";
 
 /** Deterministic gradient from a string (so each track gets a stable color). */
 function gradientFor(seed: string): string {
@@ -22,7 +23,8 @@ interface TrackArtworkProps {
 
 export function TrackArtwork({ track, className, rounded = "rounded-md" }: TrackArtworkProps) {
   const [errored, setErrored] = useState(false);
-  const showImage = track.image && !errored;
+  const image = sanitizeUrl(track.image);
+  const showImage = image && !errored;
   const Icon = track.kind === "audiobook" ? BookOpen : track.kind === "podcast" ? Mic : Music;
 
   return (
@@ -36,7 +38,7 @@ export function TrackArtwork({ track, className, rounded = "rounded-md" }: Track
     >
       {showImage ? (
         <img
-          src={track.image}
+          src={image}
           alt=""
           loading="lazy"
           decoding="async"

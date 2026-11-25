@@ -100,7 +100,7 @@ function AlbumCard({ track, count, compact = false }: { track: Track; count: num
 function WavlakeReleaseCard({ release, compact = false }: { release: WavlakeRelease; compact?: boolean }) {
   return <Link to={`/wavlake/${release.type}/${release.id}`} className={`group rounded-lg bg-secondary/50 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}>
     <div className={`aspect-square ${compact ? 'w-11/12 mx-auto' : 'w-full'} overflow-hidden bg-muted flex items-center justify-center ${compact ? 'mb-2' : 'mb-3'} ${release.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}>
-      {release.image ? <img src={release.image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Music2 className={`${compact ? 'size-8' : 'size-10'} text-muted-foreground`} />}
+      {sanitizeUrl(release.image) ? <img src={sanitizeUrl(release.image)} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Music2 className={`${compact ? 'size-8' : 'size-10'} text-muted-foreground`} />}
     </div>
     <p className={`font-semibold truncate ${compact ? 'text-sm' : ''}`}>{release.title}</p>
     <p className={`text-sm text-muted-foreground truncate ${compact ? 'text-xs' : ''}`}>{release.type === 'artist' ? 'Wavlake artist' : release.artist || 'Wavlake album'}</p>

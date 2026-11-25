@@ -4,7 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { sanitizeUrl } from '@/lib/sanitize';
+import { cloudflareStreamEmbed, sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_PUBKEY, TUNESTR_STREAM_HOST_PUBKEY } from '@/lib/sources';
 import { getUserRelayUrls, OSTRIFY_RELAY_URL } from '@/lib/appRelays';
 import { isOriginalSoundTitle, type Track } from '@/lib/music';
@@ -49,9 +49,7 @@ function streamPlaybackUrl(url: string): string {
     if (parsed.hostname === 'stream.zapclub.io' && parsed.pathname === '/live/basement.m3u8') {
       return 'https://stream.zapclub.io/live/basement.m3u8';
     }
-    if (!parsed.hostname.endsWith('.cloudflarestream.com')) return url;
-    const match = parsed.pathname.match(/^\/([a-f0-9]{32})\/(?:manifest\/video\.m3u8|watch)$/i);
-    return match ? `https://${parsed.hostname}/${match[1]}/iframe` : url;
+    return cloudflareStreamEmbed(url) ?? url;
   } catch {
     return url;
   }

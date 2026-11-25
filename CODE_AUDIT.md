@@ -1,6 +1,6 @@
 # Ostrify Code Audit
 
-**Last updated:** 2026-11-24 after the playback hardening follow-up. The original re-audit reviewed commit `305d88a`; subsequent updates record library, event-selection, and playback changes.
+**Last updated:** 2026-11-25 after the video embed and external URL security follow-up. The original re-audit reviewed commit `305d88a`; subsequent updates record library, event-selection, playback, and URL-safety changes.
 
 **Scope:** A targeted review of previous audit findings and representative security, Nostr, playback, persistence, accessibility, and catalog code. This is not a complete security assessment or a comprehensive signer, cross-device, accessibility, or performance test. Statuses describe the reviewed implementation and its known limitations; completion of a relay query does not prove that a relay has all events.
 
@@ -8,13 +8,13 @@
 
 ## Remaining work, in priority order
 
-1. **Secure video embeds and review external URLs.** Restrict supported iframe hosts, provide a safe fallback, and review CSP and other untrusted URL sinks. See §1.
+1. **Verify video provider compatibility and finish external-data review.** The arbitrary iframe issue is addressed; verify Cloudflare, ZapClub, and N94 playback on real devices, and continue reviewing catalog metadata and URL handling. See §§1 and 9.
 2. **Finish playback verification.** The identified queue, restoration, end-of-queue, rapid-update, and rejected-playback paths were improved and exercised with simulated audio. Add automated regression coverage and verify real audio, autoplay, and browser/device differences. See §11.
 3. **Complete NIP-19 destinations.** Replace note, event, and addressable-event placeholders with useful views or clear unsupported states. See §13.
 4. **Review private invites.** Assess replay and ordering assumptions and measure inbox decryption and signer prompts. Preserve the correct distinction between wrapper and seal authors. See §§2–3.
 5. **Improve accessibility.** Check live loading announcements, keyboard navigation, focus indicators, and dark-theme contrast. See §12.
 6. **Improve notification and relay transparency.** Explain notification limitations and measure polling and TuneStr relay request costs before optimizing. See §§7–8.
-7. **Finish external-data and sharing review.** Validate remaining catalog URL and metadata handling, then confirm the intended canonical domain and social sharing previews. See §9 and the sharing-metadata observation below.
+7. **Review sharing metadata.** Confirm the intended canonical domain and verify social sharing previews. See the sharing-metadata observation below.
 8. **Clean up cache-key and maintainability issues.** Review Home-session cache behavior, shared key helpers, and compressed JSX. The duplicate podcast guard is already fixed. See §§10 and 14.
 
 **Replaceable-event follow-up:** The three identified settings, TuneStr, and follower paths have been addressed, subject to relay and verification limitations in §5.
@@ -34,7 +34,7 @@
 | Notification baseline and polling | **Partial** | The UI mentions device-local storage and known followers are retained across refreshes. Initial omissions and polling costs still merit review. |
 | Cache-key mismatches | **Partial** | Normal playlist, artist, and podcast update paths account for relay-scoped keys; Home-session keys and consistency still need review. |
 | Library-read relay completeness | **Done** | Per-relay EOSE coverage is reported, incomplete results are surfaced, and the reviewed library reads retain the newest known revisions. Relay data can still be missing or stale. |
-| URL validation and iframe origins | **Open** | Stream URLs are HTTPS-validated but arbitrary HTTPS hosts can still be embedded; CSP allows HTTPS frames. |
+| URL validation and iframe origins | **Partial** | Arbitrary HTTPS iframe embedding is blocked, CSP is narrower, and shared media and URL boundaries have additional validation. Provider compatibility and broader catalog review remain. |
 | Replaceable-event selection | **Done** | The specifically identified settings, TuneStr, follower, profile and library paths now reconcile revisions using the NIP-01 tie-break. Relay completeness and controlled-conflict validation remain limitations; this is not a proof of app-wide coverage. |
 | Concurrent replaceable-list writes | **Partial** | Public library writes now use local coordination, relay reconciliation, and delivery warnings; cross-device conflicts remain possible and authenticated testing is outstanding. |
 | Playback edge cases and tests | **Partial** | Queue transitions, restoration, Next, and rejected playback were hardened and checked with simulated audio. A focused automated player suite and broader real-device verification remain outstanding. |
@@ -46,11 +46,13 @@
 
 ## Detailed findings and recommendations
 
-### 1. URL validation and iframe origins — Open
+### 1. URL validation and iframe origins — Partial; arbitrary iframe issue addressed
 
-`src/hooks/useTunestrStreams.ts` applies `sanitizeUrl()` to event-sourced streaming and recording URLs, and also sanitizes stream images. However, `streamPlaybackUrl()` returns other HTTPS URLs unchanged, and `src/components/music/TunestrPlayer.tsx` loads those URLs in an iframe without a host allowlist. A publicly supplied music-tagged stream can therefore cause an arbitrary HTTPS page to be embedded. The earlier report located the iframe in `MusicDiscovery.tsx`; it is now in `TunestrPlayer.tsx`.
+**Implemented:** TuneStr embeds only validated Cloudflare Stream customer-host player URLs with a 32-hex video ID. The embed URL is reconstructed without event-supplied query parameters, uses an iframe sandbox and no referrer, and `frame-src` is narrowed to Cloudflare Stream subdomains. The sandbox and CSP supplement the stricter application-level hostname and path checks; CSP alone cannot express the customer-host pattern. The existing ZapClub HLS and N94 native players do not use iframes. Other HTTPS sources show a warning and an explicit external link rather than being embedded; invalid URLs provide no link.
 
-`index.html` still permits `frame-src 'self' https:`. Consider an explicit set of supported embed hosts, a safe external-link fallback for unsupported providers, and a correspondingly narrower CSP after checking provider compatibility. Review event- and catalog-sourced URLs throughout the app rather than assuming every raw-looking render site lacks parse-time validation. `src/lib/sanitize.ts` allows HTTPS only; its comment incorrectly also mentions data images.
+The common URL sanitizer now accepts only credential-free HTTPS URLs. Shared track artwork, selected catalog and saved-library image/link sinks, the audio playback source, and Blossom server lists received additional validation. N94 segments are restricted to the stream event’s author and expected parent/variant/MIME type, fetched without credentials or referrer, limited to 16 MiB, and checked against their signed SHA-256 hash before decoding. Event-supplied relay hints are limited and must use credential-free WSS.
+
+**Limits and compatibility:** Cloudflare Stream’s customer subdomains are a provider family, not a single account; the reconstructed player URL still displays content supplied by that provider. Signed-token and other unsupported embed formats fall back to opening the source. Requiring the stream author to sign N94 segments is an Ostrify safety policy; the draft N94-stream proposal does not mandate that relationship, so streams using delegated segment publishers or missing hashes will need another client/source. The size cap and browser SHA-256 support can also affect compatibility. Actual Cloudflare, ZapClub, and N94 playback across browsers/devices has not been verified. This was a targeted URL-sink review, not a complete assessment of every external service or all catalog fields; see §9.
 
 ### 2. NIP-17 friend-message validation — Partial; correction to prior audit
 
@@ -171,3 +173,4 @@ Browser checks with simulated relay responses exercised complete, delayed, and f
 - For the replaceable-event selection update, `tsc --noEmit` and Shakespeare's build passed. A public profile loaded from live relay responses in preview, including its followed people and playlists, and expanding a playlist worked. The preview did not verify same-second competing events or authenticated signer flows. `npm test` could not run because `npm` is unavailable; direct Vitest was also unavailable.
 - For the settings, stream, and follower follow-up, `tsc --noEmit` and Shakespeare's build passed. The preview showed a local Blossom edit surviving reload, and kept the list when no published list was found. Live TuneStr results and an older-recording batch rendered, and the public follower view displayed its partial-result warning and retry control. A temporary browser check of the actual TuneStr merge helper passed for timestamp ties across pages, a newer unplayable replacement, and separate authors; the temporary harness was removed. The preview did not simulate competing relay responses for followers or settings, or exercise a real signer, cross-tab edits, or account switches. `npm test` and Vitest remain unavailable in this environment.
 - For playback hardening, `tsc --noEmit` and Shakespeare's build passed. The temporary simulated-audio browser checks described in §11 passed and the harness was removed. The actual player bar showed the failure/retry state when live media could not start in preview; successful real-media playback and mobile-device behavior remain unverified. `npm test` and direct Vitest could not run because npm and Vitest are unavailable.
+- For the URL-safety follow-up, `tsc --noEmit` and Shakespeare's build passed. A temporary browser harness checked Cloudflare URL reconstruction, rejected spoofed hosts, credentials, unsafe schemes, ports, and paths; it exercised the supported iframe, native ZapClub surface, and untrusted-source fallback on desktop and mobile. Synthetic N94 checks accepted a correctly hashed segment and rejected wrong hashes, oversized responses, wrong authors/parents, and unsafe URLs. The harness was removed. Preview also rejected unsafe listening links and displayed a live relay-sourced unsupported stream as an external-link fallback. Successful real-provider playback, N94 delegated-publisher compatibility, and a complete external-service audit remain unverified. `npm test` and direct Vitest could not run because npm and Vitest are unavailable.
