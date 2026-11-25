@@ -235,7 +235,7 @@ const Index = () => {
       </section>
 
       <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
-      <DeferredHomeSection title="Made for you">{near => <MadeForYouSection candidates={allMusic} isLoading={tracksLoading || !near} active={near} sessionScope={homeAccountScope} />}</DeferredHomeSection>
+      <MadeForYouSection candidates={allMusic} isLoading={!discoveryEnabled || baseSourcesLoading || neededCatalogStillLoading} sessionScope={homeAccountScope} />
       <Shelf title="Jump back in" subtitle="Your recent listening" tracks={player.history.slice(0, 10)} dense compactCards />
       <div ref={featuredAudiobooksRef}>
         <FeaturedAudiobooks enabled={featuredAudiobooksEnabled} />
