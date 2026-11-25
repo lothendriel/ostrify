@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useMatch } from "react-router-dom";
 import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3, Video } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
@@ -34,6 +34,11 @@ const navItems = [
   { to: "/friends", label: "Friends", icon: Users },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
+
+const libraryRowClass = (active: boolean) => cn(
+  "flex items-center gap-3 rounded-xl p-2 transition-colors",
+  active ? "bg-brand-surface text-foreground shadow-[inset_3px_0_0_var(--primary)]" : "hover:bg-brand-surface",
+);
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
@@ -109,7 +114,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <ScrollArea type="always" className="flex-1 min-h-0 px-2 pb-2">
           {!user ? <p className="px-3 py-4 text-sm text-muted-foreground">Log in to create playlists and like songs.</p> : (
             <div className="space-y-1">
-              <NavLink to="/artists" onClick={onNavigate} className={({ isActive }) => cn("flex items-center gap-3 p-2 rounded-md hover:bg-accent/10 transition-colors", isActive && "bg-accent/10")}>
+              <NavLink to="/artists" onClick={onNavigate} className={({ isActive }) => cn(libraryRowClass(isActive), "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
                 <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0"><Users className="size-5 text-white" /></div>
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
               </NavLink>
@@ -133,6 +138,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist: Pick<Playlist, "id" | "title" | "trackIds" | "image">; liked?: boolean; onNavigate?: () => void }) {
   const location = useLocation();
+  const isActive = !!useMatch({ path: liked ? "/liked" : `/playlist/${playlist.id}`, end: true });
   const player = usePlayer();
   const { toast } = useToast();
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -167,12 +173,12 @@ function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist
   };
   const image = sanitizeUrl(playlist.image);
   const Icon = liked ? Heart : image ? undefined : Music;
-  return <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+  return <div className={libraryRowClass(isActive)}>
     <Button type="button" variant="ghost" size="icon" className={cn("group relative size-11 shrink-0 rounded-md text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring", liked ? "bg-gradient-to-br from-violet-500 to-primary" : "overflow-hidden bg-secondary")} onClick={handlePlay} disabled={shouldLoad && tracksQuery.isLoading} aria-label={isPlayingHere ? `Pause ${playlist.title}` : `Play ${playlist.title}`} title={isPlayingHere ? `Pause ${playlist.title}` : `Play ${playlist.title}`}>
       {image && !liked ? <img src={image} alt="" loading="lazy" decoding="async" className="absolute inset-0 size-full object-cover opacity-70 group-hover:opacity-30" /> : !isPlayingHere && Icon && <Icon className={cn("size-5 group-hover:hidden", liked && "fill-white")} />}
       {isPlayingHere ? <Pause className="relative z-10 size-5 fill-current" /> : <Play className="absolute z-10 hidden size-5 fill-current group-hover:block" />}
     </Button>
-    <NavLink to={liked ? "/liked" : `/playlist/${playlist.id}`} onClick={onNavigate} className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}>
+    <NavLink to={liked ? "/liked" : `/playlist/${playlist.id}`} onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <div className="truncate text-sm font-medium">{playlist.title}</div>
       <div className="text-xs text-muted-foreground">{playlist.trackIds.length} songs</div>
     </NavLink>
@@ -181,6 +187,7 @@ function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist
 
 function TunestrLibraryItem({ playlist, onNavigate }: { playlist: Pick<Playlist, 'trackIds'>; onNavigate?: () => void }) {
   const location = useLocation();
+  const isActive = !!useMatch('/tunestr-library');
   const player = usePlayer();
   const { toast } = useToast();
   const { openStream } = useTunestrPlayer();
@@ -208,11 +215,11 @@ function TunestrLibraryItem({ playlist, onNavigate }: { playlist: Pick<Playlist,
     else toast({ title: 'No saved TuneStr recordings', description: 'Save a TuneStr recording first.' });
   };
 
-  return <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+  return <div className={libraryRowClass(isActive)}>
     <Button type="button" variant="ghost" size="icon" className="group relative size-11 shrink-0 rounded-md bg-gradient-to-br from-rose-500 to-violet-700 text-white hover:text-white" onClick={handlePlay} disabled={shouldLoad && tracksQuery.isLoading} aria-label={isPlayingHere ? 'Pause TuneStr Recordings' : 'Play TuneStr Recordings'} title="Play TuneStr Recordings">
       {isPlayingHere ? <Pause className="size-5 fill-current" /> : <><Video className="size-5 group-hover:hidden" /><Play className="absolute hidden size-5 fill-current group-hover:block" /></>}
     </Button>
-    <NavLink to="/tunestr-library" onClick={onNavigate} className={({ isActive }) => cn('min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', isActive && 'text-primary')}>
+    <NavLink to="/tunestr-library" onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
       <div className="truncate text-sm font-medium">TuneStr Recordings</div>
       <div className="text-xs text-muted-foreground">{playlist.trackIds.length} saved</div>
     </NavLink>
@@ -220,6 +227,7 @@ function TunestrLibraryItem({ playlist, onNavigate }: { playlist: Pick<Playlist,
 }
 
 function SavedAlbumsLibraryItem({ albums, onNavigate }: { albums: SavedAlbum[]; onNavigate?: () => void }) {
+  const isActive = !!useMatch('/saved-albums');
   const player = usePlayer();
   const { toast } = useToast();
   const [selectedAlbum, setSelectedAlbum] = useState<SavedAlbum>();
@@ -246,11 +254,11 @@ function SavedAlbumsLibraryItem({ albums, onNavigate }: { albums: SavedAlbum[]; 
     }
   };
   return <>
-    <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+    <div className={libraryRowClass(isActive)}>
       <Button type="button" variant="ghost" size="icon" className="group size-11 shrink-0 rounded-md bg-gradient-to-br from-emerald-600 to-teal-900 text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring" onClick={handlePlay} disabled={loading} aria-label={isPlayingHere ? 'Pause Saved Albums' : 'Play Saved Albums'} title="Play a random saved album">
         {loading ? <LoaderCircle className="size-5 animate-spin" /> : isPlayingHere ? <Pause className="size-5 fill-current" /> : <><Disc3 className="size-5 group-hover:hidden" /><Play className="hidden size-5 fill-current group-hover:block" /></>}
       </Button>
-      <NavLink to="/saved-albums" onClick={onNavigate} className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}>
+      <NavLink to="/saved-albums" onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <div className="truncate text-sm font-medium">Saved Albums</div>
         <div className="text-xs text-muted-foreground">{albums.length} {albums.length === 1 ? 'album' : 'albums'}</div>
       </NavLink>
@@ -290,6 +298,7 @@ function AlbumTracksLoader({ tracks, loading, error, onLoaded, onError }: { trac
 }
 
 function AudiobookLibraryItem({ books, favoriteCount, collectionCount, onNavigate }: { books: SavedAudiobook[]; favoriteCount: number; collectionCount: number; onNavigate?: () => void }) {
+  const isActive = !!useMatch({ path: '/audiobook-library', end: false });
   const player = usePlayer();
   const { toast } = useToast();
   const [selectedBook, setSelectedBook] = useState<SavedAudiobook>();
@@ -318,11 +327,11 @@ function AudiobookLibraryItem({ books, favoriteCount, collectionCount, onNavigat
     }
   };
   return <>
-    <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+    <div className={libraryRowClass(isActive)}>
       <Button type="button" variant="ghost" size="icon" className="group size-11 shrink-0 rounded-md bg-gradient-to-br from-rose-500 to-violet-700 text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring" onClick={handlePlay} disabled={loading} aria-label={isAudiobookPlaying ? "Pause Saved Audiobooks" : "Play Saved Audiobooks"} title="Play a random saved audiobook">
         {loading ? <LoaderCircle className="size-5 animate-spin" /> : isAudiobookPlaying ? <Pause className="size-5 fill-current" /> : <><BookOpen className="size-5 group-hover:hidden" /><Play className="hidden size-5 fill-current group-hover:block" /></>}
       </Button>
-      <NavLink to="/audiobook-library" onClick={onNavigate} className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}>
+      <NavLink to="/audiobook-library" onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <div className="truncate text-sm font-medium">Saved Audiobooks</div>
         <div className="text-xs text-muted-foreground">{favoriteCount} favorites · {collectionCount} collections</div>
       </NavLink>
@@ -356,6 +365,7 @@ function AudiobookQueueLoader({ book, onLoaded, onError }: { book: SavedAudioboo
 }
 
 function PodcastLibraryItem({ favorites, onNavigate }: { favorites: PodcastFavorite[]; onNavigate?: () => void }) {
+  const isActive = !!useMatch('/podcast-library');
   const player = usePlayer();
   const { toast } = useToast();
   const [selectedShow, setSelectedShow] = useState<PodcastFavorite>();
@@ -384,11 +394,11 @@ function PodcastLibraryItem({ favorites, onNavigate }: { favorites: PodcastFavor
     }
   };
   return <>
-    <div className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-accent/10">
+    <div className={libraryRowClass(isActive)}>
       <Button type="button" variant="ghost" size="icon" className="group size-11 shrink-0 rounded-md bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring" onClick={handlePlay} disabled={loading} aria-label={isSavedShowPlaying ? "Pause Saved Podcasts" : "Play Saved Podcasts"} title="Play a random saved podcast show">
         {loading ? <LoaderCircle className="size-5 animate-spin" /> : isSavedShowPlaying ? <Pause className="size-5 fill-current" /> : <><Mic className="size-5 group-hover:hidden" /><Play className="hidden size-5 fill-current group-hover:block" /></>}
       </Button>
-      <NavLink to="/podcast-library" onClick={onNavigate} className={({ isActive }) => cn("min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", isActive && "text-primary")}>
+      <NavLink to="/podcast-library" onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <div className="truncate text-sm font-medium">Saved Podcasts</div>
         <div className="text-xs text-muted-foreground">{shows.length} shows · {favorites.filter(item => item.episode).length} episodes</div>
       </NavLink>
