@@ -1,5 +1,6 @@
 import { useSeoMeta } from "@unhead/react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useNostr } from "@nostrify/react";
 import { Radio, Sun, Moon, UserRound, Heart, Music2, Library, Users, Mic, HardDriveUpload, Disc3 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -103,6 +104,7 @@ function UserRelayStatusList({ relays, excludedRelayUrls, nostr, onRemove, onRes
 
 const SettingsPage = () => {
   useSeoMeta({ title: "Settings — Ostrify" });
+  const [searchParams] = useSearchParams();
   const { theme, setTheme } = useTheme();
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
@@ -128,7 +130,7 @@ const SettingsPage = () => {
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-      <Tabs defaultValue="privacy" className="space-y-6">
+      <Tabs defaultValue={searchParams.get('tab') === 'relays' ? 'relays' : 'privacy'} className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="privacy">Privacy</TabsTrigger>
           <TabsTrigger value="relays">Relays</TabsTrigger>
