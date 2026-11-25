@@ -35,6 +35,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-brand-violet: var(--brand-violet);
+  --color-brand-surface: var(--brand-surface);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -90,70 +92,74 @@
 :root {
   --radius: 0.5rem;
 
-  /* Light mode: a clean music app look */
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(0 0% 9%);
+  /* Soft violet neutrals let artwork and Ostrify green remain the focus. */
+  --background: hsl(255 25% 97%);
+  --foreground: hsl(255 18% 12%);
 
-  --card: hsl(0 0% 98%);
-  --card-foreground: hsl(0 0% 9%);
+  --card: hsl(255 30% 99%);
+  --card-foreground: hsl(255 18% 12%);
 
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(0 0% 9%);
+  --popover: hsl(255 30% 99%);
+  --popover-foreground: hsl(255 18% 12%);
 
-  --primary: hsl(141 73% 42%);
+  --primary: hsl(141 73% 32%);
   --primary-foreground: hsl(0 0% 100%);
 
-  --secondary: hsl(0 0% 94%);
-  --secondary-foreground: hsl(0 0% 9%);
+  --secondary: hsl(255 21% 93%);
+  --secondary-foreground: hsl(255 18% 12%);
 
-  --muted: hsl(0 0% 94%);
-  --muted-foreground: hsl(0 0% 40%);
+  --muted: hsl(255 21% 93%);
+  --muted-foreground: hsl(255 10% 36%);
+  --brand-violet: hsl(262 56% 38%);
+  --brand-surface: hsl(258 33% 94%);
 
-  --accent: hsl(141 73% 42%);
+  --accent: hsl(141 73% 32%);
   --accent-foreground: hsl(0 0% 100%);
 
   --destructive: hsl(0 84.2% 60.2%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(0 0% 88%);
-  --input: hsl(0 0% 88%);
-  --ring: hsl(141 73% 42%);
+  --border: hsl(255 16% 87%);
+  --input: hsl(255 16% 84%);
+  --ring: hsl(141 73% 32%);
 
-  --chart-1: hsl(141 73% 42%);
+  --chart-1: hsl(141 73% 32%);
   --chart-2: hsl(173 58% 39%);
   --chart-3: hsl(262 83% 58%);
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(340 75% 55%);
 
-  --sidebar: hsl(0 0% 97%);
-  --sidebar-foreground: hsl(0 0% 20%);
-  --sidebar-primary: hsl(141 73% 42%);
+  --sidebar: hsl(255 25% 96%);
+  --sidebar-foreground: hsl(255 15% 20%);
+  --sidebar-primary: hsl(141 73% 32%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(0 0% 92%);
-  --sidebar-accent-foreground: hsl(0 0% 9%);
-  --sidebar-border: hsl(0 0% 88%);
-  --sidebar-ring: hsl(141 73% 42%);
+  --sidebar-accent: hsl(255 22% 92%);
+  --sidebar-accent-foreground: hsl(255 18% 12%);
+  --sidebar-border: hsl(255 16% 87%);
+  --sidebar-ring: hsl(141 73% 32%);
 }
 
 .dark {
-  /* Spotify-style near-black with green accent */
-  --background: hsl(0 0% 7%);
-  --foreground: hsl(0 0% 98%);
+  /* Deep violet-tinted charcoal, with green reserved for active controls. */
+  --background: hsl(260 18% 6%);
+  --foreground: hsl(255 15% 98%);
 
-  --card: hsl(0 0% 11%);
-  --card-foreground: hsl(0 0% 98%);
+  --card: hsl(260 15% 11%);
+  --card-foreground: hsl(255 15% 98%);
 
-  --popover: hsl(0 0% 11%);
-  --popover-foreground: hsl(0 0% 98%);
+  --popover: hsl(260 16% 12%);
+  --popover-foreground: hsl(255 15% 98%);
 
   --primary: hsl(141 76% 48%);
   --primary-foreground: hsl(0 0% 7%);
 
-  --secondary: hsl(0 0% 16%);
-  --secondary-foreground: hsl(0 0% 98%);
+  --secondary: hsl(260 14% 17%);
+  --secondary-foreground: hsl(255 15% 98%);
 
-  --muted: hsl(0 0% 16%);
-  --muted-foreground: hsl(0 0% 64%);
+  --muted: hsl(260 14% 17%);
+  --muted-foreground: hsl(255 9% 70%);
+  --brand-violet: hsl(265 65% 72%);
+  --brand-surface: hsl(262 32% 16%);
 
   --accent: hsl(141 76% 48%);
   --accent-foreground: hsl(0 0% 7%);
@@ -161,8 +167,8 @@
   --destructive: hsl(0 72% 51%);
   --destructive-foreground: hsl(0 0% 98%);
 
-  --border: hsl(0 0% 18%);
-  --input: hsl(0 0% 20%);
+  --border: hsl(260 14% 21%);
+  --input: hsl(260 14% 25%);
   --ring: hsl(141 76% 48%);
 
   --chart-1: hsl(141 76% 48%);
@@ -171,14 +177,24 @@
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(340 75% 60%);
 
-  --sidebar: hsl(0 0% 4%);
-  --sidebar-foreground: hsl(0 0% 70%);
+  --sidebar: hsl(260 20% 6%);
+  --sidebar-foreground: hsl(255 9% 74%);
   --sidebar-primary: hsl(141 76% 48%);
   --sidebar-primary-foreground: hsl(0 0% 7%);
-  --sidebar-accent: hsl(0 0% 14%);
-  --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(0 0% 14%);
+  --sidebar-accent: hsl(260 20% 16%);
+  --sidebar-accent-foreground: hsl(255 15% 98%);
+  --sidebar-border: hsl(260 14% 20%);
   --sidebar-ring: hsl(141 76% 48%);
+}
+
+@layer components {
+  .ostrify-header {
+    background: linear-gradient(110deg, var(--brand-surface), var(--card) 58%);
+  }
+
+  .ostrify-player {
+    background: linear-gradient(100deg, var(--brand-surface), var(--card) 45%, var(--card));
+  }
 }
 
 @layer base {

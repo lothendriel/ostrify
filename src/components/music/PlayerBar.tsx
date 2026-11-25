@@ -54,7 +54,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
   const VolumeIcon = player.muted || player.volume === 0 ? VolumeX : player.volume < 0.5 ? Volume1 : Volume2;
 
   return (
-    <footer className="flex h-28 shrink-0 flex-col justify-center gap-1 border-t border-border bg-card px-3 py-2 sm:h-20 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
+    <footer className="ostrify-player flex h-28 shrink-0 flex-col justify-center gap-1 border-t border-brand-violet/20 px-3 py-2 sm:h-20 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
       {/* Track identity and compact mobile actions */}
       <div className="flex w-full min-w-0 items-center gap-2 sm:w-[30%] sm:max-w-xs sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
@@ -135,7 +135,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             onClick={player.togglePlay}
             disabled={!current}
             aria-label={player.isPlaying ? "Pause" : "Play"}
-            className="rounded-full size-10 bg-foreground text-background hover:bg-foreground hover:scale-105 transition-transform disabled:opacity-40 sm:size-10"
+            className="size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
           >
             {player.isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current ml-0.5" />}
           </Button>

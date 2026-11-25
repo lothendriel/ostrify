@@ -63,10 +63,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         className="mx-2 flex items-center gap-2 rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <img src="/ostrify-logo-512.webp?v=opt-1" alt="" className="size-10 rounded-md object-contain" />
-        <span className="font-bold text-xl tracking-tight">Ostrify</span>
+        <span className="font-bold text-xl tracking-tight">Ostrify<span aria-hidden="true" className="ml-1 text-brand-violet">.</span></span>
       </NavLink>
 
-      <Collapsible open={menuOpen} onOpenChange={setMenuOpen} className="mx-2 shrink-0 rounded-lg bg-card">
+      <Collapsible open={menuOpen} onOpenChange={setMenuOpen} className="mx-2 shrink-0 rounded-lg border border-brand-violet/15 bg-card">
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" className="group flex h-11 w-full justify-between px-4 text-sm font-semibold text-foreground hover:bg-accent/50" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}>
             <span>Menu</span>
@@ -86,7 +86,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 }}
                 className={({ isActive }) => cn(
                   "flex w-full items-center gap-4 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  isActive ? "bg-accent/15 text-foreground" : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
+                  isActive ? "bg-brand-surface text-foreground shadow-[inset_3px_0_0_var(--primary)]" : "text-muted-foreground hover:bg-brand-surface hover:text-foreground",
                 )}
               >
                 <Icon className="size-5" />
@@ -97,7 +97,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </CollapsibleContent>
       </Collapsible>
 
-      <div className="bg-card rounded-lg mx-2 flex-1 min-h-0 flex flex-col">
+      <div className="mx-2 flex min-h-0 flex-1 flex-col rounded-lg border border-brand-violet/15 bg-card">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm">
             <Library className="size-6" />
