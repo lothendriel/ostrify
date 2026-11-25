@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { AudiobookCover } from "@/components/music/AudiobookCover";
@@ -18,6 +18,38 @@ const DAILY_PICK_COUNT = 4;
 interface FeaturedPicks {
   weekly: FeaturedBook[];
   daily: FeaturedBook[];
+}
+
+const FEATURED_SESSION_KEY = "ostrify:featured-audiobooks:v1";
+let sessionPicks: FeaturedPicks | null = null;
+
+function readSessionPicks(): FeaturedPicks | null {
+  if (sessionPicks) return sessionPicks;
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem(FEATURED_SESSION_KEY) ?? "null");
+    if (!value || typeof value !== "object") return null;
+    const picks = value as Partial<FeaturedPicks>;
+    const isBook = (book: FeaturedBook) => book && (book.source === "librivox" || book.source === "gutenberg")
+      && typeof book.id === "string" && typeof book.catalogId === "string"
+      && typeof book.title === "string" && typeof book.author === "string"
+      && Array.isArray(book.covers) && book.covers.every(cover => typeof cover === "string");
+    if (!Array.isArray(picks.weekly) || !Array.isArray(picks.daily)
+      || ![...picks.weekly, ...picks.daily].every(isBook)
+      || picks.weekly.length + picks.daily.length === 0) return null;
+    sessionPicks = { weekly: picks.weekly, daily: picks.daily };
+    return sessionPicks;
+  } catch {
+    return null;
+  }
+}
+
+function saveSessionPicks(picks: FeaturedPicks) {
+  sessionPicks = picks;
+  try {
+    sessionStorage.setItem(FEATURED_SESSION_KEY, JSON.stringify(picks));
+  } catch {
+    // Preserve the selection in memory if session storage is unavailable.
+  }
 }
 
 function hashSeed(value: string): number {
@@ -44,34 +76,24 @@ function pickDistinct(books: FeaturedBook[], seed: string, count: number, exclud
   return Array.from({ length: Math.min(count, sorted.length) }, (_, index) => sorted[(start + index) % sorted.length]);
 }
 
-function chooseFeaturedBooks(books: FeaturedBook[], day: string, week: string): FeaturedPicks {
+function chooseFeaturedBooks(books: FeaturedBook[], day: string, week: string, variation = ""): FeaturedPicks {
   const librivox = books.filter(book => book.source === "librivox");
   const gutenberg = books.filter(book => book.source === "gutenberg");
   const preferredWeeklySource: FeaturedSource = hashSeed(week) % 2 === 0 ? "librivox" : "gutenberg";
   const weeklyPool = preferredWeeklySource === "librivox"
     ? librivox.length ? librivox : gutenberg
     : gutenberg.length ? gutenberg : librivox;
-  const weekly = pickDistinct(weeklyPool, `weekly:${week}`, WEEKLY_PICK_COUNT);
+  const weekly = pickDistinct(weeklyPool, `weekly:${week}:${variation}`, WEEKLY_PICK_COUNT);
   const usedIds = new Set(weekly.map(book => book.id));
-  weekly.push(...pickDistinct(books, `weekly-fill:${week}`, WEEKLY_PICK_COUNT - weekly.length, usedIds));
+  weekly.push(...pickDistinct(books, `weekly-fill:${week}:${variation}`, WEEKLY_PICK_COUNT - weekly.length, usedIds));
   for (const book of weekly) usedIds.add(book.id);
 
   const alternateSourcePool = weekly[0]?.source === "librivox" ? gutenberg : librivox;
-  const daily = pickDistinct(alternateSourcePool, `daily:${day}`, DAILY_PICK_COUNT, usedIds);
+  const daily = pickDistinct(alternateSourcePool, `daily:${day}:${variation}`, DAILY_PICK_COUNT, usedIds);
   for (const book of daily) usedIds.add(book.id);
-  daily.push(...pickDistinct(books, `daily-fill:${day}`, DAILY_PICK_COUNT - daily.length, usedIds));
+  daily.push(...pickDistinct(books, `daily-fill:${day}:${variation}`, DAILY_PICK_COUNT - daily.length, usedIds));
 
   return { weekly, daily };
-}
-
-function useUtcDayClock(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const nextMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) + 25;
-    const timer = window.setTimeout(() => setNow(new Date()), Math.max(25, nextMidnight - Date.now()));
-    return () => window.clearTimeout(timer);
-  }, [now]);
-  return now;
 }
 
 function useBookDetails(book: FeaturedBook | undefined) {
@@ -122,10 +144,11 @@ function PickSkeleton() {
 }
 
 export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
-  const now = useUtcDayClock();
-  const { day, week } = getPeriodKeys(now);
-  const librivoxCatalog = useLibriVoxCatalog("", "title", enabled);
-  const gutenbergCatalog = useGutenbergAudiobookCatalog("", "title", enabled);
+  const [picks, setPicks] = useState(readSessionPicks);
+  const [refreshPending, setRefreshPending] = useState(false);
+  const catalogEnabled = enabled && !picks;
+  const librivoxCatalog = useLibriVoxCatalog("", "title", catalogEnabled);
+  const gutenbergCatalog = useGutenbergAudiobookCatalog("", "title", catalogEnabled);
 
   const books = useMemo(() => {
     const unique = new Map<string, FeaturedBook>();
@@ -135,38 +158,62 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
     ]) unique.set(book.id, book);
     return [...unique.values()];
   }, [librivoxCatalog.data, gutenbergCatalog.data]);
-  const picks = useMemo(() => chooseFeaturedBooks(books, day, week), [books, day, week]);
-  const isLoading = enabled && (
-    (!librivoxCatalog.data && librivoxCatalog.isLoading)
-    || (!gutenbergCatalog.data && gutenbergCatalog.isLoading)
-  );
-  const showSkeletons = !enabled || isLoading;
+  const isLoading = catalogEnabled && (librivoxCatalog.isFetching || gutenbergCatalog.isFetching);
 
-  if (enabled && !books.length && !isLoading) {
-    return <p role="status" className="mx-auto max-w-xl rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Featured audiobooks are temporarily unavailable. Please try again later.</p>;
-  }
+  useEffect(() => {
+    if (!catalogEnabled || isLoading || picks || !books.length) return;
+    const { day, week } = getPeriodKeys(new Date());
+    const next = chooseFeaturedBooks(books, day, week);
+    saveSessionPicks(next);
+    setPicks(next);
+  }, [books, catalogEnabled, isLoading, picks]);
+
+  const refreshPicks = async () => {
+    setRefreshPending(true);
+    try {
+      const [librivox, gutenberg] = await Promise.all([librivoxCatalog.refetch(), gutenbergCatalog.refetch()]);
+      const refreshedBooks = [
+        ...(librivox.data?.pages.flatMap(page => page.books) ?? []),
+        ...(gutenberg.data?.pages.flatMap(page => page.books) ?? []),
+      ];
+      if (!refreshedBooks.length) return;
+      const { day, week } = getPeriodKeys(new Date());
+      const next = chooseFeaturedBooks([...new Map(refreshedBooks.map(book => [book.id, book])).values()], day, week, crypto.randomUUID());
+      saveSessionPicks(next);
+      setPicks(next);
+    } finally {
+      setRefreshPending(false);
+    }
+  };
+  const showSkeletons = !picks && (!enabled || isLoading || books.length > 0);
+  const unavailable = !picks && enabled && !isLoading && !books.length;
 
   return (
     <div className="mx-auto max-w-5xl space-y-3">
-      <h2 className="text-center text-lg font-semibold tracking-tight">Featured audiobooks</h2>
-      <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-sm">
+      <div className="relative flex items-center justify-center">
+        <h2 className="text-center text-lg font-semibold tracking-tight">Featured audiobooks</h2>
+        <Button type="button" variant="ghost" size="icon" onClick={() => void refreshPicks()} disabled={(!enabled && !picks) || isLoading || refreshPending} aria-label="Refresh featured audiobooks" title="Refresh featured audiobooks" className="absolute right-0 size-8 rounded-full text-muted-foreground hover:text-foreground">
+          <RefreshCw className="size-4" />
+        </Button>
+      </div>
+      {unavailable ? <p role="status" className="mx-auto max-w-xl rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Featured audiobooks are temporarily unavailable. Use refresh to try again.</p> : <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-slate-950 text-white shadow-sm">
         <img src="/library-background.webp" alt="" aria-hidden="true" loading="lazy" className="absolute inset-0 size-full object-cover opacity-40" />
         <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-br from-slate-950/85 via-slate-950/75 to-slate-950/85" />
         <div className="relative grid grid-cols-1 divide-y divide-white/20 lg:grid-cols-[2fr_4fr] lg:divide-x lg:divide-y-0">
           <section aria-labelledby="weekly-featured-audiobooks" className="min-w-0 space-y-1.5 px-3 py-3 sm:px-4">
             <h3 id="weekly-featured-audiobooks" className="text-center text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">This week’s picks</h3>
             <div className="grid grid-cols-2 divide-x divide-white/15">
-              {showSkeletons ? Array.from({ length: WEEKLY_PICK_COUNT }, (_, index) => <PickSkeleton key={`weekly-skeleton-${index}`} />) : picks.weekly.map(book => <PickCard key={book.id} book={book} />)}
+              {showSkeletons ? Array.from({ length: WEEKLY_PICK_COUNT }, (_, index) => <PickSkeleton key={`weekly-skeleton-${index}`} />) : picks?.weekly.map(book => <PickCard key={book.id} book={book} />)}
             </div>
           </section>
           <section aria-labelledby="daily-featured-audiobooks" className="min-w-0 space-y-1.5 px-3 py-3 sm:px-4">
             <h3 id="daily-featured-audiobooks" className="text-center text-[0.65rem] font-bold uppercase tracking-[0.16em] text-emerald-200">Today’s picks</h3>
             <div className="grid grid-cols-2 xl:grid-cols-4">
-              {showSkeletons ? Array.from({ length: DAILY_PICK_COUNT }, (_, index) => <div key={`daily-skeleton-${index}`} className={index === 0 ? "" : index % 2 === 1 ? "border-l border-white/15" : "xl:border-l xl:border-white/15"}><PickSkeleton /></div>) : picks.daily.map((book, index) => <div key={book.id} className={index === 0 ? "" : index % 2 === 1 ? "border-l border-white/15" : "xl:border-l xl:border-white/15"}><PickCard book={book} /></div>)}
+              {showSkeletons ? Array.from({ length: DAILY_PICK_COUNT }, (_, index) => <div key={`daily-skeleton-${index}`} className={index === 0 ? "" : index % 2 === 1 ? "border-l border-white/15" : "xl:border-l xl:border-white/15"}><PickSkeleton /></div>) : picks?.daily.map((book, index) => <div key={book.id} className={index === 0 ? "" : index % 2 === 1 ? "border-l border-white/15" : "xl:border-l xl:border-white/15"}><PickCard book={book} /></div>)}
             </div>
           </section>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
