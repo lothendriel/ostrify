@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { Activity, BookOpen, Clock3, Headphones, Heart, Library, Mic2, Music2, Radio, RotateCcw, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePlayer } from "@/hooks/usePlayer";
@@ -22,11 +23,18 @@ function formatListeningTime(seconds: number): string {
   return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
 }
 
-function StatCard({ icon: Icon, label, value, detail }: { icon: typeof Music2; label: string; value: string | number; detail: string }) {
-  return <article className="rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+function StatCard({ icon: Icon, label, value, detail, showFullDetails = false }: { icon: typeof Music2; label: string; value: string | number; detail: string; showFullDetails?: boolean }) {
+  return <article className="min-w-0 rounded-xl border border-border/60 bg-card p-4 sm:p-5">
     <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground"><span>{label}</span><Icon className="size-4 shrink-0 text-primary" aria-hidden="true" /></div>
-    <p className="mt-3 text-2xl font-bold tracking-tight">{value}</p>
-    <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    <p className="mt-3 line-clamp-2 [overflow-wrap:anywhere] text-2xl font-bold tracking-tight">{value}</p>
+    <p className={`mt-1 [overflow-wrap:anywhere] text-xs text-muted-foreground ${showFullDetails ? "line-clamp-2" : ""}`}>{detail}</p>
+    {showFullDetails && <Dialog>
+      <DialogTrigger asChild><Button type="button" variant="link" size="sm" className="mt-2 h-auto p-0 text-xs">View details<span className="sr-only"> for {label.toLowerCase()}</span></Button></DialogTrigger>
+      <DialogContent className="max-h-[80dvh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{label}</DialogTitle><DialogDescription>Full track details</DialogDescription></DialogHeader>
+        <div className="min-w-0 space-y-2"><p className="break-words font-semibold [overflow-wrap:anywhere]">{value}</p><p className="break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">{detail}</p></div>
+      </DialogContent>
+    </Dialog>}
   </article>;
 }
 
@@ -118,7 +126,7 @@ export default function AnalyticsPage() {
         <StatCard icon={Clock3} label="Listening time" value={formatListeningTime(totals.seconds)} detail="Across this browser · last 180 days" />
         <StatCard icon={Headphones} label="Play sessions" value={totals.plays} detail="Tracks started on this device" />
         <StatCard icon={Music2} label="Unique tracks" value={new Set(records.map(record => record.trackId)).size} detail="Audio items played" />
-        <StatCard icon={player.isPlaying ? Headphones : Clock3} label={player.isPlaying ? "Now playing" : "Recently played"} value={player.current?.title ?? player.history[0]?.title ?? "Nothing yet"} detail={player.current?.artist ?? player.history[0]?.artist ?? "Start listening to build your stats"} />
+        <StatCard icon={player.isPlaying ? Headphones : Clock3} label={player.isPlaying ? "Now playing" : "Recently played"} value={player.current?.title ?? player.history[0]?.title ?? "Nothing yet"} detail={player.current?.artist ?? player.history[0]?.artist ?? "Start listening to build your stats"} showFullDetails={!!(player.current ?? player.history[0])} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
