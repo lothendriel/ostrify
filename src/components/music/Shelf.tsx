@@ -17,9 +17,10 @@ interface ShelfProps {
   carouselRows?: 1 | 2;
   carouselClassName?: string;
   onRefresh?: () => void;
+  refreshDisabled?: boolean;
 }
 
-export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref, emptyMessage, carouselRows = 1, carouselClassName, onRefresh }: ShelfProps) {
+export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compactCards = false, seeAllHref, emptyMessage, carouselRows = 1, carouselClassName, onRefresh, refreshDisabled = false }: ShelfProps) {
   if (!isLoading && tracks.length === 0 && !emptyMessage) return null;
 
   return (
@@ -30,7 +31,7 @@ export function Shelf({ title, subtitle, tracks, isLoading, dense = false, compa
           {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {onRefresh && <button type="button" onClick={onRefresh} aria-label={`Refresh ${title} tracks`} title={`Show another ${title} selection`} className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary"><RefreshCw className="size-4" /></button>}
+          {onRefresh && <button type="button" onClick={onRefresh} disabled={refreshDisabled} aria-label={`Refresh ${title} tracks`} title={`Show another ${title} selection`} className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50"><RefreshCw className="size-4" /></button>}
           {seeAllHref && (
             <Link to={seeAllHref} className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
               See all <ChevronRight className="size-4" />
