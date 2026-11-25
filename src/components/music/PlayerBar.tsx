@@ -54,7 +54,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
   const VolumeIcon = player.muted || player.volume === 0 ? VolumeX : player.volume < 0.5 ? Volume1 : Volume2;
 
   return (
-    <footer className="ostrify-player flex h-28 shrink-0 flex-col justify-center gap-1 border-t border-brand-violet/20 px-3 py-2 sm:h-20 sm:flex-row sm:items-center sm:gap-3 sm:px-4 sm:py-0">
+    <footer className="ostrify-player relative flex h-28 shrink-0 flex-col justify-center gap-1 border-t px-3 py-2 sm:h-24 sm:flex-row sm:items-center sm:gap-3 sm:px-5 sm:py-0">
       {/* Track identity and compact mobile actions */}
       <div className="flex w-full min-w-0 items-center gap-2 sm:w-[30%] sm:max-w-xs sm:gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
@@ -62,6 +62,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             <>
               <TrackArtwork track={current} className="size-10 shrink-0 sm:size-14" />
               <div className="min-w-0 flex-1 overflow-hidden">
+                <span className="mb-1 hidden text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet sm:block">{player.isPlaying ? "Now playing" : "Ready to play"}</span>
                 <Link to={audioDetailPath(current)} className="block min-w-0 truncate text-ellipsis text-xs font-medium hover:underline sm:text-sm" aria-label={`View details for ${current.title}`} title={current.title}>{current.title}</Link>
                 <div className="truncate text-[11px] text-muted-foreground sm:text-xs">
                   {player.playbackError ? <span role="status" className="text-destructive" title={player.playbackError}>{player.playbackError}</span> : current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}

@@ -50,7 +50,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const togglePanel = (panel: 'friends' | 'queue' | 'notifications') => setActivePanel(current => current === panel ? null : panel);
 
   return (
-    <div className="fixed inset-x-0 top-0 h-svh flex flex-col bg-background text-foreground overflow-hidden">
+    <div className="ostrify-shell fixed inset-x-0 top-0 flex h-svh flex-col overflow-hidden text-foreground">
       <div className="flex-1 flex min-h-0 gap-0 md:gap-2 md:p-2">
         {/* Desktop sidebar */}
         <aside className="hidden md:flex shrink-0 h-full min-h-0">
@@ -59,10 +59,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Main content and docked utility panels */}
         <div className="flex min-h-0 min-w-0 flex-1 gap-0 overflow-hidden md:gap-2">
-        <div className="relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-card md:rounded-lg">
-          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 z-0 h-[500px] bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "linear-gradient(to bottom, color-mix(in srgb, var(--card) 30%, transparent) 0%, var(--card) 100%), url('/autumn-forest.webp')" }} />
+        <div className="ostrify-main relative isolate flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:rounded-2xl">
+          <div aria-hidden="true" className="ostrify-atmosphere pointer-events-none absolute inset-x-0 top-0 z-0 h-[500px]" />
           {/* Top bar */}
-          <header className="ostrify-header relative z-10 flex h-auto shrink-0 flex-col gap-1 border-b border-brand-violet/15 px-3 py-2 sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-4 sm:py-0">
+          <header className="ostrify-header relative z-10 flex h-auto shrink-0 flex-col gap-1 border-b px-3 py-2 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:px-5 sm:py-0">
             <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1 sm:gap-2">
               {/* Mobile menu */}
               <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>

@@ -351,7 +351,7 @@ export function GlobalSearch() {
           aria-activedescendant={showDropdown ? activeOptionId : undefined}
           role="combobox"
           maxLength={120}
-          className="h-10 rounded-full bg-secondary pl-9 pr-9 text-sm"
+          className="h-10 rounded-xl border-brand-violet/25 bg-background/70 pl-9 pr-9 text-sm shadow-sm focus-visible:border-brand-violet"
           ref={inputRef}
         />
         {query && <button type="button" onClick={() => { updateQuery(''); setDebouncedQuery(''); setOpen(false); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary" aria-label="Clear search"><X className="size-4" /></button>}

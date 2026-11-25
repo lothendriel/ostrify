@@ -110,8 +110,12 @@
 
   --muted: hsl(255 21% 93%);
   --muted-foreground: hsl(255 10% 36%);
-  --brand-violet: hsl(262 56% 38%);
-  --brand-surface: hsl(258 33% 94%);
+  --brand-violet: hsl(264 62% 36%);
+  --brand-surface: hsl(260 42% 92%);
+  --shell-glow: hsl(264 66% 70% / 0.28);
+  --shell-glow-green: hsl(147 66% 57% / 0.13);
+  --shell-panel: hsl(259 48% 96%);
+  --shell-edge: hsl(263 35% 76% / 0.55);
 
   --accent: hsl(141 73% 32%);
   --accent-foreground: hsl(0 0% 100%);
@@ -158,8 +162,12 @@
 
   --muted: hsl(260 14% 17%);
   --muted-foreground: hsl(255 9% 70%);
-  --brand-violet: hsl(265 65% 72%);
-  --brand-surface: hsl(262 32% 16%);
+  --brand-violet: hsl(265 80% 79%);
+  --brand-surface: hsl(262 40% 18%);
+  --shell-glow: hsl(263 74% 52% / 0.32);
+  --shell-glow-green: hsl(148 77% 42% / 0.11);
+  --shell-panel: hsl(260 31% 12%);
+  --shell-edge: hsl(265 52% 70% / 0.24);
 
   --accent: hsl(141 76% 48%);
   --accent-foreground: hsl(0 0% 7%);
@@ -188,12 +196,38 @@
 }
 
 @layer components {
+  .ostrify-shell {
+    background: radial-gradient(ellipse at 5% 0%, var(--shell-glow), transparent 42%), var(--background);
+  }
+
+  .ostrify-main {
+    border: 1px solid var(--shell-edge);
+    background: var(--card);
+  }
+
+  .ostrify-atmosphere {
+    background: radial-gradient(ellipse at 85% 0%, var(--shell-glow), transparent 55%),
+      radial-gradient(ellipse at 10% 12%, var(--shell-glow-green), transparent 48%);
+  }
+
   .ostrify-header {
-    background: linear-gradient(110deg, var(--brand-surface), var(--card) 58%);
+    background: linear-gradient(105deg, var(--shell-panel), var(--card) 65%);
+    border-color: var(--shell-edge);
+  }
+
+  .ostrify-sidebar-panel {
+    background: linear-gradient(160deg, var(--shell-panel), var(--card) 70%);
+    border: 1px solid var(--shell-edge);
   }
 
   .ostrify-player {
-    background: linear-gradient(100deg, var(--brand-surface), var(--card) 45%, var(--card));
+    background: radial-gradient(ellipse at 12% 0%, var(--shell-glow), transparent 45%),
+      linear-gradient(100deg, var(--shell-panel), var(--card) 60%);
+    border-color: var(--shell-edge);
+  }
+
+  .ostrify-player [data-slot="slider-range"] {
+    background: linear-gradient(90deg, var(--brand-violet), var(--primary));
   }
 }
 

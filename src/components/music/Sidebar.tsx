@@ -54,22 +54,22 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const regular = (playlists ?? []).filter((p) => !p.isLiked && !p.isTunestrFavorites);
 
   return (
-    <nav className="flex flex-col h-full min-h-0 gap-2 w-64 overflow-hidden" aria-label="Primary">
+    <nav className="flex h-full min-h-0 w-64 flex-col gap-2 overflow-hidden" aria-label="Primary">
       <NavLink
         to="/"
         end
         onClick={onNavigate}
         aria-label="Ostrify home"
-        className="mx-2 flex items-center gap-2 rounded-md px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mx-2 flex items-center gap-3 rounded-xl px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <img src="/ostrify-logo-512.webp?v=opt-1" alt="" className="size-10 rounded-md object-contain" />
-        <span className="font-bold text-xl tracking-tight">Ostrify<span aria-hidden="true" className="ml-1 text-brand-violet">.</span></span>
+        <img src="/ostrify-logo-512.webp?v=opt-1" alt="" className="size-11 rounded-full object-contain" />
+        <span className="min-w-0"><span className="block text-xl font-black tracking-tight">Ostrify<span aria-hidden="true" className="text-brand-violet">.</span></span><span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Open protocol audio</span></span>
       </NavLink>
 
-      <Collapsible open={menuOpen} onOpenChange={setMenuOpen} className="mx-2 shrink-0 rounded-lg border border-brand-violet/15 bg-card">
+      <Collapsible open={menuOpen} onOpenChange={setMenuOpen} className="ostrify-sidebar-panel mx-2 shrink-0 overflow-hidden rounded-2xl">
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" className="group flex h-11 w-full justify-between px-4 text-sm font-semibold text-foreground hover:bg-accent/50" aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}>
-            <span>Menu</span>
+            <span className="flex items-center gap-2"><span aria-hidden="true" className="size-2 rounded-full bg-primary" /> Menu</span>
             <ChevronDown className={cn("size-4 text-muted-foreground transition-transform duration-200", menuOpen && "rotate-180")} />
           </Button>
         </CollapsibleTrigger>
@@ -85,7 +85,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   onNavigate?.();
                 }}
                 className={({ isActive }) => cn(
-                  "flex w-full items-center gap-4 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex w-full items-center gap-4 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isActive ? "bg-brand-surface text-foreground shadow-[inset_3px_0_0_var(--primary)]" : "text-muted-foreground hover:bg-brand-surface hover:text-foreground",
                 )}
               >
@@ -97,10 +97,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </CollapsibleContent>
       </Collapsible>
 
-      <div className="mx-2 flex min-h-0 flex-1 flex-col rounded-lg border border-brand-violet/15 bg-card">
+      <div className="ostrify-sidebar-panel mx-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2 text-muted-foreground font-semibold text-sm">
-            <Library className="size-6" />
+            <Library className="size-5 text-brand-violet" />
             Your Library
           </div>
           {user && <Button variant="ghost" size="icon" className="size-8 rounded-full text-muted-foreground hover:text-foreground" onClick={() => setCreateOpen(true)} aria-label="Create playlist"><Plus className="size-5" /></Button>}
