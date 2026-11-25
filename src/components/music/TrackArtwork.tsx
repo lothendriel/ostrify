@@ -17,9 +17,10 @@ interface TrackArtworkProps {
   track: Pick<Track, "image" | "id" | "title" | "kind">;
   className?: string;
   rounded?: string;
+  priority?: boolean;
 }
 
-export function TrackArtwork({ track, className, rounded = "rounded-md" }: TrackArtworkProps) {
+export function TrackArtwork({ track, className, rounded = "rounded-md", priority = false }: TrackArtworkProps) {
   const [failedImage, setFailedImage] = useState<string>();
   const image = sanitizeUrl(track.image);
   const showImage = image && image !== failedImage;
@@ -38,7 +39,8 @@ export function TrackArtwork({ track, className, rounded = "rounded-md" }: Track
         <img
           src={image}
           alt=""
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : undefined}
           decoding="async"
           onError={() => setFailedImage(image)}
           className="w-full h-full object-cover"

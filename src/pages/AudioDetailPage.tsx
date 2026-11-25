@@ -7,6 +7,7 @@ import { BookOpen, Music2, Pause, Play, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackRow } from "@/components/music/TrackRow";
+import { TrackArtwork } from "@/components/music/TrackArtwork";
 import { ArtistLink } from "@/components/music/ArtistLink";
 import { LikeButton } from "@/components/music/LikeButton";
 import { AddToPlaylistMenu } from "@/components/music/AddToPlaylistMenu";
@@ -245,7 +246,6 @@ export default function AudioDetailPage() {
     : wavlakeDetailQuery.data ?? trackWithPodcastShow;
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
-  const artwork = sanitizeUrl(track.image);
   const source = sourceLabel(track);
   const externalSource = sourceHref(track, book?.catalogId);
   const bookLink = librivoxChapter?.isBookLink || gutenbergChapter?.isBookLink;
@@ -259,7 +259,7 @@ export default function AudioDetailPage() {
       : <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />;
   const sourceIcon = track.kind === "podcast" ? Radio : track.kind === "audiobook" ? BookOpen : Music2;
   const SourceIcon = sourceIcon;
-  const trackArtwork = <div className="relative aspect-square w-full max-w-48 shrink-0 overflow-hidden rounded-xl bg-secondary shadow-lg sm:max-w-56">{artwork ? <img src={artwork} alt="" fetchPriority="high" decoding="async" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><SourceIcon className="size-16 text-white/50" aria-hidden="true" /></div>}</div>;
+  const trackArtwork = <TrackArtwork track={track} className="aspect-square w-full max-w-48 shadow-lg sm:max-w-56" rounded="rounded-xl" priority />;
   const hasBookDetail = !!(librivoxChapter?.fileName || gutenbergChapter?.fileName);
   const pageDescription = track.kind === "audiobook"
     ? track.album ? `From ${track.album}.` : "An audiobook recording in your Ostrify library."
@@ -296,7 +296,7 @@ export default function AudioDetailPage() {
     {track.topics.length > 0 && <section aria-label="Audio tags" className="flex flex-wrap gap-2">{track.topics.slice(0, 12).map(topic => <span key={topic} className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{topic.startsWith("#") ? topic : `#${topic}`}</span>)}</section>}
     {track.kind === "podcast" && <section className="rounded-xl border border-border/60 p-4"><h2 className="font-semibold">Podcast episode</h2><p className="mt-1 text-sm text-muted-foreground">Explore the show for more episodes.</p>{fountainGuid && <Link to={`/podcasts/fountain/${encodeURIComponent(fountainGuid)}`} className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">View podcast show</Link>}{podcastIndexShowId && <Link to={`/podcasts?source=directory&show=${encodeURIComponent(podcastIndexShowId)}`} className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">View podcast show</Link>}{!fountainGuid && !podcastIndexShowId && <Link to="/podcasts" className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">Browse podcasts</Link>}</section>}
     {hasBookDetail && book && <section className="space-y-3"><div><h2 className="text-2xl font-bold">{book.title}</h2><p className="text-sm text-muted-foreground">{book.chapters.length} recordings · {book.author}</p></div><div className="rounded-xl border border-border/60">{book.chapters.map((item, index) => <TrackRow key={item.id} track={item} index={index} />)}</div></section>}
-    {track.kind === "audiobook" && !hasBookDetail && <section className="flex min-w-0 items-center gap-4 rounded-xl border border-border/60 p-4"><div className="size-16 shrink-0 overflow-hidden rounded-md bg-secondary">{artwork ? <img src={artwork} alt="" loading="lazy" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><BookOpen className="size-7 text-muted-foreground" /></div>}</div><div className="min-w-0"><h2 className="font-semibold">{bookLink ? "Audiobook" : "Audiobook recording"}</h2><p className="mt-1 text-sm text-muted-foreground">{track.album || (bookLink ? "Audiobook from your library." : "This chapter is available from your audiobook library.")}</p></div></section>}
+    {track.kind === "audiobook" && !hasBookDetail && <section className="flex min-w-0 items-center gap-4 rounded-xl border border-border/60 p-4"><TrackArtwork track={track} className="size-16" /><div className="min-w-0"><h2 className="font-semibold">{bookLink ? "Audiobook" : "Audiobook recording"}</h2><p className="mt-1 text-sm text-muted-foreground">{track.album || (bookLink ? "Audiobook from your library." : "This chapter is available from your audiobook library.")}</p></div></section>}
     {track.event && <p className="text-xs text-muted-foreground">Published as a public Nostr event. Visibility controls in Ostrify do not make relay copies private.</p>}
   </main>;
 }
