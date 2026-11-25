@@ -68,6 +68,7 @@ export function AudiobookCover({ book, className }: AudiobookCoverProps) {
       )}
       {!cover && (
         <div aria-hidden="true" className={cn("absolute inset-0 flex flex-col items-center justify-center gap-1 overflow-hidden bg-gradient-to-br px-2 py-2 text-center text-white", palette)}>
+          <span className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-35" style={{ backgroundImage: "url('/browse-texture.webp')" }} />
           <span className="pointer-events-none absolute -right-1/4 -top-1/4 size-3/4 rounded-full border border-white/15" />
           <span className="pointer-events-none absolute -bottom-1/3 -left-1/4 size-3/4 rounded-full border border-white/10" />
           <BookOpen className="relative size-4 shrink-0 text-amber-100/90 sm:size-5" />

@@ -229,6 +229,30 @@
   .ostrify-player [data-slot="slider-range"] {
     background: linear-gradient(90deg, var(--brand-violet), var(--primary));
   }
+
+  .ostrify-audio-card {
+    border: 1px solid var(--shell-edge);
+    background: linear-gradient(155deg, var(--shell-panel), var(--card) 72%);
+    transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .ostrify-audio-card:hover {
+    border-color: var(--brand-violet);
+    box-shadow: 0 8px 24px -12px var(--shell-glow);
+  }
+
+  .ostrify-audio-card[data-playing="true"] {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+  }
+
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .ostrify-audio-card:hover { transform: translateY(-2px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ostrify-audio-card { transition: none; }
+  }
 }
 
 @layer base {

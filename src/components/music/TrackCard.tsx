@@ -1,4 +1,4 @@
-import { Play, Pause } from "lucide-react";
+import { AudioLines, Play, Pause } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { fountainShowGuid, type Track } from "@/lib/music";
@@ -22,6 +22,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
   const fountainGuid = track.source === "fountain" ? fountainShowGuid(track.showId) : undefined;
+  const formatLabel = track.kind === "podcast" ? "Podcast" : track.kind === "audiobook" ? "Audiobook" : "Music";
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -33,16 +34,18 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
   };
 
   return (
-    <div className={cn("group relative min-w-0 max-w-full overflow-hidden rounded-lg bg-card transition-colors hover:bg-accent/10", compact ? "p-2" : "p-3")}>
-      <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} title={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="group/play block w-full cursor-pointer text-left">
+    <div data-playing={isPlaying} className={cn("ostrify-audio-card group relative min-w-0 max-w-full rounded-xl", compact ? "p-2" : "p-3")}>
+      <button type="button" onClick={handlePlay} aria-label={`${isPlaying ? "Pause" : "Play"} ${track.title}`} title={`${isPlaying ? "Pause" : "Play"} ${track.title}`} className="group/play block w-full cursor-pointer rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
         <div className={cn("relative", compact ? "mb-2" : "mb-3")}>
-          <TrackArtwork track={track} className="w-full aspect-square" rounded={compact ? "rounded-md" : "rounded-md shadow-lg"} />
+          <TrackArtwork track={track} className="w-full aspect-square" rounded="rounded-lg" />
+          <span className="absolute left-2 top-2 rounded-full bg-black/75 px-2 py-1 text-[10px] font-semibold leading-none text-white">{formatLabel}</span>
+          {isPlaying && <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/85 px-2 py-1 text-[10px] font-semibold leading-none text-white"><AudioLines aria-hidden="true" className="size-3 text-emerald-300" /> Playing</span>}
           <span
             aria-hidden="true"
             className={cn(
               "absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl",
               compact ? "size-8" : "size-12",
-              "transition-all duration-200",
+              "motion-safe:transition-all motion-safe:duration-200",
               isPlaying
                 ? "translate-y-0 opacity-100"
                 : "translate-y-2 opacity-0 group-hover/play:translate-y-0 group-hover/play:opacity-100 group-focus-visible/play:translate-y-0 group-focus-visible/play:opacity-100",
