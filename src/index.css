@@ -239,7 +239,7 @@
   .ostrify-card-label {
     position: absolute;
     top: 0.5rem;
-    left: 0.5rem;
+    right: 0.5rem;
     border-radius: 9999px;
     background: rgb(0 0 0 / 0.75);
     padding: 0.25rem 0.5rem;
