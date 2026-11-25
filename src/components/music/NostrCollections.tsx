@@ -4,7 +4,7 @@ import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useSeoMeta } from '@unhead/react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { HorizontalCarousel } from '@/components/music/HorizontalCarousel';
 import { nip19 } from 'nostr-tools';
 import { Button } from '@/components/ui/button';
@@ -25,10 +25,10 @@ function PublisherCard({ pubkey, podcast, compact = false }: { pubkey: string; p
   const metadata = data?.metadata;
   const name = metadata?.display_name || metadata?.name || genUserName(pubkey);
   const image = sanitizeUrl(metadata?.picture);
-  return <Link to={`/artist/${nip19.npubEncode(pubkey)}`} className={`group rounded-lg bg-secondary/50 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}>
-    <div className={`aspect-square ${compact ? 'w-11/12 mx-auto' : 'w-full'} rounded-full overflow-hidden bg-muted flex items-center justify-center ${compact ? 'mb-2' : 'mb-3'}`}>
-      {image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Music2 className={`${compact ? 'size-8' : 'size-10'} text-muted-foreground`} />}
-    </div>
+  return <Link to={`/artist/${nip19.npubEncode(pubkey)}`} className={`ostrify-audio-card group relative block min-w-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}>
+    <div className={`relative ${compact ? 'mb-2' : 'mb-3'}`}><div className={`aspect-square ${compact ? 'w-11/12 mx-auto' : 'w-full'} rounded-full overflow-hidden bg-muted flex items-center justify-center`}>
+      {image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <TrackArtwork track={{ id: pubkey, title: name, kind: 'music' }} className="size-full" rounded="rounded-full" />}
+    </div><span className="ostrify-card-label">{podcast ? 'Publisher' : 'Artist'}</span></div>
     <p className={`font-semibold truncate ${compact ? 'text-sm' : ''}`}>{name}</p><p className={`text-sm text-muted-foreground ${compact ? 'text-xs' : ''}`}>{podcast ? 'Show publisher' : 'Artist · Publisher'}</p>
   </Link>;
 }
@@ -94,14 +94,12 @@ function collectionItems(tracks: Track[]) {
 }
 
 function AlbumCard({ track, count, compact = false }: { track: Track; count: number; compact?: boolean }) {
-  return <Link to={`/artist/${nip19.npubEncode(track.pubkey)}/album?title=${encodeURIComponent(track.album ?? '')}`} className={`rounded-lg bg-secondary/50 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}><TrackArtwork track={track} className={`${compact ? 'w-11/12 mx-auto' : 'w-full'} aspect-square ${compact ? 'mb-2' : 'mb-3'}`} /><p className={`font-semibold truncate ${compact ? 'text-sm' : ''}`}>{track.album}</p><p className={`text-sm text-muted-foreground truncate ${compact ? 'text-xs' : ''}`}>{track.artist || 'Publisher'} · {count} {count === 1 ? 'track' : 'tracks'} here</p></Link>;
+  return <Link to={`/artist/${nip19.npubEncode(track.pubkey)}/album?title=${encodeURIComponent(track.album ?? '')}`} className={`ostrify-audio-card block min-w-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}><div className={`relative ${compact ? 'mb-2' : 'mb-3'}`}><TrackArtwork track={track} className={`${compact ? 'w-11/12 mx-auto' : 'w-full'} aspect-square`} rounded="rounded-lg" /><span className="ostrify-card-label">Album</span></div><p className={`font-semibold truncate ${compact ? 'text-sm' : ''}`}>{track.album}</p><p className={`text-sm text-muted-foreground truncate ${compact ? 'text-xs' : ''}`}>{track.artist || 'Publisher'} · {count} {count === 1 ? 'track' : 'tracks'} here</p></Link>;
 }
 
 function WavlakeReleaseCard({ release, compact = false }: { release: WavlakeRelease; compact?: boolean }) {
-  return <Link to={`/wavlake/${release.type}/${release.id}`} className={`group rounded-lg bg-secondary/50 hover:bg-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}>
-    <div className={`aspect-square ${compact ? 'w-11/12 mx-auto' : 'w-full'} overflow-hidden bg-muted flex items-center justify-center ${compact ? 'mb-2' : 'mb-3'} ${release.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}>
-      {sanitizeUrl(release.image) ? <img src={sanitizeUrl(release.image)} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Music2 className={`${compact ? 'size-8' : 'size-10'} text-muted-foreground`} />}
-    </div>
+  return <Link to={`/wavlake/${release.type}/${release.id}`} className={`ostrify-audio-card group block min-w-0 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${compact ? 'p-2' : 'p-3'}`}>
+    <div className={`relative ${compact ? 'mb-2' : 'mb-3'}`}><TrackArtwork track={{ id: release.id, title: release.title, image: release.image, kind: 'music' }} className={`aspect-square ${compact ? 'w-11/12 mx-auto' : 'w-full'}`} rounded={release.type === 'artist' ? 'rounded-full' : 'rounded-lg'} /><span className="ostrify-card-label">{release.type === 'artist' ? 'Artist' : 'Album'}</span></div>
     <p className={`font-semibold truncate ${compact ? 'text-sm' : ''}`}>{release.title}</p>
     <p className={`text-sm text-muted-foreground truncate ${compact ? 'text-xs' : ''}`}>{release.type === 'artist' ? 'Wavlake artist' : release.artist || 'Wavlake album'}</p>
   </Link>;

@@ -27,9 +27,10 @@ function ArtistTile({ pubkey }: { pubkey: string }) {
   return (
     <Link
       to={`/artist/${npub}`}
-      className="group flex flex-col items-center text-center p-4 rounded-lg bg-card hover:bg-accent/10 transition-colors"
+      className="ostrify-audio-card group relative flex min-w-0 flex-col items-center rounded-xl p-4 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
-      <Avatar className="size-28 mb-3 shadow-lg">
+      <span className="ostrify-card-label">Artist</span>
+      <Avatar className="size-28 max-w-full mb-3 shadow-lg">
         <AvatarImage src={picture} alt={name} className="object-cover" />
         <AvatarFallback className="text-2xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
       </Avatar>
@@ -42,8 +43,8 @@ function ArtistTile({ pubkey }: { pubkey: string }) {
 function WavlakeArtistTile({ artistId }: { artistId: string }) {
   const { data, isLoading, isError } = useWavlakeRelease('artist', artistId);
   const name = data?.title ?? (isLoading ? 'Loading artist…' : 'Wavlake artist unavailable');
-  return <Link to={`/wavlake/artist/${artistId}`} className="group flex flex-col items-center text-center p-4 rounded-lg bg-card hover:bg-accent/10 transition-colors">
-    <Avatar className="size-28 mb-3 shadow-lg"><AvatarImage src={sanitizeUrl(data?.image)} alt="" /><AvatarFallback className="text-2xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+  return <Link to={`/wavlake/artist/${artistId}`} className="ostrify-audio-card group relative flex min-w-0 flex-col items-center rounded-xl p-4 text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+    <span className="ostrify-card-label">Artist</span><Avatar className="size-28 max-w-full mb-3 shadow-lg"><AvatarImage src={sanitizeUrl(data?.image)} alt="" /><AvatarFallback className="text-2xl">{name.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
     <div className="font-semibold truncate w-full">{name}</div><div className="text-xs text-muted-foreground mt-0.5">{isError ? 'Unavailable · Wavlake' : 'Wavlake artist'}</div>
   </Link>;
 }

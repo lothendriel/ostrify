@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackList } from '@/components/music/TrackList';
+import { TrackArtwork } from '@/components/music/TrackArtwork';
 import { HorizontalCarousel } from '@/components/music/HorizontalCarousel';
 import { FollowButton } from '@/components/music/FollowButton';
 import { SharePageButton } from '@/components/music/SharePageButton';
@@ -19,10 +20,8 @@ import { sanitizeUrl } from '@/lib/sanitize';
 function CatalogLinks({ items }: { items: CatalogItem[] }) {
   if (!items.length) return null;
   return <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{items.map(item => (
-    <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
-      <div className="aspect-square rounded-md bg-muted overflow-hidden mb-3 flex items-center justify-center">
-        {sanitizeUrl(item.image) ? <img src={sanitizeUrl(item.image)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
-      </div>
+    <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="ostrify-audio-card block min-w-0 rounded-xl p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+      <div className="relative mb-3"><TrackArtwork track={{ id: item.id, title: item.title, image: item.image, kind: 'music' }} className="aspect-square w-full" rounded={item.type === 'artist' ? 'rounded-full' : 'rounded-lg'} /><span className="ostrify-card-label">{item.type === 'artist' ? 'Artist' : 'Album'}</span></div>
       <div className="font-semibold truncate">{item.title}</div>
       <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : item.type === 'artist' ? 'Artist' : 'Album'}</div>
     </Link>
@@ -32,10 +31,8 @@ function CatalogLinks({ items }: { items: CatalogItem[] }) {
 function ReleaseLinks({ items }: { items: WavlakeRelease[] }) {
   if (!items.length) return null;
   return <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">{items.map(item => (
-    <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
-      <div className="aspect-square rounded-md bg-muted overflow-hidden mb-3 flex items-center justify-center">
-        {sanitizeUrl(item.image) ? <img src={sanitizeUrl(item.image)} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" /> : <Music className="size-10 text-muted-foreground" />}
-      </div>
+    <Link key={`${item.type}:${item.id}`} to={`/wavlake/${item.type}/${item.id}`} className="ostrify-audio-card block min-w-0 rounded-xl p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+      <div className="relative mb-3"><TrackArtwork track={{ id: item.id, title: item.title, image: item.image, kind: 'music' }} className="aspect-square w-full" rounded={item.type === 'artist' ? 'rounded-full' : 'rounded-lg'} /><span className="ostrify-card-label">{item.type === 'artist' ? 'Artist' : 'Album'}</span></div>
       <div className="font-semibold truncate">{item.title}</div>
       <div className="text-sm text-muted-foreground truncate">{item.type === 'album' && item.artist ? item.artist : 'Artist'}</div>
     </Link>
@@ -80,10 +77,8 @@ function CatalogTracks({ artistId, onTracksChange }: { artistId?: string; onTrac
 }
 
 function RankedReleaseCard({ item }: { item: CatalogItem }) {
-  return <Link to={`/wavlake/${item.type}/${item.id}`} className="group min-w-0 rounded-lg bg-secondary/50 p-3 transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
-    <div className="mb-3 flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-muted">
-      {sanitizeUrl(item.image) ? <img src={sanitizeUrl(item.image)} alt="" loading="lazy" decoding="async" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <Music className="size-10 text-muted-foreground" />}
-    </div>
+  return <Link to={`/wavlake/${item.type}/${item.id}`} className="ostrify-audio-card group block min-w-0 rounded-xl p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+    <div className="relative mb-3"><TrackArtwork track={{ id: item.id, title: item.title, image: item.image, kind: 'music' }} className="aspect-square w-full" rounded={item.type === 'artist' ? 'rounded-full' : 'rounded-lg'} /><span className="ostrify-card-label">{item.type === 'artist' ? 'Artist' : 'Album'}</span></div>
     <div className="truncate font-semibold">{item.title}</div>
     <div className="truncate text-sm text-muted-foreground">{item.type === 'album' && item.artist ? item.artist : 'Artist'}</div>
   </Link>;

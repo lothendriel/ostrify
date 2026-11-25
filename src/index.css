@@ -236,6 +236,19 @@
     transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
 
+  .ostrify-card-label {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    border-radius: 9999px;
+    background: rgb(0 0 0 / 0.75);
+    padding: 0.25rem 0.5rem;
+    color: white;
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
   .ostrify-audio-card:hover {
     border-color: var(--brand-violet);
     box-shadow: 0 8px 24px -12px var(--shell-glow);

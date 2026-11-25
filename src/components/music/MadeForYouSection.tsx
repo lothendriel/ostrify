@@ -223,9 +223,9 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
       ) : visibleCards.length ? (
         <>
           <HorizontalCarousel label="Made for you mixes" className="px-2" centerWhenFits>
-            {visibleCards.map(mix => <article key={mix.id} className="min-w-0 snap-start p-2">
+            {visibleCards.map(mix => <article key={mix.id} className="ostrify-audio-card min-w-0 snap-start rounded-xl p-2">
               <button type="button" onClick={() => player.playQueue(mix.tracks)} aria-label={`Play ${mix.title}, ${mix.tracks.length} tracks`} className="group block w-full rounded-lg text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-                <MixArtwork tracks={mix.tracks} title={mix.title} />
+                <span className="relative block"><MixArtwork tracks={mix.tracks} title={mix.title} /><span className="ostrify-card-label">Mix</span></span>
                 <span className="mt-3 flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold text-foreground">{mix.title}</span><span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Play className="size-4 fill-current" aria-hidden="true" /></span></span>
                 <span className="mt-1 line-clamp-2 block min-h-8 text-xs leading-4 text-muted-foreground">{mix.subtitle}</span>
               </button>

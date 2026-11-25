@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { useSeoMeta } from '@unhead/react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Music } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { TrackArtwork } from '@/components/music/TrackArtwork';
 import { HorizontalCarousel } from '@/components/music/HorizontalCarousel';
 import { nip19 } from 'nostr-tools';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -18,11 +19,9 @@ function PublicPlaylistCard({ playlist }: { playlist: PublicMusicPlaylist }) {
   const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(playlist.pubkey);
   const image = sanitizeUrl(playlist.image);
   const path = `/ostrify-playlist/${nip19.npubEncode(playlist.pubkey)}?d=${encodeURIComponent(playlist.id)}`;
-  return <Link to={path} className="group overflow-hidden rounded-xl border border-border/70 bg-secondary/30 transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
-    <div className="relative aspect-square bg-muted">
-      {image ? <img src={image} alt="" loading="lazy" decoding="async" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center bg-gradient-to-br from-emerald-900 to-teal-950"><Music className="size-12 text-white/70" /></div>}
-    </div>
-    <div className="p-3"><p className="truncate font-semibold" title={playlist.title}>{playlist.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{name}</p><p className="mt-1 text-xs text-muted-foreground">{playlist.trackIds.length} {playlist.trackIds.length === 1 ? 'track' : 'tracks'} · Ostrify</p></div>
+  return <Link to={path} className="ostrify-audio-card group block min-w-0 rounded-xl p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+    <div className="relative mb-3"><TrackArtwork track={{ id: `${playlist.pubkey}:${playlist.id}`, title: playlist.title, image, kind: 'music' }} className="aspect-square w-full" rounded="rounded-lg" /><span className="ostrify-card-label">Playlist</span></div>
+    <div><p className="truncate font-semibold" title={playlist.title}>{playlist.title}</p><p className="mt-1 truncate text-sm text-muted-foreground">{name}</p><p className="mt-1 text-xs text-muted-foreground">{playlist.trackIds.length} {playlist.trackIds.length === 1 ? 'track' : 'tracks'} · Ostrify</p></div>
   </Link>;
 }
 

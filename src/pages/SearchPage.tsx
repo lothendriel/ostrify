@@ -65,7 +65,7 @@ function ResultCard({ title, subtitle, image, href, icon: Icon }: {
   icon: typeof Music2;
 }) {
   const safeImage = sanitizeUrl(image);
-  return <Link to={href} className="flex min-w-0 items-center gap-3 rounded-xl bg-secondary/40 p-3 transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-primary">
+  return <Link to={href} className="ostrify-audio-card flex min-w-0 items-center gap-3 rounded-xl p-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
     <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary">{safeImage ? <img src={safeImage} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <Icon className="size-5 text-muted-foreground" />}</div>
     <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{title}</span><span className="block truncate text-sm text-muted-foreground">{subtitle}</span></span>
     <ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />

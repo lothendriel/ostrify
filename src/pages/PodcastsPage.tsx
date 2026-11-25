@@ -5,6 +5,7 @@ import { useSeoMeta } from "@unhead/react";
 import { Mic, Radio, Globe2, ChevronLeft, ChevronRight, Play, Search, Heart, ListPlus } from "lucide-react";
 import { usePodcastEpisodes, useNostrPodcastEpisodeFeed, useNostrPodcastShows, useFountainPodcastShows, usePodcastIndexSearch, usePodcastIndexEpisodes, usePodcastFavorites, usePodcastFavoriteActions, findPodcastShowFavorite, fountainShowFavorite, type PodcastShow, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { TrackCard } from "@/components/music/TrackCard";
+import { TrackArtwork } from "@/components/music/TrackArtwork";
 import { TrackList } from "@/components/music/TrackList";
 import { QueueActionsMenu } from "@/components/music/QueueActionsMenu";
 import { AddToPlaylistMenu } from "@/components/music/AddToPlaylistMenu";
@@ -442,10 +443,8 @@ function ShowCard({ show, tracks, onPlay, favorites, onToggleFavorite, userLogge
   const savedFavorite = existingFavorite ?? favorite;
   const isSaved = !!existingFavorite;
   return (
-    <article className="group rounded-xl bg-secondary/40 p-3 hover:bg-secondary transition-colors">
-      <div className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-gradient-to-br from-fuchsia-800 to-purple-950">
-        {cover ? <img src={cover} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><Mic className="size-12 text-white/70" /></div>}
-      </div>
+    <article className="ostrify-audio-card group min-w-0 rounded-xl p-3">
+      <div className="relative mb-3"><TrackArtwork track={{ id: show.id, title: name, image: cover, kind: 'podcast' }} className="aspect-square w-full" rounded="rounded-lg" /><span className="ostrify-card-label">Podcast show</span></div>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">{show.source === "fountain" && show.feedGuid ? <Link to={`/podcasts/fountain/${encodeURIComponent(show.feedGuid)}`} className="block truncate font-semibold hover:text-primary hover:underline focus-visible:underline" title={`Open ${name}`}>{name}</Link> : <p className="truncate font-semibold" title={name}>{name}</p>}<p className="mt-1 truncate text-sm text-muted-foreground">{show.source === "fountain" ? show.publisher ?? "Fountain show" : show.source === "podcast-index" ? show.publisher ?? "Podcast Index" : "Nostr show"} · {show.episodeCount !== undefined ? `${show.episodeCount} Nostr references` : show.source === "fountain" ? "RSS available" : `${tracks.length} episodes`}</p></div>
         {playTracks.length > 0 && onPlay && <button type="button" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground" aria-label={`Play ${name}`} onClick={() => onPlay(playTracks)}><Play className="size-4 fill-current" /></button>}

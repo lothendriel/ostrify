@@ -41,7 +41,7 @@ function TunestrStreamCard({ stream, onSelect }: { stream: TunestrStream; onSele
   const safeImage = sanitizeUrl(stream.image);
   const imageUrl = safeImage ? cloudflareThumbnail(safeImage) ?? safeImage : undefined;
   const thumbnail = imageUrl || cloudflareThumbnail(stream.thumbnailSourceUrl ?? stream.url);
-  return <article className="overflow-hidden rounded-xl border border-border/70 bg-secondary/30 transition hover:bg-secondary">
+  return <article className="ostrify-audio-card overflow-hidden rounded-xl">
     <button type="button" className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-primary" onClick={() => onSelect(stream)} aria-label={`${stream.isLive ? 'Watch live stream' : 'Watch recording'}: ${stream.title}`}>
       <div className="relative aspect-video bg-black/80">{thumbnail && !imageFailed ? <img src={thumbnail} alt="" loading="lazy" onError={() => setImageFailed(true)} className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center text-white/70"><Video className="size-10" /></div>}<span className="absolute left-3 top-3 rounded-full bg-black/70 px-2 py-1 text-xs font-bold text-white">{stream.isLive ? 'LIVE' : 'Recording'}{stream.format === 'n94' ? ' · N94' : ''}</span></div>
     </button>

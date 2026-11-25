@@ -5,16 +5,16 @@ import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { audiobookPath, useAudiobookLibrary, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
-import { sanitizeUrl } from '@/lib/sanitize';
+import { AudiobookCover } from '@/components/music/AudiobookCover';
+import { usePlayer } from '@/hooks/usePlayer';
 
 function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; onRemove?: () => void; removeLabel?: string }) {
-  const cover = sanitizeUrl(book.covers[0]);
-  return <article className="group flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-3 hover:bg-secondary/60">
+  const player = usePlayer();
+  const isPlaying = player.isPlaying && player.current?.kind === 'audiobook' && player.current.id.startsWith(`${book.id}:`);
+  return <article data-playing={isPlaying} className="ostrify-audio-card group flex min-w-0 items-center gap-3 rounded-xl p-3">
     <Link to={audiobookPath(book)} className="flex min-w-0 flex-1 items-center gap-3 focus-visible:outline-2 focus-visible:outline-primary">
-      <div className="size-14 shrink-0 overflow-hidden rounded-md bg-secondary">
-        {cover ? <img src={cover} alt="" loading="lazy" decoding="async" className="size-full object-cover" /> : <div className="flex size-full items-center justify-center"><BookOpen className="size-6 text-muted-foreground" /></div>}
-      </div>
-      <div className="min-w-0"><h3 className="truncate font-semibold group-hover:underline">{book.title}</h3><p className="truncate text-sm text-muted-foreground">{book.author}</p><p className="text-xs text-muted-foreground">{book.sectionCount} chapters{book.language ? ` · ${book.language}` : ''}</p></div>
+      <AudiobookCover book={book} className="size-14 shrink-0 rounded-lg bg-secondary" />
+      <div className="min-w-0"><h3 className="truncate font-semibold group-hover:underline">{book.title}</h3><p className="truncate text-sm text-muted-foreground">{book.author}</p><p className="text-xs text-muted-foreground">{isPlaying ? 'Playing · ' : 'Audiobook · '}{book.sectionCount} chapters{book.language ? ` · ${book.language}` : ''}</p></div>
     </Link>
     {onRemove && <Button type="button" variant="ghost" size="icon" onClick={onRemove} aria-label={removeLabel ?? `Remove ${book.title}`}><Trash2 className="size-4" /></Button>}
   </article>;
@@ -55,7 +55,7 @@ export default function AudiobookLibraryPage() {
     </header>
 
     {!id && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><ListMusic className="size-5" /> Collections</h2>
-      {library.collections.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.collections.map(item => <div key={item.id} className="flex items-center gap-3 rounded-xl border border-border/60 bg-secondary/30 p-4">
+      {library.collections.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.collections.map(item => <div key={item.id} className="ostrify-audio-card flex items-center gap-3 rounded-xl p-4">
         <Link to={`/audiobook-library/${encodeURIComponent(item.id)}`} className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-primary"><h3 className="truncate font-semibold hover:underline">{item.title}</h3><p className="text-sm text-muted-foreground">{item.audiobookIds.length} books</p></Link>
         <Button type="button" variant="ghost" size="icon" aria-label={`Delete ${item.title}`} onClick={() => { sync.requestSync(); library.deleteCollection(item.id); }}><Trash2 className="size-4" /></Button>
       </div>)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Create a collection from an audiobook’s Save menu to organize books here.</p>}
