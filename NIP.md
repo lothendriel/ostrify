@@ -145,8 +145,11 @@ The content is a JSON array of station records (ID, name, HTTPS stream and artwo
 URLs, location, tags, and HLS flag), encrypted to the author's own pubkey with
 NIP-44. Reads are constrained to the signed-in author. Browser-only favorites are
 claimed by the first account on that browser and merged on initial sync. Subsequent
-updates reconcile local additions and removals against the last synced baseline;
-reads must complete on configured library relays before publishing. Sync relies on
+updates reconcile local additions and removals against the last synced baseline.
+Sync requires at least one completed relay read and, for an update, a confirming
+write to a relay that completed both checks. Unresponsive relays do not block
+available relays, but may contain unseen changes from another device; Ostrify
+reports partial sync rather than assuming the list is complete. Sync relies on
 compatible signers and relay availability and cannot make simultaneous edits from
 separate devices atomic. Ciphertext, author, event type, and identifier remain
 visible to relays, which may retain older revisions.
