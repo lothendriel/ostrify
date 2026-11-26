@@ -7,6 +7,7 @@ import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
 import { useFountainRssEpisodes, useFountainShow, useNostrPodcastEpisodesForShow, usePodcastFavorites, usePodcastIndexEpisodes, usePodcastIndexFeed, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { usePlayer } from "@/hooks/usePlayer";
+import { useRadioFavorites } from '@/hooks/useRadioFavorites';
 import { useToast } from "@/hooks/useToast";
 import type { Track } from "@/lib/music";
 import { cn } from "@/lib/utils";
@@ -113,8 +114,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </div>
 
         <ScrollArea type="always" className="flex-1 min-h-0 px-2 pb-2">
-          {!user ? <p className="px-3 py-4 text-sm text-muted-foreground">Log in to create playlists and like songs.</p> : (
-            <div className="space-y-1">
+          <div className="space-y-1">
+            <RadioFavoritesLibraryItem onNavigate={onNavigate} />
+            {!user ? <p className="px-3 py-4 text-sm text-muted-foreground">Log in to create playlists and like songs.</p> : <>
               <NavLink to="/artists" onClick={onNavigate} className={({ isActive }) => cn(libraryRowClass(isActive), "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
                 <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0"><Users className="size-5 text-white" /></div>
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
@@ -126,8 +128,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
               <PodcastLibraryItem favorites={podcastFavorites.data} onNavigate={onNavigate} />
               {isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">Loading…</p>}
               {regular.map(playlist => <PlaylistLibraryItem key={playlist.id} playlist={playlist} onNavigate={onNavigate} />)}
-            </div>
-          )}
+            </>}
+          </div>
         </ScrollArea>
       </div>
 
@@ -135,6 +137,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <CreatePlaylistDialog open={createOpen} onOpenChange={setCreateOpen} />
     </nav>
   );
+}
+
+function RadioFavoritesLibraryItem({ onNavigate }: { onNavigate?: () => void }) {
+  const { favorites } = useRadioFavorites();
+  return <NavLink to="/radio-favorites" onClick={onNavigate} className={({ isActive }) => cn(libraryRowClass(isActive), 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring')}>
+    <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-indigo-800 text-white"><Radio className="size-5" /></div>
+    <div className="min-w-0"><div className="truncate text-sm font-medium">Favorite Radio</div><div className="text-xs text-muted-foreground">{favorites.length} {favorites.length === 1 ? 'station' : 'stations'}</div></div>
+  </NavLink>;
 }
 
 function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist: Pick<Playlist, "id" | "title" | "trackIds" | "image">; liked?: boolean; onNavigate?: () => void }) {

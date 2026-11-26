@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useSeoMeta } from '@unhead/react';
 import { Heart, MapPin, Pause, Play, Radio, Search, Waves } from 'lucide-react';
-import { useToast } from '@/hooks/useToast';
+import { useRadioFavorites, type RadioStation as Station } from '@/hooks/useRadioFavorites';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,29 +15,6 @@ import { sanitizeUrl } from '@/lib/sanitize';
 const SERVERS = ['https://de1.api.radio-browser.info', 'https://nl1.api.radio-browser.info', 'https://at1.api.radio-browser.info'];
 const PAGE_SIZE = 30;
 type Filters = { name: string; country: string; state: string };
-type Station = { id: string; name: string; url?: string; image?: string; location: string; tags: string; hls: boolean };
-const FAVORITES_KEY = 'ostrify:local-radio-favorites';
-
-function readFavorites(raw: string | null): Station[] {
-  if (!raw) return [];
-  try {
-    const data: unknown = JSON.parse(raw);
-    if (!Array.isArray(data)) return [];
-    const seen = new Set<string>();
-    return data.flatMap((item: unknown) => {
-      if (!item || typeof item !== 'object') return [];
-      const value = item as Record<string, unknown>;
-      if (typeof value.id !== 'string' || !/^[\da-f-]{36}$/i.test(value.id) || seen.has(value.id) || typeof value.name !== 'string' || !value.name.trim()) return [];
-      seen.add(value.id);
-      const text = (field: unknown) => typeof field === 'string' ? field.trim().slice(0, 300) : '';
-      const url = sanitizeUrl(text(value.url));
-      return [{ id: value.id, name: text(value.name), url, image: sanitizeUrl(text(value.image)), location: text(value.location), tags: text(value.tags), hls: value.hls === true || /\.m3u8(?:\?|$)/i.test(url ?? '') }];
-    });
-  } catch {
-    return [];
-  }
-}
-
 async function directoryRequest(path: string, signal: AbortSignal): Promise<unknown> {
   for (const server of SERVERS) {
     try {
@@ -69,18 +47,7 @@ function stationTrack(station: Station): Track {
 
 export default function LocalRadioPage() {
   useSeoMeta({ title: 'Local Radio — Ostrify', description: 'Discover live radio stations around the world.' });
-  const player = usePlayer();
-  const { toast } = useToast();
-  const [favorites, setFavorites] = useState<Station[]>(() => {
-    try { return readFavorites(localStorage.getItem(FAVORITES_KEY)); } catch { return []; }
-  });
-  useEffect(() => {
-    const sync = (event: StorageEvent) => {
-      if (event.key === FAVORITES_KEY || event.key === null) setFavorites(readFavorites(event.newValue));
-    };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
+  const { favorites, toggleFavorite } = useRadioFavorites();
   const [draft, setDraft] = useState<Filters>({ name: '', country: '', state: '' });
   const [filters, setFilters] = useState<Filters>(draft);
   const [page, setPage] = useState(0);
@@ -111,40 +78,6 @@ export default function LocalRadioPage() {
     setPage(0);
     setFilters({ name: draft.name.trim(), country: draft.country, state: draft.state.trim() });
   };
-  const tune = (station: Station) => {
-    if (!station.url || station.hls) return;
-    if (player.current?.id === `radio-browser:${station.id}`) {
-      player.togglePlay();
-      return;
-    }
-    player.playStation(stationTrack(station));
-    // Radio Browser asks clients to count a click when a listener tunes in.
-    void directoryRequest(`/json/url/${station.id}`, AbortSignal.timeout(5000)).catch(() => {});
-  };
-
-  const toggleFavorite = (station: Station) => {
-    const next = favorites.some(item => item.id === station.id)
-      ? favorites.filter(item => item.id !== station.id)
-      : [station, ...favorites];
-    try {
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
-      setFavorites(next);
-    } catch {
-      toast({ title: 'Could not save favorites', description: 'Browser storage is unavailable. Please check your browser settings.', variant: 'destructive' });
-    }
-  };
-  const renderStation = (station: Station) => {
-    const active = player.current?.id === `radio-browser:${station.id}`;
-    const favorite = favorites.some(item => item.id === station.id);
-    const unavailable = !station.url || station.hls;
-    return <article key={station.id} className="flex min-w-0 items-center gap-2 rounded-xl border bg-card/60 p-3 transition-colors hover:bg-card sm:gap-4 sm:p-4">
-      <TrackArtwork track={stationTrack(station)} className="size-12 sm:size-16" />
-      <div className="min-w-0 flex-1"><h3 className="truncate font-semibold" title={station.name}>{station.name}</h3><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" /><span className="truncate">{station.location || 'Location not listed'}</span></p><p className="mt-1 truncate text-xs text-muted-foreground">{unavailable ? station.hls ? 'HLS stream not supported yet' : 'Secure stream unavailable' : station.tags || 'Live radio'}</p>{active && player.playbackError && <p role="status" className="mt-1 text-xs text-destructive">{player.playbackError}</p>}</div>
-      <Button size="icon" variant="ghost" className={`size-10 shrink-0 rounded-full ${favorite ? 'text-primary' : 'text-muted-foreground'}`} onClick={() => toggleFavorite(station)} aria-label={`${favorite ? 'Remove' : 'Add'} ${station.name} ${favorite ? 'from' : 'to'} favorites`} aria-pressed={favorite} title={favorite ? 'Remove from favorites' : 'Add to favorites'}><Heart className={`size-5 ${favorite ? 'fill-current' : ''}`} /></Button>
-      <Button size="icon" variant={active && player.isPlaying ? 'default' : 'secondary'} className="size-10 shrink-0 rounded-full" disabled={unavailable} onClick={() => tune(station)} aria-label={`${active && player.isPlaying ? 'Pause' : 'Play'} ${station.name}`} title={unavailable ? 'This stream is not supported' : `Tune in to ${station.name}`}>{active && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</Button>
-    </article>;
-  };
-
   return <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:px-8 sm:py-10">
     <header className="relative overflow-hidden rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-900/80 via-indigo-950/80 to-card p-6 sm:p-10">
       <div aria-hidden="true" className="absolute -right-8 -top-12 hidden size-64 rounded-full border-[32px] border-white/5 sm:block" />
@@ -153,10 +86,10 @@ export default function LocalRadioPage() {
       <p className="mt-3 max-w-xl text-base leading-relaxed text-violet-100/80 sm:text-lg">Find familiar voices close to home, or tune in somewhere new. Explore live internet radio from around the world.</p>
     </header>
 
-    <section aria-labelledby="favorite-radio" className="space-y-4">
-      <div><p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary"><Heart className="size-4" /> Your stations</p><h2 id="favorite-radio" className="mt-1 text-2xl font-bold">Favorite stations</h2><p className="mt-1 text-sm text-muted-foreground">Saved on this browser only; favorites do not sync between devices.</p></div>
-      {favorites.length ? <div className="grid gap-3 sm:grid-cols-2">{favorites.map(station => renderStation(stations.data?.find(result => result.id === station.id) ?? station))}</div> : <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Your favorites will appear here. Select the heart on a station to save it.</div>}
-    </section>
+    <div className="flex items-center justify-between gap-4 rounded-xl border bg-card/60 p-4">
+      <div><h2 className="font-semibold">Your favorite stations</h2><p className="text-sm text-muted-foreground">{favorites.length} {favorites.length === 1 ? 'station' : 'stations'} saved in this browser</p></div>
+      <Button asChild variant="outline"><Link to="/radio-favorites">View favorites</Link></Button>
+    </div>
 
     <section aria-labelledby="find-radio" className="space-y-4">
       <div><h2 id="find-radio" className="text-2xl font-bold">Find your frequency</h2><p className="mt-1 text-sm text-muted-foreground">Search by station, country, or state and region. No location access needed.</p></div>
@@ -174,9 +107,46 @@ export default function LocalRadioPage() {
       {stations.isLoading && <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>}
       {stations.isError && <div role="alert" className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">The station directory could not be reached. <button className="underline" onClick={() => void stations.refetch()}>Try again</button></div>}
       {!stations.isLoading && !stations.isError && !stations.data?.length && <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No stations found. Try a broader search or another region.</div>}
-      {!!stations.data?.length && <div className="grid gap-3 sm:grid-cols-2">{stations.data.map(renderStation)}</div>}
+      {!!stations.data?.length && <div className="grid gap-3 sm:grid-cols-2">{stations.data.map(station => <StationCard key={station.id} station={station} favorite={favorites.some(item => item.id === station.id)} toggleFavorite={toggleFavorite} />)}</div>}
       <div className="flex items-center justify-between gap-4"><Button variant="outline" disabled={page === 0 || stations.isFetching} onClick={() => setPage(p => p - 1)}>Previous</Button><Button variant="outline" disabled={(stations.data?.length ?? 0) < PAGE_SIZE || stations.isFetching} onClick={() => setPage(p => p + 1)}>Next</Button></div>
     </section>
     <p className="flex gap-2 text-xs leading-relaxed text-muted-foreground"><Waves className="size-4 shrink-0" /> Stations are provided by <a className="underline" href="https://www.radio-browser.info/" target="_blank" rel="noreferrer">Radio Browser</a>. Availability and locations are community-maintained; some broadcasts may be offline, region-restricted, or incompatible with your browser. Only secure streams are shown.</p>
   </div>;
+}
+
+export function FavoriteRadioPage() {
+  useSeoMeta({ title: 'Favorite Radio Stations — Ostrify', description: 'Your saved live radio stations.' });
+  const { favorites, toggleFavorite } = useRadioFavorites();
+  return <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:px-8 sm:py-10">
+    <header className="relative overflow-hidden rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-900/80 via-indigo-950/80 to-card p-6 sm:p-10">
+      <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-violet-200"><Heart className="size-4" /> Your library</p>
+      <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">Favorite Radio Stations</h1>
+      <p className="mt-3 max-w-xl text-base leading-relaxed text-violet-100/80 sm:text-lg">Your favorite frequencies, all in one place.</p>
+      <p className="mt-3 text-sm text-violet-100/80">Saved on this browser only; favorites do not sync between devices.</p>
+    </header>
+    <section className="space-y-4" aria-labelledby="favorite-stations-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 id="favorite-stations-heading" className="text-2xl font-bold">Your stations</h2><p className="mt-1 text-sm text-muted-foreground">{favorites.length} {favorites.length === 1 ? 'station' : 'stations'} saved</p></div><Button variant="outline" asChild><Link to="/radio"><Search className="size-4" /> Find stations</Link></Button></div>
+      {favorites.length ? <div className="grid gap-3 sm:grid-cols-2">{favorites.map(station => <StationCard key={station.id} station={station} favorite toggleFavorite={toggleFavorite} />)}</div> : <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No favorite stations yet. Browse Local Radio and select the heart on a station to save it.</div>}
+      <p className="text-xs leading-relaxed text-muted-foreground">Stations are provided by Radio Browser. Streams may change, go offline, or be incompatible with your browser.</p>
+    </section>
+  </div>;
+}
+
+function StationCard({ station, favorite, toggleFavorite }: { station: Station; favorite: boolean; toggleFavorite: (station: Station) => void }) {
+  const player = usePlayer();
+  const active = player.current?.id === `radio-browser:${station.id}`;
+  const unavailable = !station.url || station.hls;
+  const tune = () => {
+    if (!station.url || station.hls) return;
+    if (active) { player.togglePlay(); return; }
+    player.playStation(stationTrack(station));
+    // Radio Browser asks clients to count a click when a listener tunes in.
+    void directoryRequest(`/json/url/${station.id}`, AbortSignal.timeout(5000)).catch(() => {});
+  };
+  return <article className="flex min-w-0 items-center gap-2 rounded-xl border bg-card/60 p-3 transition-colors hover:bg-card sm:gap-4 sm:p-4">
+    <TrackArtwork track={stationTrack(station)} className="size-12 sm:size-16" />
+    <div className="min-w-0 flex-1"><h3 className="truncate font-semibold" title={station.name}>{station.name}</h3><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" /><span className="truncate">{station.location || 'Location not listed'}</span></p><p className="mt-1 truncate text-xs text-muted-foreground">{unavailable ? station.hls ? 'HLS stream not supported yet' : 'Secure stream unavailable' : station.tags || 'Live radio'}</p>{active && player.playbackError && <p role="status" className="mt-1 text-xs text-destructive">{player.playbackError}</p>}</div>
+    <Button size="icon" variant="ghost" className={`size-10 shrink-0 rounded-full ${favorite ? 'text-primary' : 'text-muted-foreground'}`} onClick={() => toggleFavorite(station)} aria-label={`${favorite ? 'Remove' : 'Add'} ${station.name} ${favorite ? 'from' : 'to'} favorites`} aria-pressed={favorite} title={favorite ? 'Remove from favorites' : 'Add to favorites'}><Heart className={`size-5 ${favorite ? 'fill-current' : ''}`} /></Button>
+    <Button size="icon" variant={active && player.isPlaying ? 'default' : 'secondary'} className="size-10 shrink-0 rounded-full" disabled={unavailable} onClick={tune} aria-label={`${active && player.isPlaying ? 'Pause' : 'Play'} ${station.name}`} title={unavailable ? 'This stream is not supported' : `Tune in to ${station.name}`}>{active && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</Button>
+  </article>;
 }
