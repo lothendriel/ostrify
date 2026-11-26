@@ -7,6 +7,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { sanitizeUrl } from '@/lib/sanitize';
+import { cn } from '@/lib/utils';
 import type { Track } from '@/lib/music';
 import { audioDetailPath, encodeAudioDetailFallback } from '@/lib/audioDetail';
 
@@ -133,7 +134,7 @@ function trackTags(track: Track): string[][] {
   return url ? [['r', url]] : [];
 }
 
-export function ShareTrackButton({ track }: { track: Track | undefined }) {
+export function ShareTrackButton({ track, className, iconClassName }: { track: Track | undefined; className?: string; iconClassName?: string }) {
   const { user } = useCurrentUser();
   const { mutateAsync: publish, isPending } = useNostrPublish();
   const { toast } = useToast();
@@ -201,9 +202,9 @@ export function ShareTrackButton({ track }: { track: Track | undefined }) {
       disabled={!track}
       aria-label="Share to Nostr"
       title="Share to Nostr"
-      className="rounded-full size-8 text-muted-foreground hover:text-foreground"
+      className={cn("rounded-full size-8 text-muted-foreground hover:text-foreground", className)}
     >
-      <Share2 className="size-4" />
+      <Share2 className={cn("size-4", iconClassName)} />
     </Button>
     <Dialog open={open} onOpenChange={value => { if (!isPending) setOpen(value); }}>
       <DialogContent className="min-w-0 overflow-x-hidden">

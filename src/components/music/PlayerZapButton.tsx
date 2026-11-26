@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/useToast";
 import { assertInvoiceAmount, invoiceCommitsTo } from "@/lib/bolt11";
 import { lnurlToUrl, resolveLnurlPay, type LnurlPayParams, type LnurlSource } from "@/lib/lnurlPay";
 import type { Track } from "@/lib/music";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ function usePaymentMethod(pubkey: string | undefined) {
   return { author, query };
 }
 
-export function PlayerZapButton({ track }: { track: Track | null }) {
+export function PlayerZapButton({ track, className, iconClassName }: { track: Track | null; className?: string; iconClassName?: string }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("100");
   const [invoice, setInvoice] = useState<string | null>(null);
@@ -140,7 +141,7 @@ export function PlayerZapButton({ track }: { track: Track | null }) {
 
   if (!recipient || !track) return null;
   return <>
-    <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground" aria-label={`Zap ${recipient.name}`} onClick={() => { setLockedRecipient(recipient); setOpen(true); }}><Zap className="size-4" /></Button></TooltipTrigger><TooltipContent>Zap {recipient.role.toLowerCase()}</TooltipContent></Tooltip>
+    <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className={cn("size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground", className)} aria-label={`Zap ${recipient.name}`} onClick={() => { setLockedRecipient(recipient); setOpen(true); }}><Zap className={cn("size-4", iconClassName)} /></Button></TooltipTrigger><TooltipContent>Zap {recipient.role.toLowerCase()}</TooltipContent></Tooltip>
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-sm">
         <DialogHeader>

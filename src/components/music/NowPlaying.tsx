@@ -11,8 +11,11 @@ import { sanitizeUrl } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import { TrackArtwork } from './TrackArtwork';
 import { ArtistLink } from './ArtistLink';
+import { LikeButton } from './LikeButton';
+import { ShareTrackButton } from './ShareTrackButton';
+import { PlayerZapButton } from './PlayerZapButton';
 
-type VisualiserStatus = 'off' | 'loading' | 'active' | 'unavailable';
+type VisualiserStatus = 'loading' | 'active' | 'unavailable';
 
 /** Analyse a separate, inaudible CORS-enabled copy; never route the real player through Web Audio. */
 function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: VisualiserStatus) => void }) {
@@ -176,9 +179,7 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
   const player = usePlayer();
   const { current } = player;
   // Opening the listening room is the listener's opt-in for this session.
-  const [enabled, setEnabled] = useState(true);
   const [status, setStatus] = useState<VisualiserStatus>('loading');
-  const [attempt, setAttempt] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -191,7 +192,7 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
   const control = 'inline-flex size-11 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-300 disabled:opacity-30';
 
   const changeOpen = (value: boolean) => {
-    if (!value) { setEnabled(true); setStatus('loading'); }
+    if (!value) setStatus('loading');
     onOpenChange(value);
   };
   const closeOnNavigation = (event: MouseEvent<HTMLElement>) => {
@@ -230,13 +231,17 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
             </div>
           </div>
           <div className="relative mt-6 h-24 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] sm:mt-8 sm:h-36">
-            <div className="absolute inset-x-4 bottom-4 top-4"><Spectrum key={attempt} enabled={enabled && open} onStatus={setStatus} /></div>
-            {(!enabled || status === 'unavailable' || reducedMotion || (enabled && !player.isPlaying)) && <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
-              <div className="max-w-sm"><AudioLines aria-hidden="true" className="mx-auto mb-2 size-5 text-green-300/80" /><p className="text-xs leading-relaxed text-white/70">{reducedMotion ? 'Visualiser paused to respect your reduced motion preference.' : isRadio ? 'Visualisation is not available for live radio.' : status === 'unavailable' ? 'Visualisation unavailable for this source or device. Playback is unaffected.' : enabled && !player.isPlaying ? 'Visualiser is ready when playback starts.' : 'Sound-responsive visuals use an additional audio connection and may use more data.'}</p></div>
+            <div className="absolute inset-x-4 bottom-4 top-4"><Spectrum enabled={open} onStatus={setStatus} /></div>
+            {(status === 'unavailable' || reducedMotion || !player.isPlaying) && <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
+              <div className="max-w-sm"><AudioLines aria-hidden="true" className="mx-auto mb-2 size-5 text-green-300/80" /><p className="text-xs leading-relaxed text-white/70">{reducedMotion ? 'Visualiser paused to respect your reduced motion preference.' : isRadio ? 'Visualisation is not available for live radio.' : status === 'unavailable' ? 'Visualisation unavailable for this source or device. Playback is unaffected.' : 'Visualiser is ready when playback starts.'}</p></div>
             </div>}
-            {enabled && status === 'loading' && player.isPlaying && !reducedMotion && <div className="absolute inset-0 flex items-center justify-center text-xs text-white/70" role="status">Connecting visualiser…</div>}
+            {status === 'loading' && player.isPlaying && !reducedMotion && <div className="absolute inset-0 flex items-center justify-center text-xs text-white/70" role="status">Connecting visualiser…</div>}
           </div>
-          {!reducedMotion && !isRadio && <div className="mt-3 text-center lg:text-left"><button onClick={() => { if (enabled && status !== 'unavailable') { setEnabled(false); setStatus('off'); } else { setStatus('loading'); setAttempt(n => n + 1); setEnabled(true); } }} className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold text-white/85 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-300">{enabled && status !== 'unavailable' ? 'Turn visualiser off' : status === 'unavailable' ? 'Try visualiser again' : 'Turn visualiser on'}</button></div>}
+          {!isRadio && <div className="mt-3 flex items-center justify-center gap-2 lg:justify-start" aria-label="Track actions">
+            <LikeButton trackId={current.id} size={20} className="size-11 text-white/70 hover:bg-white/10 hover:text-white aria-pressed:text-green-300 focus-visible:ring-green-300" />
+            <ShareTrackButton track={current} className="size-11 text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300" iconClassName="size-5" />
+            <PlayerZapButton key={current.id} track={current} className="size-11 text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300" iconClassName="size-5" />
+          </div>}
           {player.playbackError && <p role="status" className="mt-3 text-sm text-red-300">{player.playbackError}</p>}
           <div className="mt-6">
             {isRadio ? <div className="text-center text-xs font-bold uppercase tracking-widest text-green-300">Live radio</div> : <><Slider value={[player.duration ? Math.min(100, (player.progress / player.duration) * 100) : 0]} max={100} step={0.1} disabled={!player.duration} onValueChange={([v]) => player.seek((v / 100) * player.duration)} aria-label="Seek" /><div className="mt-2 flex justify-between text-xs tabular-nums text-white/60"><span>{formatDuration(player.progress)}</span><span>{formatDuration(player.duration)}</span></div></>}
