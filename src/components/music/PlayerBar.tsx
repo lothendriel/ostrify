@@ -48,7 +48,7 @@ function ThanksgivingPlayIcon() {
   }, []);
 
   return showTurkey
-    ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[2.5] object-contain mix-blend-multiply" />
+    ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[2.7] object-contain mix-blend-multiply" />
     : <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
 }
 
