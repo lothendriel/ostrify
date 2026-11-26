@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { Link } from 'react-router-dom';
+import { nip19 } from 'nostr-tools';
 import { AudioLines, ChevronDown, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { usePlayer } from '@/hooks/usePlayer';
-import { formatDuration } from '@/lib/music';
+import { formatDuration, fountainShowGuid } from '@/lib/music';
+import { audioDetailPath } from '@/lib/audioDetail';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import { TrackArtwork } from './TrackArtwork';
+import { ArtistLink } from './ArtistLink';
 
 type VisualiserStatus = 'off' | 'loading' | 'active' | 'unavailable';
 
@@ -190,6 +194,19 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
     if (!value) { setEnabled(true); setStatus('loading'); }
     onOpenChange(value);
   };
+  const closeOnNavigation = (event: MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('a') && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) changeOpen(false);
+  };
+  let podcastShowPath = '/podcasts';
+  if (current?.kind === 'podcast') {
+    const guid = fountainShowGuid(current.showId);
+    if (guid) podcastShowPath = `/podcasts/fountain/${encodeURIComponent(guid)}`;
+    else if (current.showId && /^podcast-index:\d{1,12}$/.test(current.showId)) podcastShowPath = `/podcasts?source=directory&show=${encodeURIComponent(current.showId)}`;
+    else if (current.pubkey) {
+      try { podcastShowPath = `/${nip19.npubEncode(current.pubkey)}`; } catch { /* Keep the podcast directory fallback. */ }
+    }
+  }
 
   return <Dialog open={open} onOpenChange={changeOpen}>
     <DialogContent showCloseButton={false} className="fixed inset-0 top-0 left-0 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-y-auto rounded-none border-0 bg-[#100e1d] p-0 text-white sm:max-w-none">
@@ -204,11 +221,13 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
         <div className="flex shrink-0 justify-center lg:w-[40%]">
           <TrackArtwork track={current} priority rounded="rounded-2xl" className="aspect-square w-[min(56vw,250px)] shadow-[0_25px_80px_rgba(0,0,0,0.4)] sm:w-[min(42vw,340px)] lg:w-full lg:max-w-[420px]" />
         </div>
-        <div className="mx-auto flex w-full max-w-xl flex-col lg:mx-0">
-          <div className="min-w-0 text-center lg:text-left">
+        <div className="mx-auto flex w-full min-w-0 max-w-xl flex-col lg:mx-0">
+          <div className="min-w-0 text-center lg:text-left" onClick={closeOnNavigation}>
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-green-300">{isRadio ? 'Live radio' : current.kind === 'podcast' ? 'Podcast' : current.kind === 'audiobook' ? 'Audiobook' : 'In your ears'}</p>
-            <h2 className="break-words text-2xl font-bold tracking-tight sm:text-4xl">{current.title}</h2>
-            <p className="mt-2 break-words text-base text-white/65 sm:text-lg">{current.artist || 'Unknown artist'}</p>
+            <h2 className="min-w-0 text-2xl font-bold tracking-tight sm:text-4xl"><Link to={isRadio ? '/radio' : audioDetailPath(current)} title={current.title} className="block truncate rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-300">{current.title}</Link></h2>
+            <div className="mt-2 truncate text-base text-white/65 sm:text-lg" title={current.artist || undefined}>
+              {isRadio ? <Link to="/radio" className="hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-green-300">{current.artist || 'Live radio'}</Link> : current.kind === 'podcast' ? <Link to={podcastShowPath} className="hover:text-white hover:underline focus-visible:outline-2 focus-visible:outline-green-300">{current.artist || 'Podcast show'}</Link> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} stopPropagation={false} className="hover:!text-white focus-visible:outline-2 focus-visible:outline-green-300" />}
+            </div>
           </div>
           <div className="relative mt-6 h-24 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] sm:mt-8 sm:h-36">
             <div className="absolute inset-x-4 bottom-4 top-4"><Spectrum key={attempt} enabled={enabled && open} onStatus={setStatus} /></div>
