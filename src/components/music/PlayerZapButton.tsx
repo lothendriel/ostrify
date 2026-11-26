@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNostr } from "@nostrify/react";
+import type { NostrEvent } from "@nostrify/nostrify";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, Zap } from "lucide-react";
-import { nip19 } from "nostr-tools";
+import { nip19, verifyEvent } from "nostr-tools";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
@@ -21,6 +23,22 @@ const HEX_KEY = /^[0-9a-f]{64}$/i;
 const AMOUNTS = [21, 100, 500, 1000];
 
 type Recipient = { pubkey: string; name: string; role: "Artist" | "Publisher"; source: LnurlSource; params: LnurlPayParams };
+type ReceiptWatch = { invoice: string; provider: string; recipient: string; requestId: string; relays: string[]; since: number };
+
+/** Only the recipient's advertised provider can report this exact invoice/request. */
+function matchesReceipt(event: NostrEvent, watch: ReceiptWatch): boolean {
+  if (event.kind !== 9735 || event.pubkey !== watch.provider || !verifyEvent(event)) return false;
+  const tag = (name: string) => event.tags.find(([key]) => key === name)?.[1];
+  if (tag("p") !== watch.recipient || tag("bolt11")?.toLowerCase() !== watch.invoice.toLowerCase()) return false;
+  try {
+    const description = tag("description");
+    if (!description) return false;
+    const request: NostrEvent = JSON.parse(description);
+    return request.kind === 9734 && request.id === watch.requestId && verifyEvent(request);
+  } catch {
+    return false;
+  }
+}
 
 /** Resolve each advertised pointer independently, so an invalid lud06 doesn't mask a working lud16. */
 function usePaymentMethod(pubkey: string | undefined) {
@@ -51,11 +69,13 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("100");
   const [invoice, setInvoice] = useState<string | null>(null);
+  const [receiptWatch, setReceiptWatch] = useState<ReceiptWatch | null>(null);
   const [lockedRecipient, setLockedRecipient] = useState<Recipient | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [copied, setCopied] = useState(false);
   const dialogSession = useRef(0);
   const { user } = useCurrentUser();
+  const { nostr } = useNostr();
   const { config } = useAppContext();
   const { toast } = useToast();
 
@@ -76,9 +96,37 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   } : undefined;
   const recipient = lockedRecipient ?? availableRecipient;
 
+  useEffect(() => {
+    if (!open || !receiptWatch || receiptWatch.relays.length === 0) return;
+    const controller = new AbortController();
+    let received = false;
+    const watchRelay = async (url: string) => {
+      try {
+        const filter = { kinds: [9735], authors: [receiptWatch.provider], '#p': [receiptWatch.recipient], since: receiptWatch.since, limit: 100 };
+        for await (const message of nostr.relay(url).req([filter], { signal: controller.signal })) {
+          if (message[0] !== 'EVENT' || received || controller.signal.aborted || !matchesReceipt(message[2], receiptWatch)) continue;
+          received = true;
+          controller.abort();
+          dialogSession.current++;
+          setOpen(false);
+          setInvoice(null);
+          setReceiptWatch(null);
+          setCopied(false);
+          setLockedRecipient(null);
+          toast({ title: "Zap receipt received", description: "The recipient’s Lightning provider reported your zap." });
+          break;
+        }
+      } catch {
+        // Other relays can still deliver a receipt; the user can always close manually.
+      }
+    };
+    for (const url of receiptWatch.relays) void watchRelay(url);
+    return () => controller.abort();
+  }, [nostr, open, receiptWatch, toast]);
+
   const close = (nextOpen: boolean) => {
     setOpen(nextOpen);
-    if (!nextOpen) { dialogSession.current++; setInvoice(null); setCopied(false); setLockedRecipient(null); }
+    if (!nextOpen) { dialogSession.current++; setInvoice(null); setReceiptWatch(null); setCopied(false); setLockedRecipient(null); }
   };
 
   const createInvoice = async () => {
@@ -100,18 +148,21 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
       const callback = new URL(params.callback);
       callback.searchParams.set("amount", String(amountMsat));
       let commitment = params.metadata;
+      let watch: Omit<ReceiptWatch, "invoice"> | undefined;
       if (params.allowsNostr && params.nostrPubkey && HEX_KEY.test(params.nostrPubkey) && user) {
         const lnurlUrl = lnurlToUrl(recipient.source);
         const { bech32 } = await import("@scure/base");
         const lnurl = lnurlUrl ? bech32.encode("lnurl", bech32.toWords(new TextEncoder().encode(lnurlUrl)), false) : undefined;
+        const relays = [...new Set(config.relayMetadata.relays.filter((relay) => relay.read || relay.write).map((relay) => relay.url))];
         const tags = [
-          ["relays", ...config.relayMetadata.relays.filter((relay) => relay.read || relay.write).map((relay) => relay.url)],
+          ["relays", ...relays],
           ["amount", String(amountMsat)],
           ["p", recipient.pubkey],
           ...(lnurl ? [["lnurl", lnurl]] : []),
         ];
         const request = await user.signer.signEvent({ kind: 9734, content: "", created_at: Math.floor(Date.now() / 1000), tags });
         commitment = JSON.stringify(request);
+        watch = { provider: params.nostrPubkey.toLowerCase(), recipient: recipient.pubkey, requestId: request.id, relays, since: Math.max(0, request.created_at - 60) };
         callback.searchParams.set("nostr", commitment);
         if (lnurl) callback.searchParams.set("lnurl", lnurl);
       }
@@ -120,7 +171,10 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
       if (!response.ok || typeof body.pr !== "string") throw new Error(typeof body.reason === "string" ? body.reason : `Lightning service returned HTTP ${response.status}.`);
       const decoded = assertInvoiceAmount(body.pr, amountMsat);
       if (!commitment || !invoiceCommitsTo(decoded, [commitment])) throw new Error("The Lightning service returned an invoice for a different payment. No payment was made.");
-      if (session === dialogSession.current) setInvoice(body.pr);
+      if (session === dialogSession.current) {
+        setInvoice(body.pr);
+        setReceiptWatch(watch ? { ...watch, invoice: body.pr } : null);
+      }
     } catch (error) {
       toast({ title: "Could not create payment invoice", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
     } finally {
@@ -153,7 +207,8 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
           <div className="mx-auto w-fit rounded-lg bg-white p-3"><QRCodeCanvas value={`lightning:${invoice}`} size={220} className="block size-52 max-w-full" /></div>
           <div className="space-y-2"><Label htmlFor="player-zap-invoice">Lightning invoice</Label><div className="flex gap-2"><Input id="player-zap-invoice" value={invoice} readOnly className="min-w-0 font-mono text-xs" onClick={(event) => event.currentTarget.select()} /><Button type="button" variant="outline" size="icon" onClick={() => void copyInvoice()} aria-label="Copy Lightning invoice">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}</Button></div></div>
           <Button type="button" className="w-full" onClick={() => { window.location.href = `lightning:${invoice}`; }}><ExternalLink className="size-4" /> Open Lightning wallet</Button>
-          <p className="text-center text-xs text-muted-foreground">Scan or copy the invoice to pay. Payment is completed in your wallet.</p>
+          <p className="text-center text-xs text-muted-foreground">{receiptWatch && receiptWatch.relays.length > 0 ? "Waiting for a zap receipt. Some providers or relays may not deliver one; check your wallet if it doesn’t arrive." : "Payment is completed in your wallet. Ostrify cannot automatically confirm this payment."}</p>
+          <Button type="button" variant="outline" className="w-full" onClick={() => close(false)}>Done</Button>
         </div> : <div className="space-y-4">
           <div className="grid grid-cols-4 gap-2">{AMOUNTS.map((sats) => <Button key={sats} type="button" variant={amount === String(sats) ? "default" : "outline"} onClick={() => setAmount(String(sats))}>{sats}</Button>)}</div>
           <div className="space-y-2"><Label htmlFor="player-zap-amount">Amount in sats</Label><Input id="player-zap-amount" type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="numeric" /></div>
