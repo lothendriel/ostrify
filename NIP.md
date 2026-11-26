@@ -137,6 +137,20 @@ Browser-only saves are merged into the remote copy on first sync. Use only on
 relays suitable for private application data; relay availability, retention, and
 account signer support affect cross-device recovery.
 
+### Private radio favorites — NIP-78 application data (kind `30078`)
+
+Radio Browser station favorites sync as a kind `30078` event with
+`d=ostrify-radio-favorites-v1` and `alt=Encrypted Ostrify radio favorites`.
+The content is a JSON array of station records (ID, name, HTTPS stream and artwork
+URLs, location, tags, and HLS flag), encrypted to the author's own pubkey with
+NIP-44. Reads are constrained to the signed-in author. Browser-only favorites are
+claimed by the first account on that browser and merged on initial sync. Subsequent
+updates reconcile local additions and removals against the last synced baseline;
+reads must complete on configured library relays before publishing. Sync relies on
+compatible signers and relay availability and cannot make simultaneous edits from
+separate devices atomic. Ciphertext, author, event type, and identifier remain
+visible to relays, which may retain older revisions.
+
 ### Ostrify directory — NIP-78 application data (kind `30078`)
 
 An optional public listing uses `d=ostrify-directory-v1`, `t=ostrify-directory-v1`

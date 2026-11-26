@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSeoMeta } from '@unhead/react';
 import { Heart, MapPin, Pause, Play, Radio, Search, Waves } from 'lucide-react';
 import { useRadioFavorites, type RadioStation as Station } from '@/hooks/useRadioFavorites';
+import { useRadioFavoritesSync } from '@/hooks/useRadioFavoritesSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -87,7 +88,7 @@ export default function LocalRadioPage() {
     </header>
 
     <div className="flex items-center justify-between gap-4 rounded-xl border bg-card/60 p-4">
-      <div><h2 className="font-semibold">Your favorite stations</h2><p className="text-sm text-muted-foreground">{favorites.length} {favorites.length === 1 ? 'station' : 'stations'} saved in this browser</p></div>
+      <div><h2 className="font-semibold">Your favorite stations</h2><p className="text-sm text-muted-foreground">{favorites.length} {favorites.length === 1 ? 'station' : 'stations'} saved</p></div>
       <Button asChild variant="outline"><Link to="/radio-favorites">View favorites</Link></Button>
     </div>
 
@@ -117,12 +118,18 @@ export default function LocalRadioPage() {
 export function FavoriteRadioPage() {
   useSeoMeta({ title: 'Favorite Radio Stations — Ostrify', description: 'Your saved live radio stations.' });
   const { favorites, toggleFavorite } = useRadioFavorites();
+  const sync = useRadioFavoritesSync();
   return <div className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:px-8 sm:py-10">
     <header className="relative overflow-hidden rounded-2xl border border-violet-400/20 bg-gradient-to-br from-violet-900/80 via-indigo-950/80 to-card p-6 sm:p-10">
       <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-violet-200"><Heart className="size-4" /> Your library</p>
       <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">Favorite Radio Stations</h1>
       <p className="mt-3 max-w-xl text-base leading-relaxed text-violet-100/80 sm:text-lg">Your favorite frequencies, all in one place.</p>
-      <p className="mt-3 text-sm text-violet-100/80">Saved on this browser only; favorites do not sync between devices.</p>
+      <div role="status" className="mt-4 rounded-lg border border-white/15 bg-black/20 p-4 text-sm text-white/90">
+        {!sync?.isSignedIn ? <p>Sign in with Nostr to sync favorites privately across devices. Existing browser-only favorites are imported into the first account that signs in.</p>
+          : sync.status === 'syncing' || sync.status === 'local' ? <p>Checking your encrypted favorites on your relays…</p>
+            : sync.status === 'error' ? <div><p>Could not sync favorites: {sync.message}</p><p className="mt-1">Your changes remain in this browser. Retry when your signer and relays are available.</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={sync.requestSync}>Try again</Button><Button size="sm" variant="outline" asChild><Link to="/settings">Relay settings</Link></Button></div></div>
+              : <div><p>Favorites sync privately to your write relays using NIP-44 encryption. Sign in with the same account on another device to restore them.</p><Button className="mt-2" size="sm" variant="secondary" onClick={sync.requestSync}>Sync now</Button></div>}
+      </div>
     </header>
     <section className="space-y-4" aria-labelledby="favorite-stations-heading">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 id="favorite-stations-heading" className="text-2xl font-bold">Your stations</h2><p className="mt-1 text-sm text-muted-foreground">{favorites.length} {favorites.length === 1 ? 'station' : 'stations'} saved</p></div><Button variant="outline" asChild><Link to="/radio"><Search className="size-4" /> Find stations</Link></Button></div>
