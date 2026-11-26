@@ -95,7 +95,7 @@ export function QueuePanel({ open, onClose }: { open: boolean; onClose: () => vo
                 <div className="flex items-center justify-between gap-3 px-1">
                   <h2 id="queue-up-next" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Up next</h2>
                   <div className="flex items-center gap-1">
-                    {player.current?.kind === 'music' && <Button type="button" variant="ghost" size="icon" onClick={() => player.setAutoplay(!player.autoplay)} aria-label="Autoplay similar music" aria-pressed={player.autoplay} title="Autoplay similar music when the queue ends" className={player.autoplay ? 'size-8 text-primary' : 'size-8 text-muted-foreground'}><Sparkles className="size-4" /></Button>}
+                    {player.current?.kind === 'music' && player.current.source !== 'radio-browser' && <Button type="button" variant="ghost" size="icon" onClick={() => player.setAutoplay(!player.autoplay)} aria-label="Autoplay similar music" aria-pressed={player.autoplay} title="Autoplay similar music when the queue ends" className={player.autoplay ? 'size-8 text-primary' : 'size-8 text-muted-foreground'}><Sparkles className="size-4" /></Button>}
                     <Button type="button" variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-destructive" onClick={() => { player.clearUpcomingQueue(); toast({ title: 'Queue cleared', description: current ? 'Now playing was kept.' : undefined }); }} disabled={upcoming.length === 0} aria-label="Clear upcoming queue">
                       <Trash2 className="size-3.5" /> Clear queue
                     </Button>
@@ -152,7 +152,7 @@ export function QueuePanel({ open, onClose }: { open: boolean; onClose: () => vo
         <TabsContent value="history" className="min-h-0 flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="space-y-2 p-4">
-              {player.history.length ? player.history.map((track, index) => <QueueTrack key={`${track.id}-${index}`} track={track} active={current?.id === track.id} onPlay={() => player.playQueue([track])} />) : <div className="rounded-lg border border-dashed p-8 text-center"><Clock3 className="mx-auto mb-3 size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">Tracks you start playing will appear here.</p></div>}
+              {player.history.length ? player.history.map((track, index) => <QueueTrack key={`${track.id}-${index}`} track={track} active={current?.id === track.id} onPlay={() => track.source === 'radio-browser' ? player.playStation(track) : player.playQueue([track])} />) : <div className="rounded-lg border border-dashed p-8 text-center"><Clock3 className="mx-auto mb-3 size-8 text-muted-foreground" /><p className="text-sm text-muted-foreground">Tracks you start playing will appear here.</p></div>}
             </div>
           </ScrollArea>
         </TabsContent>
@@ -251,8 +251,8 @@ function QueueTrack({ track, active = false, onPlay, onRemove, onMoveUp, onMoveD
     {draggable && <span className="grid size-6 cursor-grab touch-none place-items-center text-muted-foreground active:cursor-grabbing" aria-label={`Drag ${track.title} to reorder`} title="Drag to reorder"><GripVertical className="size-4" /></span>}
       {onPlay ? <button type="button" onClick={event => { event.stopPropagation(); onPlay(); }} aria-label={`Play ${track.title}`} className="relative size-11 rounded focus-visible:outline-2 focus-visible:outline-primary"><TrackArtwork track={track} className="size-11" /><span className="absolute inset-0 hidden items-center justify-center rounded bg-black/55 text-white group-hover:flex group-focus-within:flex"><Play className="size-4 fill-current" /></span></button> : <TrackArtwork track={track} className="size-11" />}
     <div className="min-w-0 overflow-hidden">
-      {onPlay ? <Link to={audioDetailPath(track)} onClick={event => event.stopPropagation()} className={`block truncate text-sm font-medium hover:underline ${active ? 'text-primary' : ''}`} title={`View details for ${track.title}`}>{track.title}</Link> : <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>}
-      <p className="truncate text-xs text-muted-foreground"><ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist ?? track.album ?? (track.kind === 'audiobook' ? 'Audiobook' : track.kind === 'podcast' ? 'Podcast episode' : 'Unknown artist')} />{track.duration ? ` · ${formatDuration(track.duration)}` : ''}</p>
+      {onPlay ? <Link to={track.source === 'radio-browser' ? '/radio' : audioDetailPath(track)} onClick={event => event.stopPropagation()} className={`block truncate text-sm font-medium hover:underline ${active ? 'text-primary' : ''}`} title={`View details for ${track.title}`}>{track.title}</Link> : <p className={`truncate text-sm font-medium ${active ? 'text-primary' : ''}`} title={track.title}>{track.title}</p>}
+      <p className="truncate text-xs text-muted-foreground">{track.source === 'radio-browser' ? (track.artist || 'Live radio') : <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist ?? track.album ?? (track.kind === 'audiobook' ? 'Audiobook' : track.kind === 'podcast' ? 'Podcast episode' : 'Unknown artist')} />}{track.duration ? ` · ${formatDuration(track.duration)}` : ''}</p>
     </div>
     <div className="flex w-max shrink-0 items-center justify-self-end">
       {active && <span className="mr-1 text-xs font-medium text-primary">Playing</span>}

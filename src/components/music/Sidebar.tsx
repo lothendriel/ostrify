@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useLocation, useMatch } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3, Video } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3, Video, Radio } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
@@ -29,6 +29,7 @@ const navItems = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/search", label: "Search", icon: Search },
   { to: "/music", label: "Music", icon: Music },
+  { to: "/radio", label: "Radio", icon: Radio },
   { to: "/podcasts", label: "Podcasts", icon: Mic },
   { to: "/audiobooks", label: "Audiobooks", icon: BookOpen },
   { to: "/friends", label: "Friends", icon: Users },

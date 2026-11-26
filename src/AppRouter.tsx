@@ -10,6 +10,7 @@ import { TunestrPlayerProvider } from "./components/music/TunestrPlayer";
 
 const Index = lazy(() => import("./pages/Index"));
 const MusicNewsPage = lazy(() => import("./pages/MusicNewsPage"));
+const LocalRadioPage = lazy(() => import("./pages/LocalRadioPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const PlaylistPage = lazy(() => import("./pages/PlaylistPage"));
@@ -60,6 +61,7 @@ export function AppRouter() {
                     <Route path="/audio" element={<AudioDetailPage />} />
                     <Route path="/listen" element={<ListenPage />} />
                     <Route path="/music-news" element={<MusicNewsPage />} />
+                    <Route path="/radio" element={<LocalRadioPage />} />
                     <Route path="/search" element={<SearchPage />} />
                     <Route path="/category/:id" element={<CategoryPage />} />
                     <Route path="/category/:id/publishers" element={<CategoryCollectionsPage type="publishers" />} />

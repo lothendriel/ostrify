@@ -75,7 +75,8 @@ function PodcastShowLink({ track }: { track: Track }) {
 export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle: () => void; queueOpen?: boolean }) {
   const player = usePlayer();
   const { current } = player;
-  const canGoNext = !!current && (player.index < player.queue.length - 1 || player.repeat === "all" || (player.shuffle && player.queue.length > 1));
+  const isRadio = current?.source === 'radio-browser';
+  const canGoNext = !isRadio && !!current && (player.index < player.queue.length - 1 || player.repeat === "all" || (player.shuffle && player.queue.length > 1));
 
   const VolumeIcon = player.muted || player.volume === 0 ? VolumeX : player.volume < 0.5 ? Volume1 : Volume2;
 
@@ -89,12 +90,12 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
               <TrackArtwork track={current} className="size-10 shrink-0 sm:size-14" />
               <div className="min-w-0 flex-1 overflow-hidden">
                 <span className="mb-1 hidden text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet sm:block">{player.isPlaying ? "Now playing" : "Ready to play"}</span>
-                <Link to={audioDetailPath(current)} className="block min-w-0 truncate text-ellipsis text-xs font-medium hover:underline sm:text-sm" aria-label={`View details for ${current.title}`} title={current.title}>{current.title}</Link>
+                <Link to={isRadio ? '/radio' : audioDetailPath(current)} className="block min-w-0 truncate text-ellipsis text-xs font-medium hover:underline sm:text-sm" aria-label={isRadio ? `Radio: ${current.title}` : `View details for ${current.title}`} title={current.title}>{current.title}</Link>
                 <div className="truncate text-[11px] text-muted-foreground sm:text-xs">
-                  {player.playbackError ? <span role="status" className="text-destructive" title={player.playbackError}>{player.playbackError}</span> : current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
+                  {player.playbackError ? <span role="status" className="text-destructive" title={player.playbackError}>{player.playbackError}</span> : isRadio ? <span>{current.artist || 'Live radio'}</span> : current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
                 </div>
               </div>
-              {current.kind === 'music' && current.source !== 'tunestr' && <div className="hidden sm:flex items-center">
+              {current.kind === 'music' && current.source !== 'tunestr' && !isRadio && <div className="hidden sm:flex items-center">
                 <LikeButton trackId={current.id} size={16} />
               </div>}
               {current.source !== 'librivox' && current.source !== 'fountain' && current.kind === 'podcast' && <div className="hidden sm:flex items-center">
@@ -111,6 +112,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleShuffleAutoplay}
+            disabled={isRadio}
             aria-label={player.shuffle ? "Shuffle on" : player.autoplay ? "Autoplay similar music on" : "Shuffle and autoplay off"}
             aria-pressed={player.shuffle || player.autoplay}
             title={player.shuffle ? "Shuffle on — click for autoplay" : player.autoplay ? "Autoplay on — click to turn off" : "Shuffle and autoplay off — click to shuffle"}
@@ -122,6 +124,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleRepeat}
+            disabled={isRadio}
             aria-label={`Repeat: ${player.repeat}`}
             aria-pressed={player.repeat !== "off"}
             title={player.repeat === "off" ? "Repeat off — click to repeat queue" : player.repeat === "all" ? "Repeat queue — click to repeat current track" : "Repeat current track — click to turn off"}
@@ -129,7 +132,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           >
             {player.repeat === "one" ? <Repeat1 className="size-4" /> : <Repeat className="size-4" />}
           </Button>
-          <ShareTrackButton track={current} />
+          {!isRadio && <ShareTrackButton track={current} />}
           <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         </div>
       </div>
@@ -141,6 +144,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleShuffleAutoplay}
+            disabled={isRadio}
             aria-label={player.shuffle ? "Shuffle on" : player.autoplay ? "Autoplay similar music on" : "Shuffle and autoplay off"}
             aria-pressed={player.shuffle || player.autoplay}
             title={player.shuffle ? "Shuffle on — click for autoplay" : player.autoplay ? "Autoplay on — click to turn off" : "Shuffle and autoplay off — click to shuffle"}
@@ -152,7 +156,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.previous}
-            disabled={!current}
+            disabled={!current || isRadio}
             aria-label="Previous"
             className="rounded-full size-10 text-muted-foreground hover:text-foreground sm:size-8"
           >
@@ -181,6 +185,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleRepeat}
+            disabled={isRadio}
             aria-label={`Repeat: ${player.repeat}`}
             className={cn("rounded-full size-8 hidden sm:inline-flex", player.repeat !== "off" ? "text-primary" : "text-muted-foreground")}
           >
@@ -189,7 +194,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
         </div>
 
         {/* Seek bar */}
-        <div className="flex items-center gap-2 w-full max-w-xl">
+        {isRadio ? <div className="flex w-full max-w-xl items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary"><span className="size-2 rounded-full bg-red-500" /> Live radio</div> : <div className="flex items-center gap-2 w-full max-w-xl">
           <span className="text-[11px] text-muted-foreground tabular-nums w-10 text-right">
             {formatDuration(player.progress)}
           </span>
@@ -206,12 +211,12 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           <span className="text-[11px] text-muted-foreground tabular-nums w-10">
             {formatDuration(player.duration)}
           </span>
-        </div>
+        </div>}
       </div>
 
       {/* Queue and volume */}
       <div className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
-        <ShareTrackButton track={current} />
+        {!isRadio && <ShareTrackButton track={current} />}
         <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         <div className="hidden md:flex items-center gap-2">
           <Button

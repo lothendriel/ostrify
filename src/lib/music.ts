@@ -16,7 +16,7 @@ export interface Track {
   /** Nostr event kind preserved in share links when event payload is not carried. */
   eventKind?: number;
   /** External catalog tracks are not Nostr events. */
-  source?: "wavlake" | "librivox" | "gutenberg" | "tunestr" | "fountain" | "podcast-index";
+  source?: "wavlake" | "librivox" | "gutenberg" | "tunestr" | "fountain" | "podcast-index" | "radio-browser";
   artistId?: string;
   /** Explicit Nostr identity for the artist, distinct from the event publisher. */
   artistPubkey?: string;

@@ -60,7 +60,7 @@ function restoreTrack(value: unknown): Track | undefined {
     typeof createdAt !== "number" || !Number.isFinite(createdAt)
   ) return undefined;
 
-  const source = ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(String(value.source))
+  const source = ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index", "radio-browser"].includes(String(value.source))
     ? value.source as Track["source"]
     : undefined;
   const duration = typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration > 0
@@ -354,7 +354,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     wantsPlaybackRef.current = false;
     pendingAutoplayRef.current = false;
     setIsPlaying(false);
-    setPlaybackError(blocked ? "Playback was blocked. Press Play to try again." : sources.urls.length > 1 ? "Audio unavailable from its source and backups." : "Audio source unavailable. Press Play to retry.");
+    setPlaybackError(blocked ? "Playback was blocked. Press Play to try again." : track.source === "radio-browser" ? "Station unavailable or unsupported. Press Play to retry." : sources.urls.length > 1 ? "Audio unavailable from its source and backups." : "Audio source unavailable. Press Play to retry.");
     const currentQueue = queueRef.current;
     const currentIndex = indexRef.current;
     if (currentQueue[currentIndex]) {
@@ -444,13 +444,15 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       audio.src = safeUrl;
       audio.load();
     } else if (!restoredStateRef.current) {
-      try { audio.currentTime = 0; } catch { /* The source may not be seekable. */ }
+      if (current.source !== "radio-browser") {
+        try { audio.currentTime = 0; } catch { /* The source may not be seekable. */ }
+      }
     }
     if (restoredStateRef.current) {
       const restorePosition = () => {
         if (!restoredStateRef.current) return;
         const requestedPosition = pendingSeekRef.current;
-        if (requestedPosition > 0 && Number.isFinite(audio.duration)) {
+        if (current.source !== "radio-browser" && requestedPosition > 0 && Number.isFinite(audio.duration)) {
           try { audio.currentTime = Math.min(requestedPosition, Math.max(0, audio.duration - 0.25)); } catch { /* Not seekable yet. */ }
         }
         const position = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
@@ -593,7 +595,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     const startingIndex = indexRef.current;
     const seed = startingQueue[startingIndex];
     const startingEpoch = autoplayEpochRef.current;
-    if (!autoplayRef.current || !seed || seed.kind !== "music" || autoplayBusyRef.current === startingEpoch) return;
+    if (!autoplayRef.current || !seed || seed.kind !== "music" || seed.source === "radio-browser" || autoplayBusyRef.current === startingEpoch) return;
     if (startingIndex !== startingQueue.length - 1 || autoplayQueueKeyRef.current === startingQueue.map(track => track.id).join("|")) return;
 
     const queueKey = startingQueue.map(track => track.id).join("|");
@@ -680,6 +682,11 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     const onEnded = () => {
       const active = queueRef.current[indexRef.current];
       if (!current || active?.id !== current.id || active.url !== current.url) return;
+      if (current.source === "radio-browser") {
+        setIsPlaying(false);
+        setPlaybackError("This live station stopped. Press Play to reconnect.");
+        return;
+      }
       if (playerPreferencesRef.current.repeat === "one") {
         try { audio.currentTime = 0; } catch { /* The source may not be seekable. */ }
         playAudio(audio);
@@ -748,6 +755,22 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     const nextIndex = hasCurrentTrack ? position + 1 : 0;
     selectQueueIndex([...currentQueue.slice(0, nextIndex), track, ...currentQueue.slice(nextIndex)], nextIndex);
   }, [selectQueueIndex]);
+
+  const playStation = useCallback((station: Track) => {
+    const existing = queueRef.current;
+    const position = indexRef.current;
+    const before = existing.slice(0, Math.max(0, position + 1)).filter(track => track.source !== "radio-browser");
+    const upcoming = existing.slice(Math.max(0, position + 1)).filter(track => track.source !== "radio-browser");
+    selectQueueIndex([...before, station, ...upcoming], before.length);
+    // Start directly in the click handler so browsers can honor the user gesture.
+    const audio = audioRef.current;
+    const url = sanitizeUrl(station.url);
+    if (audio && url) {
+      sourceRef.current = { urls: [url], index: 0 };
+      if (audio.src !== url) { audio.src = url; audio.load(); }
+      playAudio(audio);
+    }
+  }, [selectQueueIndex, playAudio]);
 
   const addToQueue = useCallback((tracks: Track[]) => {
     if (tracks.length === 0) return;
@@ -838,6 +861,10 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     autoplayEpochRef.current++;
     autoplayQueueKeyRef.current = "";
     if (audio.paused) {
+      if (queueRef.current[indexRef.current]?.source === "radio-browser") {
+        pendingSeekRef.current = 0;
+        audio.load();
+      }
       if (restoredStateRef.current) pendingAutoplayRef.current = true;
       playAudio(audio);
     } else {
@@ -921,6 +948,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       autoplay,
       setAutoplay,
       playQueue,
+      playStation,
       playTrack,
       addToQueue,
       playNext,
@@ -953,6 +981,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       autoplay,
       setAutoplay,
       playQueue,
+      playStation,
       playTrack,
       addToQueue,
       playNext,
