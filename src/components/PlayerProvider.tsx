@@ -931,6 +931,8 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     setRepeat(nextMode);
   }, []);
 
+  const getPlaybackElement = useCallback(() => audioRef.current, []);
+
   const value = useMemo(
     () => ({
       queue,
@@ -939,6 +941,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       current,
       isPlaying,
       playbackError,
+      getPlaybackElement,
       progress,
       duration,
       volume,
@@ -972,6 +975,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       current,
       isPlaying,
       playbackError,
+      getPlaybackElement,
       progress,
       duration,
       volume,

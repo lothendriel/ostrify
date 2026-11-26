@@ -15,6 +15,8 @@ export interface PlayerState {
   isPlaying: boolean;
   /** An audio playback request was blocked or failed. */
   playbackError?: string;
+  /** The existing playback element, for read-only synchronisation with optional visualisations. */
+  getPlaybackElement: () => HTMLAudioElement | null;
   /** Current playback position in seconds. */
   progress: number;
   /** Duration of current track in seconds. */

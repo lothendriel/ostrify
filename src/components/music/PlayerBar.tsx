@@ -10,6 +10,7 @@ import {
   Volume2,
   Volume1,
   VolumeX,
+  AudioLines,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -26,6 +27,7 @@ import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { QueuePanelButton } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
 import { audioDetailPath } from "@/lib/audioDetail";
+import { NowPlaying } from "./NowPlaying";
 
 // This one-time Thanksgiving surprise ends at midnight on November 28, 2026,
 // according to the listener's local clock (including when the app stays open).
@@ -74,6 +76,7 @@ function PodcastShowLink({ track }: { track: Track }) {
 
 export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle: () => void; queueOpen?: boolean }) {
   const player = usePlayer();
+  const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
   const { current } = player;
   const isRadio = current?.source === 'radio-browser';
   const canGoNext = !isRadio && !!current && (player.index < player.queue.length - 1 || player.repeat === "all" || (player.shuffle && player.queue.length > 1));
@@ -108,6 +111,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1 sm:hidden">
+          <Button variant="ghost" size="icon" onClick={() => setNowPlayingOpen(true)} disabled={!current} aria-label="Open now playing" title="Now playing" className="size-8 rounded-full text-muted-foreground"><AudioLines className="size-4" /></Button>
           <Button
             variant="ghost"
             size="icon"
@@ -216,6 +220,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
 
       {/* Queue and volume */}
       <div className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
+        <Button variant="ghost" size="icon" onClick={() => setNowPlayingOpen(true)} disabled={!current} aria-label="Open now playing" title="Now playing" className="size-8 rounded-full text-muted-foreground"><AudioLines className="size-4" /></Button>
         {!isRadio && <ShareTrackButton track={current} />}
         <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         <div className="hidden md:flex items-center gap-2">
@@ -237,6 +242,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           />
         </div>
       </div>
+      <NowPlaying open={nowPlayingOpen} onOpenChange={setNowPlayingOpen} />
     </footer>
   );
 }
