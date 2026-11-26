@@ -28,7 +28,8 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
     const canvas = canvasRef.current;
     // iOS can suspend the audible player when another media element starts.
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    if (!primary || !canvas || isIOS || current.source === 'radio-browser' || typeof AudioContext === 'undefined') {
+    const isLiveRadio = current.source === 'radio-browser';
+    if (!primary || !canvas || isIOS || typeof AudioContext === 'undefined') {
       onStatus('unavailable');
       return;
     }
@@ -90,7 +91,9 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
           ctx.fillRect(i * (barWidth + gap), height - barHeight, barWidth, barHeight);
         }
         ctx.globalAlpha = 1;
-        if (performance.now() - lastSync > 2000) {
+        // A second live connection has its own timeline and cannot be sought to the
+        // audible stream's currentTime. Its bars may lag or lead slightly.
+        if (!isLiveRadio && performance.now() - lastSync > 2000) {
           lastSync = performance.now();
           if (Number.isFinite(primary.currentTime) && Math.abs(audio.currentTime - primary.currentTime) > 0.5) {
             try { audio.currentTime = primary.currentTime; } catch { /* Wait for metadata. */ }
@@ -103,6 +106,12 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
         window.clearTimeout(failureTimer);
         cancelAnimationFrame(frame);
         audio.pause();
+        if (isLiveRadio && sourceUrl) {
+          // Disconnect the extra live stream when it is not being visualised.
+          audio.removeAttribute('src');
+          audio.load();
+          sourceUrl = '';
+        }
       };
       const sync = () => {
         stop();
@@ -116,7 +125,7 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
           onStatus('loading');
         }
         audio.playbackRate = primary.playbackRate;
-        if (Number.isFinite(primary.currentTime)) {
+        if (!isLiveRadio && Number.isFinite(primary.currentTime)) {
           try { audio.currentTime = primary.currentTime; } catch { /* Retry after metadata. */ }
         }
         const generation = syncGeneration;
@@ -136,7 +145,7 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
       };
       const onError = () => { if (!disposed) { stop(); onStatus('unavailable'); } };
       const onMetadata = () => {
-        if (Number.isFinite(primary.currentTime)) {
+        if (!isLiveRadio && Number.isFinite(primary.currentTime)) {
           try { audio.currentTime = primary.currentTime; } catch { /* Source may not be seekable. */ }
         }
       };
@@ -233,7 +242,7 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
           <div className="relative mt-6 h-24 overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] sm:mt-8 sm:h-36">
             <div className="absolute inset-x-4 bottom-4 top-4"><Spectrum enabled={open} onStatus={setStatus} /></div>
             {(status === 'unavailable' || reducedMotion || !player.isPlaying) && <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
-              <div className="max-w-sm"><AudioLines aria-hidden="true" className="mx-auto mb-2 size-5 text-green-300/80" /><p className="text-xs leading-relaxed text-white/70">{reducedMotion ? 'Visualiser paused to respect your reduced motion preference.' : isRadio ? 'Visualisation is not available for live radio.' : status === 'unavailable' ? 'Visualisation unavailable for this source or device. Playback is unaffected.' : 'Visualiser is ready when playback starts.'}</p></div>
+              <div className="max-w-sm"><AudioLines aria-hidden="true" className="mx-auto mb-2 size-5 text-green-300/80" /><p className="text-xs leading-relaxed text-white/70">{reducedMotion ? 'Visualiser paused to respect your reduced motion preference.' : status === 'unavailable' ? isRadio ? 'Visualisation unavailable for this station or device. Some stations do not allow audio analysis. Playback is unaffected.' : 'Visualisation unavailable for this source or device. Playback is unaffected.' : 'Visualiser is ready when playback starts.'}</p></div>
             </div>}
             {status === 'loading' && player.isPlaying && !reducedMotion && <div className="absolute inset-0 flex items-center justify-center text-xs text-white/70" role="status">Connecting visualiser…</div>}
           </div>
