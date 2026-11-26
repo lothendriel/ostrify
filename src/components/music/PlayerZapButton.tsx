@@ -4,6 +4,8 @@ import type { NostrEvent } from "@nostrify/nostrify";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, Zap } from "lucide-react";
 import { nip19, verifyEvent } from "nostr-tools";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useAppContext } from "@/hooks/useAppContext";
@@ -21,6 +23,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 const HEX_KEY = /^[0-9a-f]{64}$/i;
 const AMOUNTS = [21, 100, 500, 1000];
+
+type BrowserLightningWallet = {
+  enable: () => Promise<void>;
+  sendPayment: (paymentRequest: string) => Promise<{ preimage: string }>;
+};
 
 type Recipient = { pubkey: string; name: string; role: "Artist" | "Publisher"; source: LnurlSource; params: LnurlPayParams };
 type ReceiptWatch = { invoice: string; provider: string; recipient: string; requestId: string; relays: string[]; since: number };
@@ -72,8 +79,11 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   const [receiptWatch, setReceiptWatch] = useState<ReceiptWatch | null>(null);
   const [lockedRecipient, setLockedRecipient] = useState<Recipient | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [paymentUncertain, setPaymentUncertain] = useState(false);
   const [copied, setCopied] = useState(false);
   const dialogSession = useRef(0);
+  const paymentPending = useRef(false);
   const { user } = useCurrentUser();
   const { nostr } = useNostr();
   const { config } = useAppContext();
@@ -95,6 +105,8 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
     ...method,
   } : undefined;
   const recipient = lockedRecipient ?? availableRecipient;
+  const browserWallet = (window as Window & { webln?: BrowserLightningWallet }).webln;
+  const hasBrowserWallet = typeof browserWallet?.enable === "function" && typeof browserWallet?.sendPayment === "function";
 
   useEffect(() => {
     if (!open || !receiptWatch || receiptWatch.relays.length === 0) return;
@@ -112,6 +124,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
           setInvoice(null);
           setReceiptWatch(null);
           setCopied(false);
+          setPaymentUncertain(false);
           setLockedRecipient(null);
           toast({ title: "Zap receipt received", description: "The recipient’s Lightning provider reported your zap." });
           break;
@@ -125,8 +138,9 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   }, [nostr, open, receiptWatch, toast]);
 
   const close = (nextOpen: boolean) => {
+    if (!nextOpen && paymentPending.current) return;
     setOpen(nextOpen);
-    if (!nextOpen) { dialogSession.current++; setInvoice(null); setReceiptWatch(null); setCopied(false); setLockedRecipient(null); }
+    if (!nextOpen) { dialogSession.current++; setInvoice(null); setReceiptWatch(null); setCopied(false); setPaymentUncertain(false); setLockedRecipient(null); }
   };
 
   const createInvoice = async () => {
@@ -182,6 +196,41 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
     }
   };
 
+  const payWithBrowserWallet = async () => {
+    if (!invoice || !browserWallet || !hasBrowserWallet || paymentPending.current) return;
+    const session = dialogSession.current;
+    let paymentRequested = false;
+    paymentPending.current = true;
+    setIsPaying(true);
+    try {
+      // Check again immediately before handing an untrusted invoice to a wallet.
+      const decoded = assertInvoiceAmount(invoice, Number(amount) * 1000);
+      if (!decoded.paymentHash || !/^[0-9a-f]{64}$/i.test(decoded.paymentHash)) throw new Error("This invoice has no valid payment hash.");
+      await browserWallet.enable();
+      if (session !== dialogSession.current) return;
+      paymentRequested = true;
+      const result = await browserWallet.sendPayment(invoice);
+      if (session !== dialogSession.current) return;
+      if (!result || typeof result.preimage !== "string" || !/^[0-9a-f]{64}$/i.test(result.preimage) || bytesToHex(sha256(hexToBytes(result.preimage))) !== decoded.paymentHash) {
+        throw new Error("The wallet did not return a valid payment confirmation.");
+      }
+      paymentPending.current = false;
+      close(false);
+      toast({ title: "Payment sent", description: "Your Lightning wallet confirmed the payment." });
+    } catch (error) {
+      if (session !== dialogSession.current) return;
+      if (paymentRequested) setPaymentUncertain(true);
+      toast({
+        title: paymentRequested ? "Payment not confirmed" : "Could not connect to your Lightning wallet",
+        description: paymentRequested ? "Check your wallet’s history before trying again to avoid paying twice." : error instanceof Error ? error.message : "You can still pay the invoice manually.",
+        variant: "destructive",
+      });
+    } finally {
+      paymentPending.current = false;
+      setIsPaying(false);
+    }
+  };
+
   const copyInvoice = async () => {
     if (!invoice) return;
     try {
@@ -206,9 +255,10 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
           <p className="text-center text-lg font-semibold">{amount} sats</p>
           <div className="mx-auto w-fit rounded-lg bg-white p-3"><QRCodeCanvas value={`lightning:${invoice}`} size={220} className="block size-52 max-w-full" /></div>
           <div className="space-y-2"><Label htmlFor="player-zap-invoice">Lightning invoice</Label><div className="flex gap-2"><Input id="player-zap-invoice" value={invoice} readOnly className="min-w-0 font-mono text-xs" onClick={(event) => event.currentTarget.select()} /><Button type="button" variant="outline" size="icon" onClick={() => void copyInvoice()} aria-label="Copy Lightning invoice">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}</Button></div></div>
-          <Button type="button" className="w-full" onClick={() => { window.location.href = `lightning:${invoice}`; }}><ExternalLink className="size-4" /> Open Lightning wallet</Button>
-          <p className="text-center text-xs text-muted-foreground">{receiptWatch && receiptWatch.relays.length > 0 ? "Waiting for a zap receipt. Some providers or relays may not deliver one; check your wallet if it doesn’t arrive." : "Payment is completed in your wallet. Ostrify cannot automatically confirm this payment."}</p>
-          <Button type="button" variant="outline" className="w-full" onClick={() => close(false)}>Done</Button>
+          {hasBrowserWallet && <Button type="button" className="w-full" onClick={() => void payWithBrowserWallet()} disabled={isPaying || paymentUncertain || isCreating}><Zap className="size-4" /> {isPaying ? "Waiting for wallet…" : "Pay with browser wallet"}</Button>}
+          <Button type="button" variant={hasBrowserWallet ? "outline" : "default"} className="w-full" onClick={() => { window.location.href = `lightning:${invoice}`; }} disabled={isPaying || paymentUncertain}><ExternalLink className="size-4" /> Open Lightning wallet</Button>
+          <p className="text-center text-xs text-muted-foreground">{paymentUncertain ? "Payment status is unknown. Check your wallet’s history before paying again." : receiptWatch && receiptWatch.relays.length > 0 ? "Waiting for a zap receipt. Some providers or relays may not deliver one; check your wallet if it doesn’t arrive." : "Payment is completed in your wallet. Ostrify cannot automatically confirm a manual payment."}</p>
+          <Button type="button" variant="outline" className="w-full" onClick={() => close(false)} disabled={isPaying}>Done</Button>
         </div> : <div className="space-y-4">
           <div className="grid grid-cols-4 gap-2">{AMOUNTS.map((sats) => <Button key={sats} type="button" variant={amount === String(sats) ? "default" : "outline"} onClick={() => setAmount(String(sats))}>{sats}</Button>)}</div>
           <div className="space-y-2"><Label htmlFor="player-zap-amount">Amount in sats</Label><Input id="player-zap-amount" type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="numeric" /></div>
