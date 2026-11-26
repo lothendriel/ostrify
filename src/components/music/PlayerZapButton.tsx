@@ -27,7 +27,17 @@ const AMOUNTS = [21, 100, 500, 1000];
 type BrowserLightningWallet = {
   enable: () => Promise<void>;
   sendPayment: (paymentRequest: string) => Promise<{ preimage: string }>;
+  isSidecar?: boolean;
 };
+
+type WalletStatus = "not-found" | "unsupported" | "available" | "sidecar";
+
+function getBrowserWallet(): { status: WalletStatus; wallet?: BrowserLightningWallet } {
+  const provider = (window as Window & { webln?: Partial<BrowserLightningWallet> }).webln;
+  if (!provider) return { status: "not-found" };
+  if (typeof provider.enable !== "function" || typeof provider.sendPayment !== "function") return { status: "unsupported" };
+  return { status: provider.isSidecar === true ? "sidecar" : "available", wallet: provider as BrowserLightningWallet };
+}
 
 type Recipient = { pubkey: string; name: string; role: "Artist" | "Publisher"; source: LnurlSource; params: LnurlPayParams };
 type ReceiptWatch = { invoice: string; provider: string; recipient: string; requestId: string; relays: string[]; since: number };
@@ -81,6 +91,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   const [isCreating, setIsCreating] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
   const [paymentUncertain, setPaymentUncertain] = useState(false);
+  const [walletStatus, setWalletStatus] = useState<WalletStatus>(() => getBrowserWallet().status);
   const [copied, setCopied] = useState(false);
   const dialogSession = useRef(0);
   const paymentPending = useRef(false);
@@ -105,8 +116,24 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
     ...method,
   } : undefined;
   const recipient = lockedRecipient ?? availableRecipient;
-  const browserWallet = (window as Window & { webln?: BrowserLightningWallet }).webln;
-  const hasBrowserWallet = typeof browserWallet?.enable === "function" && typeof browserWallet?.sendPayment === "function";
+  const hasBrowserWallet = walletStatus === "available" || walletStatus === "sidecar";
+
+  useEffect(() => {
+    if (!open) return;
+    const refresh = () => setWalletStatus(getBrowserWallet().status);
+    window.addEventListener("webln:ready", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    // Also catch providers that do not announce readiness or are replaced later.
+    const interval = window.setInterval(refresh, 2000);
+    refresh();
+    return () => {
+      window.removeEventListener("webln:ready", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(interval);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || !receiptWatch || receiptWatch.relays.length === 0) return;
@@ -197,7 +224,13 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   };
 
   const payWithBrowserWallet = async () => {
-    if (!invoice || !browserWallet || !hasBrowserWallet || paymentPending.current) return;
+    if (!invoice || paymentPending.current) return;
+    const { wallet: browserWallet, status } = getBrowserWallet();
+    setWalletStatus(status);
+    if (!browserWallet) {
+      toast({ title: "Browser wallet not found", description: "Unlock your wallet extension and refresh or recheck wallet detection.", variant: "destructive" });
+      return;
+    }
     const session = dialogSession.current;
     let paymentRequested = false;
     paymentPending.current = true;
@@ -251,11 +284,16 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
           <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-primary" /> Support {recipient.role.toLowerCase()}</DialogTitle>
           <DialogDescription>Paying {recipient.role.toLowerCase()}: <strong className="break-words text-foreground">{recipient.name}</strong><br />For “{track.title}”</DialogDescription>
         </DialogHeader>
+        <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground" role="status" aria-live="polite">
+          <p className="font-medium text-foreground">{walletStatus === "sidecar" ? "Sidecar wallet detected" : walletStatus === "available" ? "Browser Lightning wallet detected" : walletStatus === "unsupported" ? "Browser wallet detected, but it does not support payments" : "No browser Lightning wallet detected"}</p>
+          <p className="mt-1">{hasBrowserWallet ? "Ostrify can request a payment; your wallet may ask for approval." : "Unlock your wallet extension and check its site access. You can still pay an invoice manually."}</p>
+          {!hasBrowserWallet && <button type="button" className="mt-2 font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2" onClick={() => setWalletStatus(getBrowserWallet().status)}>Check again</button>}
+        </div>
         {invoice ? <div className="space-y-4">
           <p className="text-center text-lg font-semibold">{amount} sats</p>
           <div className="mx-auto w-fit rounded-lg bg-white p-3"><QRCodeCanvas value={`lightning:${invoice}`} size={220} className="block size-52 max-w-full" /></div>
           <div className="space-y-2"><Label htmlFor="player-zap-invoice">Lightning invoice</Label><div className="flex gap-2"><Input id="player-zap-invoice" value={invoice} readOnly className="min-w-0 font-mono text-xs" onClick={(event) => event.currentTarget.select()} /><Button type="button" variant="outline" size="icon" onClick={() => void copyInvoice()} aria-label="Copy Lightning invoice">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}</Button></div></div>
-          {hasBrowserWallet && <Button type="button" className="w-full" onClick={() => void payWithBrowserWallet()} disabled={isPaying || paymentUncertain || isCreating}><Zap className="size-4" /> {isPaying ? "Waiting for wallet…" : "Pay with browser wallet"}</Button>}
+          {hasBrowserWallet && <Button type="button" className="w-full" onClick={() => void payWithBrowserWallet()} disabled={isPaying || paymentUncertain || isCreating}><Zap className="size-4" /> {isPaying ? "Waiting for wallet…" : walletStatus === "sidecar" ? "Pay with Sidecar" : "Pay with browser wallet"}</Button>}
           <Button type="button" variant={hasBrowserWallet ? "outline" : "default"} className="w-full" onClick={() => { window.location.href = `lightning:${invoice}`; }} disabled={isPaying || paymentUncertain}><ExternalLink className="size-4" /> Open Lightning wallet</Button>
           <p className="text-center text-xs text-muted-foreground">{paymentUncertain ? "Payment status is unknown. Check your wallet’s history before paying again." : receiptWatch && receiptWatch.relays.length > 0 ? "Waiting for a zap receipt. Some providers or relays may not deliver one; check your wallet if it doesn’t arrive." : "Payment is completed in your wallet. Ostrify cannot automatically confirm a manual payment."}</p>
           <Button type="button" variant="outline" className="w-full" onClick={() => close(false)} disabled={isPaying}>Done</Button>
