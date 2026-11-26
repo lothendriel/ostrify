@@ -28,6 +28,7 @@ import { QueuePanelButton } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
 import { audioDetailPath } from "@/lib/audioDetail";
 import { NowPlaying } from "./NowPlaying";
+import { PlayerZapButton } from "./PlayerZapButton";
 
 // This one-time Thanksgiving surprise ends at midnight on November 28, 2026,
 // according to the listener's local clock (including when the app stays open).
@@ -110,6 +111,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             <div className="text-xs text-muted-foreground sm:text-sm">Nothing playing</div>
           )}
         </div>
+        {current && <PlayerZapButton key={current.id} track={current} />}
         <div className="flex shrink-0 items-center gap-1 sm:hidden">
           <Button variant="ghost" size="icon" onClick={() => setNowPlayingOpen(true)} disabled={!current} aria-label="Open now playing" title="Now playing" className="size-8 rounded-full text-muted-foreground"><AudioLines className="size-4" /></Button>
           <Button
