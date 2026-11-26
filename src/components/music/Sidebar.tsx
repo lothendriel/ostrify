@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useMatch } from "react-router-dom";
-import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Disc3, Video, Radio } from "lucide-react";
+import { Home, Search, Library, Plus, Heart, Music, Mic, Users, BookOpen, BarChart3, Play, Pause, LoaderCircle, ChevronDown, Video, Radio } from "lucide-react";
 import { useAudiobookLibrary, type SavedAudiobook } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
 import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
@@ -21,9 +21,6 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { parseN94Stream, parseTunestrStreamEvent } from '@/hooks/useTunestrStreams';
 import { CreatePlaylistDialog } from "./CreatePlaylistDialog";
 import { useSavedAlbums } from '@/hooks/useSavedAlbums';
-import { useWavlakeRelease } from '@/hooks/useWavlake';
-import { groupIntoAlbums, useArtistTracks } from '@/hooks/useArtistTracks';
-import type { SavedAlbum } from '@/lib/savedAlbums';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const navItems = [
@@ -121,9 +118,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                 <div className="size-11 rounded-md bg-gradient-to-br from-sky-500 to-primary flex items-center justify-center shrink-0"><Users className="size-5 text-white" /></div>
                 <div className="min-w-0"><div className="font-medium text-sm truncate">Followed Artists</div><div className="text-xs text-muted-foreground">Artists</div></div>
               </NavLink>
-              <PlaylistLibraryItem playlist={likedPlaylist} liked onNavigate={onNavigate} />
+              <PlaylistLibraryItem playlist={likedPlaylist} liked albumCount={savedAlbums.albums.length} onNavigate={onNavigate} />
               <TunestrLibraryItem playlist={tunestrFavorites} onNavigate={onNavigate} />
-              <SavedAlbumsLibraryItem albums={savedAlbums.albums} onNavigate={onNavigate} />
               <AudiobookLibraryItem books={savedAudiobooks} favoriteCount={audiobookLibrary.favoriteBooks.length} collectionCount={audiobookLibrary.collections.length} onNavigate={onNavigate} />
               <PodcastLibraryItem favorites={podcastFavorites.data} onNavigate={onNavigate} />
               {isLoading && <p className="px-3 py-2 text-sm text-muted-foreground">Loading…</p>}
@@ -147,9 +143,9 @@ function RadioFavoritesLibraryItem({ onNavigate }: { onNavigate?: () => void }) 
   </NavLink>;
 }
 
-function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist: Pick<Playlist, "id" | "title" | "trackIds" | "image">; liked?: boolean; onNavigate?: () => void }) {
+function PlaylistLibraryItem({ playlist, liked = false, albumCount = 0, onNavigate }: { playlist: Pick<Playlist, "id" | "title" | "trackIds" | "image">; liked?: boolean; albumCount?: number; onNavigate?: () => void }) {
   const location = useLocation();
-  const isActive = !!useMatch({ path: liked ? "/liked" : `/playlist/${playlist.id}`, end: true });
+  const isActive = liked ? location.pathname === '/liked' || location.pathname === '/saved-albums' : location.pathname === `/playlist/${playlist.id}`;
   const player = usePlayer();
   const { toast } = useToast();
   const [shouldLoad, setShouldLoad] = useState(false);
@@ -190,8 +186,8 @@ function PlaylistLibraryItem({ playlist, liked = false, onNavigate }: { playlist
       {isPlayingHere ? <Pause className="relative z-10 size-5 fill-current" /> : <Play className="absolute z-10 hidden size-5 fill-current group-hover:block" />}
     </Button>
     <NavLink to={liked ? "/liked" : `/playlist/${playlist.id}`} onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <div className="truncate text-sm font-medium">{playlist.title}</div>
-      <div className="text-xs text-muted-foreground">{playlist.trackIds.length} songs</div>
+      <div className="truncate text-sm font-medium">{liked ? 'Saved Music' : playlist.title}</div>
+      <div className="text-xs text-muted-foreground">{playlist.trackIds.length} songs{liked && ` · ${albumCount} ${albumCount === 1 ? 'album' : 'albums'}`}</div>
     </NavLink>
   </div>;
 }
@@ -235,77 +231,6 @@ function TunestrLibraryItem({ playlist, onNavigate }: { playlist: Pick<Playlist,
       <div className="text-xs text-muted-foreground">{playlist.trackIds.length} saved</div>
     </NavLink>
   </div>;
-}
-
-function SavedAlbumsLibraryItem({ albums, onNavigate }: { albums: SavedAlbum[]; onNavigate?: () => void }) {
-  const isActive = !!useMatch('/saved-albums');
-  const player = usePlayer();
-  const { toast } = useToast();
-  const [selectedAlbum, setSelectedAlbum] = useState<SavedAlbum>();
-  const [loading, setLoading] = useState(false);
-  const callbacks = useRef({ onNavigate, toast, player });
-  callbacks.current = { onNavigate, toast, player };
-  const isSavedAlbumQueue = !!player.queue.length && albums.some(album => player.queue.every(track => album.source === 'wavlake'
-    ? track.source === 'wavlake' && track.albumId?.toLowerCase() === album.id.toLowerCase()
-    : track.pubkey.toLowerCase() === album.artistPubkey?.toLowerCase() && track.album?.toLocaleLowerCase() === album.title.toLocaleLowerCase()));
-  const isPlayingHere = isSavedAlbumQueue && player.isPlaying;
-  const handlePlay = () => {
-    if (isSavedAlbumQueue) {
-      player.togglePlay();
-      return;
-    }
-    if (!albums.length) {
-      toast({ title: 'No saved albums', description: 'Save an album to your library to play it here.' });
-      return;
-    }
-    const album = albums[Math.floor(Math.random() * albums.length)];
-    if (album) {
-      setLoading(true);
-      setSelectedAlbum(album);
-    }
-  };
-  return <>
-    <div className={libraryRowClass(isActive)}>
-      <Button type="button" variant="ghost" size="icon" className="group size-11 shrink-0 rounded-md bg-gradient-to-br from-emerald-600 to-teal-900 text-white hover:brightness-110 hover:text-white focus-visible:ring-2 focus-visible:ring-ring" onClick={handlePlay} disabled={loading} aria-label={isPlayingHere ? 'Pause Saved Albums' : 'Play Saved Albums'} title="Play a random saved album">
-        {loading ? <LoaderCircle className="size-5 animate-spin" /> : isPlayingHere ? <Pause className="size-5 fill-current" /> : <><Disc3 className="size-5 group-hover:hidden" /><Play className="hidden size-5 fill-current group-hover:block" /></>}
-      </Button>
-      <NavLink to="/saved-albums" onClick={onNavigate} className="min-w-0 flex-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <div className="truncate text-sm font-medium">Saved Albums</div>
-        <div className="text-xs text-muted-foreground">{albums.length} {albums.length === 1 ? 'album' : 'albums'}</div>
-      </NavLink>
-    </div>
-    {selectedAlbum && <SavedAlbumQueueLoader album={selectedAlbum} onLoaded={tracks => { callbacks.current.player.playQueue(tracks); setLoading(false); setSelectedAlbum(undefined); callbacks.current.onNavigate?.(); }} onError={message => { setLoading(false); setSelectedAlbum(undefined); callbacks.current.toast({ title: 'Could not load saved album', description: message }); }} />}
-  </>;
-}
-
-function SavedAlbumQueueLoader({ album, onLoaded, onError }: { album: SavedAlbum; onLoaded: (tracks: Track[]) => void; onError: (message: string) => void }) {
-  if (album.source === 'wavlake') return <WavlakeAlbumQueueLoader album={album} onLoaded={onLoaded} onError={onError} />;
-  if (!album.artistPubkey) return <AlbumTracksLoader tracks={[]} loading={false} onLoaded={onLoaded} onError={onError} />;
-  return <NostrAlbumQueueLoader album={album} onLoaded={onLoaded} onError={onError} />;
-}
-
-function WavlakeAlbumQueueLoader({ album, onLoaded, onError }: { album: SavedAlbum; onLoaded: (tracks: Track[]) => void; onError: (message: string) => void }) {
-  const query = useWavlakeRelease('album', album.id);
-  return <AlbumTracksLoader tracks={query.data?.tracks ?? []} loading={query.isLoading} error={query.isError ? 'Wavlake could not load this album right now.' : undefined} onLoaded={onLoaded} onError={onError} />;
-}
-
-function NostrAlbumQueueLoader({ album, onLoaded, onError }: { album: SavedAlbum; onLoaded: (tracks: Track[]) => void; onError: (message: string) => void }) {
-  const query = useArtistTracks(album.artistPubkey);
-  const tracks = useMemo(() => groupIntoAlbums(query.data ?? []).albums.find(item => item.title?.toLocaleLowerCase() === album.title.toLocaleLowerCase())?.tracks ?? [], [album.title, query.data]);
-  return <AlbumTracksLoader tracks={tracks} loading={query.isLoading} error={query.isError ? 'This album could not be loaded from your relays.' : undefined} onLoaded={onLoaded} onError={onError} />;
-}
-
-function AlbumTracksLoader({ tracks, loading, error, onLoaded, onError }: { tracks: Track[]; loading: boolean; error?: string; onLoaded: (tracks: Track[]) => void; onError: (message: string) => void }) {
-  const callbacks = useRef({ onLoaded, onError });
-  callbacks.current = { onLoaded, onError };
-  const handled = useRef(false);
-  useEffect(() => {
-    if (handled.current || loading) return;
-    handled.current = true;
-    if (tracks.length) callbacks.current.onLoaded(tracks);
-    else callbacks.current.onError(error ?? 'No playable tracks were found for this album.');
-  }, [error, loading, tracks]);
-  return null;
 }
 
 function AudiobookLibraryItem({ books, favoriteCount, collectionCount, onNavigate }: { books: SavedAudiobook[]; favoriteCount: number; collectionCount: number; onNavigate?: () => void }) {

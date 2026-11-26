@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowDownAZ, Heart, Search, X } from "lucide-react";
+import { ArrowDownAZ, Disc3, Heart, Search, X } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import SavedAlbumsPage from "./SavedAlbumsPage";
+import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LIKED_SONGS_ID, usePlaylist, usePlaylistActions } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
@@ -16,7 +19,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type PlaylistSort = "original" | "title" | "artist";
 
 const LikedSongs = () => {
-  useSeoMeta({ title: "Liked Songs — Ostrify" });
   const { user } = useCurrentUser();
   const { data: playlist, isPartial, refetch: refetchLibrary } = usePlaylist(LIKED_SONGS_ID);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
@@ -66,7 +68,7 @@ const LikedSongs = () => {
     return (
       <div className="flex flex-col items-center justify-center text-center gap-4 py-24 px-6">
         <Heart className="size-12 text-primary" />
-        <h1 className="text-2xl font-bold">Your Liked Songs live here</h1>
+        <h2 className="text-2xl font-bold">Your Liked Songs live here</h2>
         <p className="text-muted-foreground max-w-sm">
           Log in with Nostr to save tracks to your public library across devices.
         </p>
@@ -77,8 +79,9 @@ const LikedSongs = () => {
 
   return (
     <div>
-      <CollectionHeader
-        subtitle="Playlist"
+        <CollectionHeader
+          headingLevel={2}
+          subtitle="Playlist"
         title="Liked Songs"
         description="Your favorite tracks on Nostr"
         gradient="linear-gradient(to bottom, hsl(262 60% 35%), transparent)"
@@ -128,4 +131,18 @@ const LikedSongs = () => {
   );
 };
 
-export default LikedSongs;
+export default function SavedMusicPage({ section = 'songs' }: { section?: 'songs' | 'albums' }) {
+  useSeoMeta({ title: `${section === 'songs' ? 'Liked Songs' : 'Saved Albums'} · Saved Music — Ostrify` });
+  return <div>
+    <div className="px-4 pt-6 sm:px-6">
+      <p className="text-xs font-semibold uppercase tracking-wider text-primary">Your library</p>
+      <h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">Saved Music</h1>
+      <p className="mt-2 text-sm text-muted-foreground">Your liked songs and saved albums, together in one place.</p>
+      <nav aria-label="Saved music sections" className="mt-5 flex gap-2 border-b border-border pb-3">
+        <NavLink to="/liked" end style={({ isActive }) => isActive ? { backgroundColor: '#5b21b6', color: '#ffffff' } : undefined} className={({ isActive }) => cn('inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', !isActive && 'bg-secondary text-muted-foreground hover:text-foreground')}><Heart className="size-4" /> Liked Songs</NavLink>
+        <NavLink to="/saved-albums" end style={({ isActive }) => isActive ? { backgroundColor: '#5b21b6', color: '#ffffff' } : undefined} className={({ isActive }) => cn('inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', !isActive && 'bg-secondary text-muted-foreground hover:text-foreground')}><Disc3 className="size-4" /> Saved Albums</NavLink>
+      </nav>
+    </div>
+    {section === 'songs' ? <LikedSongs /> : <SavedAlbumsPage />}
+  </div>;
+}

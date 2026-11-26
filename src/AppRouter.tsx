@@ -16,7 +16,7 @@ const SearchPage = lazy(() => import("./pages/SearchPage"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const PlaylistPage = lazy(() => import("./pages/PlaylistPage"));
 const PublicMusicPlaylistPage = lazy(() => import("./pages/PublicMusicPlaylistPage"));
-const LikedSongs = lazy(() => import("./pages/LikedSongs"));
+const SavedMusicPage = lazy(() => import("./pages/LikedSongs"));
 const TunestrLibraryPage = lazy(() => import("./pages/TunestrLibraryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const PodcastsPage = lazy(() => import("./pages/PodcastsPage"));
@@ -25,7 +25,6 @@ const FountainBrowsePage = lazy(() => import("./pages/PodcastsPage").then(module
 const PodcastBrowsePage = lazy(() => import("./pages/PodcastsPage").then(module => ({ default: module.PodcastBrowsePage })));
 const FountainShowPage = lazy(() => import("./pages/FountainShowPage"));
 const SavedPodcastsPage = lazy(() => import("./pages/SavedPodcastsPage"));
-const SavedAlbumsPage = lazy(() => import("./pages/SavedAlbumsPage"));
 const WavlakePage = lazy(() => import("./pages/WavlakePage"));
 const RankedReleasesPage = lazy(() => import("./pages/WavlakePage").then(module => ({ default: module.RankedReleasesPage })));
 const MusicDiscovery = lazy(() => import("./pages/MusicDiscovery"));
@@ -70,7 +69,7 @@ export function AppRouter() {
                     <Route path="/category/:id/albums" element={<CategoryCollectionsPage type="albums" />} />
                     <Route path="/playlist/:id" element={<PlaylistPage />} />
                     <Route path="/ostrify-playlist/:pubkey" element={<PublicMusicPlaylistPage />} />
-                    <Route path="/liked" element={<LikedSongs />} />
+                    <Route path="/liked" element={<SavedMusicPage section="songs" />} />
                     <Route path="/tunestr-library" element={<TunestrLibraryPage />} />
                     <Route path="/podcasts" element={<PodcastsPage />} />
                     <Route path="/podcasts/episodes" element={<CombinedPodcastEpisodesPage />} />
@@ -80,7 +79,7 @@ export function AppRouter() {
                     <Route path="/podcasts/nostr/episodes" element={<PodcastBrowsePage type="episodes" />} />
                     <Route path="/podcasts/fountain/:feedGuid" element={<FountainShowPage />} />
                     <Route path="/podcast-library" element={<SavedPodcastsPage />} />
-                    <Route path="/saved-albums" element={<SavedAlbumsPage />} />
+                    <Route path="/saved-albums" element={<SavedMusicPage section="albums" />} />
                     <Route path="/audiobook-library" element={<AudiobookLibraryPage />} />
                     <Route path="/audiobook-library/:id" element={<AudiobookLibraryPage />} />
                     <Route path="/audiobooks" element={<AudiobooksPage />} />

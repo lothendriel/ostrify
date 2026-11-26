@@ -14,6 +14,7 @@ interface CollectionHeaderProps {
   gradient?: string;
   tracks: Track[];
   actions?: React.ReactNode;
+  headingLevel?: 1 | 2;
 }
 
 export function CollectionHeader({
@@ -25,7 +26,9 @@ export function CollectionHeader({
   gradient,
   tracks,
   actions,
+  headingLevel = 1,
 }: CollectionHeaderProps) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2';
   const player = usePlayer();
   const safeImage = sanitizeUrl(image);
   const isThisPlaying =
@@ -59,9 +62,9 @@ export function CollectionHeader({
         </div>
         <div className="text-center sm:text-left min-w-0">
           {subtitle && <p className="text-sm font-semibold uppercase tracking-wide">{subtitle}</p>}
-          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight break-words my-2">
+          <Heading className="text-4xl sm:text-6xl font-extrabold tracking-tight break-words my-2">
             {title}
-          </h1>
+          </Heading>
           {description && <p className="text-muted-foreground mt-1 line-clamp-2">{description}</p>}
           <p className="text-sm text-muted-foreground mt-2">{tracks.length} tracks</p>
         </div>
