@@ -171,8 +171,9 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
 export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const player = usePlayer();
   const { current } = player;
-  const [enabled, setEnabled] = useState(false);
-  const [status, setStatus] = useState<VisualiserStatus>('off');
+  // Opening the listening room is the listener's opt-in for this session.
+  const [enabled, setEnabled] = useState(true);
+  const [status, setStatus] = useState<VisualiserStatus>('loading');
   const [attempt, setAttempt] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   useEffect(() => {
@@ -186,7 +187,7 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
   const control = 'inline-flex size-11 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-300 disabled:opacity-30';
 
   const changeOpen = (value: boolean) => {
-    if (!value) { setEnabled(false); setStatus('off'); }
+    if (!value) { setEnabled(true); setStatus('loading'); }
     onOpenChange(value);
   };
 
