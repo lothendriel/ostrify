@@ -11,6 +11,7 @@ import {
   Volume1,
   VolumeX,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,31 @@ import { AddToPlaylistMenu } from "./AddToPlaylistMenu";
 import { QueuePanelButton } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
 import { audioDetailPath } from "@/lib/audioDetail";
+
+// This one-time Thanksgiving surprise ends at midnight on November 28, 2026,
+// according to the listener's local clock (including when the app stays open).
+function isThanksgivingPlayIcon() {
+  const now = new Date();
+  return now.getFullYear() === 2026 && now.getMonth() === 10 && now.getDate() <= 27;
+}
+
+function ThanksgivingPlayIcon() {
+  const [showTurkey, setShowTurkey] = useState(isThanksgivingPlayIcon);
+
+  useEffect(() => {
+    const update = () => setShowTurkey(isThanksgivingPlayIcon());
+    const timer = window.setInterval(update, 60_000);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", update);
+    };
+  }, []);
+
+  return showTurkey
+    ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[2.5] object-contain mix-blend-multiply" />
+    : <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
+}
 
 function PodcastShowLink({ track }: { track: Track }) {
   const fountainGuid = fountainShowGuid(track.showId);
@@ -138,7 +164,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             aria-label={player.isPlaying ? "Pause" : "Play"}
             className="size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
           >
-            {player.isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current ml-0.5" />}
+            {player.isPlaying ? <Pause className="size-5 fill-current" /> : <ThanksgivingPlayIcon />}
           </Button>
           <Button
             variant="ghost"
