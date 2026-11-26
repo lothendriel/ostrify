@@ -14,6 +14,7 @@ import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
 import { ServiceWorkerUpdateNotice } from '@/components/ServiceWorkerUpdateNotice';
+import { AudiobookSyncProvider } from '@/hooks/useAudiobookLibrarySync';
 import { restorePublicPageCache, watchPublicPageCache } from '@/lib/publicPageCache';
 import AppRouter from './AppRouter';
 
@@ -79,11 +80,13 @@ export function App() {
               <TooltipProvider>
                 <Toaster />
                 <ServiceWorkerUpdateNotice />
-                <Suspense>
-                  <PublicPageCacheSync>
-                    <AppRouter />
-                  </PublicPageCacheSync>
-                </Suspense>
+                <AudiobookSyncProvider>
+                  <Suspense>
+                    <PublicPageCacheSync>
+                      <AppRouter />
+                    </PublicPageCacheSync>
+                  </Suspense>
+                </AudiobookSyncProvider>
               </TooltipProvider>
             </NostrProvider>
           </NostrLoginProvider>

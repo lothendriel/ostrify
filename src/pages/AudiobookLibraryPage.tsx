@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { BookOpen, Heart, ListMusic, Trash2 } from 'lucide-react';
@@ -23,10 +22,7 @@ function AudiobookTile({ book, onRemove, removeLabel }: { book: SavedAudiobook; 
 export default function AudiobookLibraryPage() {
   const { id } = useParams<{ id: string }>();
   const library = useAudiobookLibrary();
-  const sync = useAudiobookLibrarySync(true);
-  useEffect(() => {
-    sync.requestSync();
-  }, [id, sync.requestSync]);
+  const sync = useAudiobookLibrarySync();
   const collection = library.collections.find(item => item.id === id);
   const collectionBooks = id ? library.booksInCollection(id) : [];
   const favoriteIds = new Set(library.favoriteBooks.map(book => book.id));
@@ -35,7 +31,7 @@ export default function AudiobookLibraryPage() {
 
   useSeoMeta({ title: id ? `${collection?.title ?? 'Audiobook Collection'} — Ostrify` : 'Saved Audiobooks — Ostrify' });
 
-  if (id && !collection) return <div className="p-6"><h1 className="text-2xl font-bold">Collection not found</h1></div>;
+  if (id && !collection) return <div className="p-6"><h1 className="text-2xl font-bold">{sync.isLoading ? 'Loading collection…' : 'Collection not found'}</h1></div>;
 
   return <div className="space-y-8 p-4 sm:p-6">
     <header className="rounded-xl bg-gradient-to-br from-rose-950 via-violet-950 to-card p-6 sm:p-8">
@@ -48,9 +44,9 @@ export default function AudiobookLibraryPage() {
             : !sync.hasReadRelays ? <p>Enable at least one read relay in Settings to load your private audiobook library.</p>
               : !sync.hasWriteRelays ? <p>Enable at least one write relay in Settings to publish audiobook library updates.</p>
                 : sync.isLoading ? <p>Checking your encrypted audiobook library on your relays…</p>
-                : sync.isError ? <div><p>Could not load your encrypted library: {sync.error instanceof Error ? sync.error.message : 'Relay query failed.'}</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => void sync.refetch()}>Try again</Button><Button size="sm" variant="outline" onClick={() => window.location.reload()}>Reload app</Button></div></div>
-                  : sync.isPartial ? <div><p>Your saved library remains on this device. Some selected relays did not finish, so private sync is paused to avoid overwriting a newer copy. Check your relay settings if this continues.</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Retry relay check</Button><Button size="sm" variant="outline" asChild><Link to="/settings">Relay settings</Link></Button></div></div>
-                    : <p>Your library syncs as private, NIP-44-encrypted data on your read relays. Other clients cannot read its contents.</p>}
+                : sync.isError || sync.publishError ? <div><p>Private sync could not finish: {sync.publishError ?? (sync.error instanceof Error ? sync.error.message : 'Relay query failed.')}</p><p className="mt-1">Your saved books remain on this device.</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Try again</Button><Button size="sm" variant="outline" asChild><Link to="/settings">Relay settings</Link></Button></div></div>
+                  : sync.isPartial ? <div><p>Some library relays did not finish. Available books are shown, but publishing is paused to avoid overwriting a newer copy. Retry or check your relay settings.</p>{sync.incompleteRelays.length > 0 && <p className="mt-2 break-all text-xs">Unavailable: {sync.incompleteRelays.join(', ')}</p>}<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Retry relay check</Button><Button size="sm" variant="outline" asChild><Link to="/settings">Relay settings</Link></Button></div></div>
+                    : <div><p>Your library is stored as NIP-44-encrypted data on your write relays. Sign in with the same account in another browser to restore it.</p><Button className="mt-2" size="sm" variant="secondary" onClick={() => sync.requestSync()}>Sync now</Button></div>}
       </div>}
     </header>
 

@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 
 export function AudiobookActions({ book, compact = false }: { book: SavedAudiobook; compact?: boolean }) {
   const library = useAudiobookLibrary();
-  const sync = useAudiobookLibrarySync(true);
+  const sync = useAudiobookLibrarySync();
   const [createOpen, setCreateOpen] = useState(false);
   const [collectionTitle, setCollectionTitle] = useState('');
   const savedBook: SavedAudiobook = {
