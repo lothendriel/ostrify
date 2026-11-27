@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { ExternalLink, Music2, Play, Radio, RefreshCw, Search, Video } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Music2, Play, Radio, RefreshCw, Search, Video } from 'lucide-react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { WavlakeDiscovery } from '@/pages/WavlakePage';
@@ -87,23 +87,45 @@ async function fetchOdyseeMusic(page: number, signal: AbortSignal) {
 
 function OdyseeDiscovery() {
   const { openOdysee } = useTunestrPlayer();
+  const [page, setPage] = useState(1);
   const query = useInfiniteQuery({
     queryKey: ['odysee-music'], initialPageParam: 1,
     queryFn: ({ pageParam, signal }) => fetchOdyseeMusic(pageParam, signal),
     getNextPageParam: (lastPage, pages) => lastPage.hasMore ? pages.length + 1 : undefined,
     staleTime: 5 * 60 * 1000,
   });
-  const videos = Array.from(new Map((query.data?.pages.flatMap(page => page.videos) ?? []).map(video => [video.id, video])).values());
+  const videos = Array.from(new Map((query.data?.pages.flatMap(batch => batch.videos) ?? []).map(video => [video.id, video])).values());
+  const pageCount = Math.max(1, Math.ceil(videos.length / RESULTS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const visibleVideos = videos.slice((currentPage - 1) * RESULTS_PER_PAGE, currentPage * RESULTS_PER_PAGE);
+  const next = async () => {
+    if (query.isFetchingNextPage) return;
+    let count = videos.length;
+    let hasMore = query.hasNextPage;
+    while (hasMore && count < (currentPage + 1) * RESULTS_PER_PAGE) {
+      const result = await query.fetchNextPage();
+      if (result.isFetchNextPageError) return;
+      count = new Set(result.data?.pages.flatMap(batch => batch.videos.map(video => video.id)) ?? []).size;
+      hasMore = result.hasNextPage;
+    }
+    if (count > currentPage * RESULTS_PER_PAGE) setPage(currentPage + 1);
+  };
+  const pagination = (position: 'top' | 'bottom') => videos.length > RESULTS_PER_PAGE || query.hasNextPage ? <nav aria-label={`Odysee video pagination (${position})`} className="flex flex-wrap items-center justify-between gap-3 border-y py-3">
+    <Button type="button" variant="outline" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={currentPage <= 1 || query.isFetchingNextPage}><ChevronLeft className="size-4" /> Previous</Button>
+    <p aria-live="polite" className="text-sm text-muted-foreground">Page {currentPage}{!query.hasNextPage && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {videos.length} videos {query.hasNextPage ? 'loaded' : 'total'}</span></p>
+    <Button type="button" variant="outline" onClick={() => void next()} disabled={query.isFetchingNextPage || (currentPage >= pageCount && !query.hasNextPage)}>{query.isFetchingNextPage ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
+  </nav> : null;
   return <div className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold uppercase tracking-wider text-primary">Discover on Odysee</p><h2 className="mt-2 text-2xl font-bold">Music videos</h2><p className="mt-2 max-w-2xl text-sm text-muted-foreground">Recent videos from Odysee’s Music category. Play in Ostrify using Odysee’s embedded player, or visit the original video.</p></div><a href="https://odysee.com/$/music" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline">Explore on Odysee <ExternalLink className="size-4" /></a></div>
     {query.isLoading && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading Odysee videos">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="aspect-video rounded-xl" />)}</div>}
-    {query.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Odysee videos couldn’t be loaded. Please try again. <button type="button" className="font-semibold underline" onClick={() => void query.refetch()}>Retry</button></div>}
+    {query.isError && <div role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Odysee videos couldn’t be loaded. Please try again. <button type="button" className="font-semibold underline" onClick={() => void (query.isFetchNextPageError ? next() : query.refetch())}>Retry</button></div>}
     {!query.isLoading && !query.isError && !videos.length && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No videos were found in Odysee’s Music category right now.</div>}
-    {videos.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{videos.map(video => <article key={video.id} className="ostrify-audio-card overflow-hidden rounded-xl">
+    {pagination('top')}
+    {visibleVideos.length > 0 && <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{visibleVideos.map(video => <article key={video.id} className="ostrify-audio-card overflow-hidden rounded-xl">
       <button type="button" onClick={() => openOdysee(video)} aria-label={`Watch in Ostrify: ${video.title}`} className="group block w-full text-left focus-visible:outline-2 focus-visible:outline-primary"><div className="relative aspect-video overflow-hidden bg-black/80">{video.image ? <img src={video.image} alt="" loading="lazy" referrerPolicy="no-referrer" className="size-full object-cover transition group-hover:scale-[1.02]" /> : <div className="flex size-full items-center justify-center text-white/70"><Video className="size-10" /></div>}<span className="absolute inset-0 flex items-center justify-center bg-black/10 transition group-hover:bg-black/30"><span className="flex size-12 items-center justify-center rounded-full bg-black/70 text-white"><Play className="size-5 fill-current" /></span></span>{video.duration && <span className="absolute bottom-2 right-2 rounded bg-black/80 px-2 py-1 text-xs font-semibold text-white">{Math.floor(video.duration / 60)}:{String(Math.floor(video.duration % 60)).padStart(2, '0')}</span>}</div></button>
       <div className="space-y-2 p-4"><h3 className="line-clamp-2 font-semibold">{video.title}</h3><p className="truncate text-sm text-muted-foreground">{video.creator} · Odysee</p><div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1"><button type="button" onClick={() => openOdysee(video)} className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"><Video className="size-4" /> Watch in Ostrify</button><a href={`https://odysee.com/${encodeURIComponent(video.name)}:${video.claimId}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground hover:underline">Open on Odysee <ExternalLink className="size-3" /></a></div></div>
     </article>)}</div>}
-    {query.hasNextPage && <Button variant="outline" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{query.isFetchingNextPage ? 'Loading videos…' : 'Load more videos'}</Button>}
+    {pagination('bottom')}
     <p className="text-xs text-muted-foreground">Videos are provided by Odysee. Some may be unavailable or restricted; use “Open on Odysee” if playback doesn’t work.</p>
   </div>;
 }
