@@ -7,6 +7,7 @@ import { groupIntoAlbums, useArtistTracks } from '@/hooks/useArtistTracks';
 import type { SavedAlbum } from '@/lib/savedAlbums';
 import type { Track } from '@/lib/music';
 import { TrackArtwork } from '@/components/music/TrackArtwork';
+import { LibrarySyncStatus } from '@/components/music/CollectionHeader';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
@@ -48,9 +49,7 @@ export default function SavedAlbumsPage() {
     </header>
 
     {!library.isEnabled && <p className="rounded-lg border border-dashed p-6 text-muted-foreground">Log in with Nostr to save albums and sync your collection across devices.</p>}
-    {library.isEnabled && !library.hasReadRelays && <p className="rounded-lg border border-dashed p-6 text-muted-foreground">Enable a read relay in Settings to load and sync your saved albums.</p>}
-    {library.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load Saved Albums. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p>}
-    {library.isEnabled && library.hasReadRelays && !library.isLoading && library.data?.complete === false && <p role="status" className="text-sm text-muted-foreground">Relay responses may be incomplete, so this list may not include every saved album. <button className="underline" onClick={() => void library.refetch()}>Try again</button></p>}
+    {library.isEnabled && <LibrarySyncStatus name="Saved albums" hasReadRelays={library.hasReadRelays} isFetching={library.isFetching} isError={library.isError} isPartial={library.data?.complete === false} onRetry={() => void library.refetch()} />}
 
     <section className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><h3 className="flex items-center gap-2 text-2xl font-bold"><Disc3 className="size-5 text-primary" /> Albums</h3><span className="text-sm text-muted-foreground">{library.albums.length} saved</span></div><Button variant="outline" disabled={loading || !library.isEnabled} onClick={playSavedAlbum}>{loading ? <LoaderCircle className="size-4 animate-spin" /> : isSavedAlbumQueue && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}{isSavedAlbumQueue ? player.isPlaying ? 'Pause album' : 'Resume album' : 'Play a random album'}</Button></div>

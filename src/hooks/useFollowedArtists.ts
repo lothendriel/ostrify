@@ -59,7 +59,7 @@ export function useFollowedArtists(enabled = true, sessionScope?: string) {
     },
     enabled: enabled && !!user && !!readRelayKey,
   });
-  return { ...query, coverage, isPartial: !!coverage && !coverage.complete };
+  return { ...query, coverage, hasReadRelays: !!readRelayKey, isPartial: !!coverage && !coverage.complete };
 }
 
 /** Whether the current user follows a given artist. */

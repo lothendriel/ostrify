@@ -8,7 +8,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { LIKED_SONGS_ID, usePlaylist, usePlaylistActions } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useToast } from "@/hooks/useToast";
-import { CollectionHeader } from "@/components/music/CollectionHeader";
+import { CollectionHeader, LibrarySyncStatus } from "@/components/music/CollectionHeader";
 import { TrackList } from "@/components/music/TrackList";
 import { LoginArea } from "@/components/auth/LoginArea";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ type PlaylistSort = "original" | "title" | "artist";
 
 const LikedSongs = () => {
   const { user } = useCurrentUser();
-  const { data: playlist, isPartial, refetch: refetchLibrary } = usePlaylist(LIKED_SONGS_ID);
+  const { data: playlist, isPartial, isFetching: isFetchingLibrary, isError: isLibraryError, hasReadRelays, refetch: refetchLibrary } = usePlaylist(LIKED_SONGS_ID);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
   const { reorderPlaylist } = usePlaylistActions();
@@ -89,7 +89,7 @@ const LikedSongs = () => {
         tracks={sortedTracks}
       />
       <div className="px-3 sm:px-6">
-        {isPartial && <p role="status" className="mb-4 text-sm text-muted-foreground">Some selected relays did not finish. Liked Songs may be incomplete or out of date. <button type="button" className="underline" onClick={() => void refetchLibrary()}>Try again</button></p>}
+        <div className="mb-4"><LibrarySyncStatus name="Liked Songs" hasReadRelays={hasReadRelays} isFetching={isFetchingLibrary} isError={isLibraryError} isPartial={isPartial} onRetry={() => void refetchLibrary()} /></div>
         {tracks.length > 1 && <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-64">

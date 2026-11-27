@@ -9,6 +9,7 @@ import { useTracksByIds } from '@/hooks/useTracksByIds';
 import { usePlayer } from '@/hooks/usePlayer';
 import { QueueActionsMenu } from '@/components/music/QueueActionsMenu';
 import { TrackArtwork } from '@/components/music/TrackArtwork';
+import { LibrarySyncStatus } from '@/components/music/CollectionHeader';
 import { sanitizeUrl } from '@/lib/sanitize';
 
 function SavedShowCard({ show, onRemove, pending }: { show: PodcastFavorite; onRemove: () => void; pending: boolean }) {
@@ -48,8 +49,7 @@ export default function SavedPodcastsPage() {
     </header>
 
     {!favorites.isEnabled && <p className="rounded-lg border border-dashed p-6 text-muted-foreground">Log in with Nostr to save podcasts and sync them across your devices.</p>}
-    {favorites.isError && <p role="alert" className="text-sm text-destructive">Couldn’t load your saved podcasts. <button className="underline" onClick={() => void favorites.refetch()}>Try again</button></p>}
-    {favorites.isEnabled && favorites.isPartial && !favorites.isLoading && <p role="status" className="text-sm text-muted-foreground">Some selected relays did not finish. Saved podcasts may be incomplete or out of date. <button type="button" className="underline" onClick={() => void favorites.refetch()}>Try again</button></p>}
+    {favorites.isEnabled && <LibrarySyncStatus name="Saved podcasts" hasReadRelays={favorites.hasReadRelays} isFetching={favorites.isFetching} isError={favorites.isError} isPartial={favorites.isPartial} onRetry={() => void favorites.refetch()} />}
 
     <section className="space-y-3">
       <h2 className="flex items-center gap-2 text-2xl font-bold"><Mic className="size-5 text-primary" /> Shows</h2>

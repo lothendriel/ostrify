@@ -3,6 +3,7 @@ import { useSeoMeta } from '@unhead/react';
 import { Heart, Video } from 'lucide-react';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { LikeButton } from '@/components/music/LikeButton';
+import { LibrarySyncStatus } from '@/components/music/CollectionHeader';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -28,9 +29,10 @@ export default function TunestrLibraryPage() {
 
   return <div className="space-y-6 p-4 sm:p-6">
     <header className="rounded-xl bg-gradient-to-br from-violet-900/70 via-slate-950 to-card p-6 sm:p-8"><p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-violet-200"><Heart className="size-4" /> Your library</p><h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">TuneStr Recordings</h1><p className="mt-2 max-w-2xl text-muted-foreground">Recordings you’ve saved from TuneStr, synced with your Nostr library.</p></header>
+    <LibrarySyncStatus name="Saved recordings" hasReadRelays={playlist.hasReadRelays} isFetching={playlist.isFetching} isError={playlist.isError} isPartial={playlist.isPartial} onRetry={() => void playlist.refetch()} />
     {tracksQuery.isLoading && <div className="grid gap-4 sm:grid-cols-2">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="aspect-video rounded-xl" />)}</div>}
     {tracksQuery.isError && <p role="alert" className="rounded-lg border border-destructive/50 p-4 text-sm">Couldn’t load your saved TuneStr recordings. Check your read relays and try again. <button type="button" className="underline" onClick={() => void tracksQuery.refetch()}>Retry</button></p>}
-    {!tracksQuery.isLoading && !tracksQuery.isError && streams.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No saved TuneStr recordings yet. Use the heart on a TuneStr recording to save it here.</div>}
+    {!tracksQuery.isLoading && !tracksQuery.isError && streams.length === 0 && <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">{playlist.isPartial || playlist.isFetching || playlist.isError || !playlist.hasReadRelays ? 'Your saved recordings may not be fully loaded from your relays yet.' : 'No saved TuneStr recordings yet. Use the heart on a TuneStr recording to save it here.'}</div>}
     {streams.length > 0 && <div className="grid gap-4 sm:grid-cols-2">{streams.map(stream => {
       const image = sanitizeUrl(stream.image);
       return <article key={stream.id} className="overflow-hidden rounded-xl border border-border/70 bg-secondary/30">

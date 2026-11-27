@@ -193,7 +193,7 @@ export function usePlaylists(enabled = true, sessionScope?: string) {
       return finalPlaylists;
     },
   });
-  return { ...query, coverage, isPartial: !!coverage && !coverage.complete };
+  return { ...query, coverage, hasReadRelays: !!readRelayKey, isPartial: !!coverage && !coverage.complete };
 }
 
 /** Fetch a single playlist by its d-tag for the current user. */

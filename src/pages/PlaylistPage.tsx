@@ -19,7 +19,8 @@ import {
 import { usePlaylist, usePlaylistActions } from "@/hooks/usePlaylists";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useToast } from "@/hooks/useToast";
-import { CollectionHeader } from "@/components/music/CollectionHeader";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { CollectionHeader, LibrarySyncStatus } from "@/components/music/CollectionHeader";
 import { TrackList } from "@/components/music/TrackList";
 import { CreatePlaylistDialog } from "@/components/music/CreatePlaylistDialog";
 import { useNavigate } from "react-router-dom";
@@ -29,7 +30,8 @@ type PlaylistSort = "original" | "title" | "artist";
 
 const PlaylistPage = () => {
   const { id } = useParams<{ id: string }>();
-  const { data: playlist, isLoading: playlistLoading, isPartial, refetch: refetchLibrary } = usePlaylist(id);
+  const { user } = useCurrentUser();
+  const { data: playlist, isLoading: playlistLoading, isFetching: isFetchingLibrary, isError: isLibraryError, hasReadRelays, isPartial, refetch: refetchLibrary } = usePlaylist(id);
   const { data, isLoading, isFetching, refetch } = useTracksByIds(playlist?.trackIds);
   const tracks = data?.tracks ?? [];
   const { removeFromPlaylist, reorderPlaylist, deletePlaylist } = usePlaylistActions();
@@ -96,9 +98,10 @@ const PlaylistPage = () => {
 
   if (!playlistLoading && !playlist) {
     return (
-      <div className="py-24 text-center">
-        <p className="text-muted-foreground">{isPartial ? 'Some relays did not finish, so this playlist may not have loaded yet.' : 'Playlist not found.'}</p>
-        {isPartial && <Button type="button" variant="link" onClick={() => void refetchLibrary()}>Retry relay check</Button>}
+      <div className="mx-auto max-w-3xl space-y-4 p-6">
+        <h1 className="text-2xl font-bold">Playlist</h1>
+        {user ? <LibrarySyncStatus name="This playlist" hasReadRelays={hasReadRelays} isFetching={isFetchingLibrary} isError={isLibraryError} isPartial={isPartial} onRetry={() => void refetchLibrary()} /> : <p className="text-muted-foreground">Sign in to load your playlists.</p>}
+        <p className="text-muted-foreground">{isPartial || isLibraryError || !hasReadRelays ? 'This playlist may not have loaded yet.' : 'Playlist not found.'}</p>
       </div>
     );
   }
@@ -139,7 +142,7 @@ const PlaylistPage = () => {
         }
       />
       <div className="px-3 sm:px-6">
-        {isPartial && <p role="status" className="mb-4 text-sm text-muted-foreground">Some selected relays did not finish. This playlist may be incomplete or out of date. <button type="button" className="underline" onClick={() => void refetchLibrary()}>Try again</button></p>}
+        <div className="mb-4"><LibrarySyncStatus name="This playlist" hasReadRelays={hasReadRelays} isFetching={isFetchingLibrary} isError={isLibraryError} isPartial={isPartial} onRetry={() => void refetchLibrary()} /></div>
         {tracks.length > 1 && <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-64">

@@ -10,6 +10,7 @@ import { useFollowedArtists } from "@/hooks/useFollowedArtists";
 import { useWavlakeRelease } from "@/hooks/useWavlake";
 import { genUserName, sanitizeUrl } from "@/lib/sanitize";
 import { LoginArea } from "@/components/auth/LoginArea";
+import { LibrarySyncStatus } from "@/components/music/CollectionHeader";
 
 function ArtistTile({ pubkey }: { pubkey: string }) {
   const author = useAuthor(pubkey);
@@ -52,7 +53,7 @@ function WavlakeArtistTile({ artistId }: { artistId: string }) {
 const FollowedArtists = () => {
   useSeoMeta({ title: "Followed Artists — Ostrify" });
   const { user } = useCurrentUser();
-  const { data: artists = [], isLoading, isPartial, refetch } = useFollowedArtists();
+  const { data: artists = [], isLoading, isFetching, isError, isPartial, hasReadRelays, refetch } = useFollowedArtists();
 
   if (!user) {
     return (
@@ -70,7 +71,7 @@ const FollowedArtists = () => {
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Followed Artists</h1>
-      {isPartial && !isLoading && <p role="status" className="text-sm text-muted-foreground">Some selected relays did not finish. Your followed artists may be incomplete or out of date. <button type="button" className="underline" onClick={() => void refetch()}>Try again</button></p>}
+      <LibrarySyncStatus name="Your followed artists" hasReadRelays={hasReadRelays} isFetching={isFetching} isError={isError} isPartial={isPartial} onRetry={() => void refetch()} />
 
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">

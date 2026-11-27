@@ -31,25 +31,24 @@ export default function AudiobookLibraryPage() {
 
   useSeoMeta({ title: id ? `${collection?.title ?? 'Audiobook Collection'} — Ostrify` : 'Saved Audiobooks — Ostrify' });
 
-  if (id && !collection) return <div className="p-6"><h1 className="text-2xl font-bold">{sync.isLoading ? 'Loading collection…' : 'Collection not found'}</h1></div>;
-
   return <div className="space-y-8 p-4 sm:p-6">
     <header className="rounded-xl bg-gradient-to-br from-rose-950 via-violet-950 to-card p-6 sm:p-8">
       <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-rose-200"><Heart className="size-4" /> Your audiobook library</p>
-      <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{collection?.title ?? 'Saved Audiobooks'}</h1>
+      <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">{collection?.title ?? (id ? 'Audiobook Collection' : 'Saved Audiobooks')}</h1>
       <p className="mt-2 text-muted-foreground">{collection ? `${collectionBooks.length} books in this collection` : 'Favorites and collections sync privately across devices when you sign in.'}</p>
-      {!id && <div className="mt-4 rounded-lg border border-white/15 bg-black/20 p-4 text-sm text-white/90">
+      <div role="status" className="mt-4 rounded-lg border border-white/15 bg-black/20 p-4 text-sm text-white/90">
         {!sync.isSignedIn ? <p>Sign in with a Nostr account to sync your saved audiobooks privately across devices. Your browser-only saves are kept when you sign in.</p>
           : !sync.supportsEncryption ? <p>Your signer does not support NIP-44 encryption, which is needed to keep this library private while syncing. Your saved books remain available in this browser.</p>
             : !sync.hasReadRelays ? <p>Enable at least one read relay in Settings to load your private audiobook library.</p>
               : !sync.hasWriteRelays ? <p>Enable at least one write relay in Settings to publish audiobook library updates.</p>
                 : sync.isLoading ? <p>Checking your encrypted audiobook library on your relays…</p>
-                : sync.isError || sync.publishError ? <div><p>Private sync could not finish: {sync.publishError ?? (sync.error instanceof Error ? sync.error.message : 'Relay query failed.')}</p><p className="mt-1">Your saved books remain on this device.</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Try again</Button><Button size="sm" variant="outline" asChild><Link to="/settings">Relay settings</Link></Button></div></div>
-                  : sync.isPartial ? <div><p>Some library relays did not finish. Available books are shown, but publishing is paused to avoid overwriting a newer copy. Retry or check your relay settings.</p>{sync.incompleteRelays.length > 0 && <p className="mt-2 break-all text-xs">Unavailable: {sync.incompleteRelays.join(', ')}</p>}<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Retry relay check</Button><Button size="sm" variant="outline" asChild><Link to="/settings">Relay settings</Link></Button></div></div>
+                : sync.isError || sync.publishError ? <div><p>Private sync could not finish: {sync.publishError ?? (sync.error instanceof Error ? sync.error.message : 'Relay query failed.')}</p><p className="mt-1">Your saved books remain on this device.</p><div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Try again</Button><Button size="sm" variant="outline" asChild><Link to="/settings?tab=relays">Relay settings</Link></Button></div></div>
+                  : sync.isPartial ? <div><p>Some library relays did not finish. Available books are shown, but publishing is paused to avoid overwriting a newer copy. Retry or check your relay settings.</p>{sync.incompleteRelays.length > 0 && <p className="mt-2 break-all text-xs">Unavailable: {sync.incompleteRelays.join(', ')}</p>}<div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => sync.requestSync()}>Retry relay check</Button><Button size="sm" variant="outline" asChild><Link to="/settings?tab=relays">Relay settings</Link></Button></div></div>
                     : <div><p>Your library is stored as NIP-44-encrypted data on your write relays. Sign in with the same account in another browser to restore it.</p><Button className="mt-2" size="sm" variant="secondary" onClick={() => sync.requestSync()}>Sync now</Button></div>}
-      </div>}
+      </div>
     </header>
 
+    {id && !collection ? <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">{sync.isLoading ? 'Loading collection…' : sync.isPartial || sync.isError || !sync.hasReadRelays ? 'This collection may not have loaded yet. Check your sync status above.' : 'Collection not found.'}</p> : <>
     {!id && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><ListMusic className="size-5" /> Collections</h2>
       {library.collections.length ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{library.collections.map(item => <div key={item.id} className="ostrify-audio-card flex items-center gap-3 rounded-xl p-4">
         <Link to={`/audiobook-library/${encodeURIComponent(item.id)}`} className="min-w-0 flex-1 focus-visible:outline-2 focus-visible:outline-primary"><h3 className="truncate font-semibold hover:underline">{item.title}</h3><p className="text-sm text-muted-foreground">{item.audiobookIds.length} books</p></Link>
@@ -68,5 +67,6 @@ export default function AudiobookLibraryPage() {
     {!id && <section className="space-y-3"><h2 className="flex items-center gap-2 text-2xl font-bold"><BookOpen className="size-5" />Recently saved audiobooks</h2>
       {library.savedBooks.length ? <div className="grid gap-2 sm:grid-cols-2">{library.savedBooks.map(book => <AudiobookTile key={book.id} book={book} />)}</div> : <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">Audiobooks you favorite or add to a collection will also be easy to reopen here.</p>}
     </section>}
+    </>}
   </div>;
 }

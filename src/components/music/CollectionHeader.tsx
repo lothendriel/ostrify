@@ -1,9 +1,32 @@
 import { Play, Pause } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { Track } from "@/lib/music";
 import { usePlayer } from "@/hooks/usePlayer";
 import { sanitizeUrl } from "@/lib/sanitize";
+
+/** Relay-read status for public Nostr library lists. A successful read does not confirm relay retention or write delivery. */
+export function LibrarySyncStatus({ name, hasReadRelays, isFetching, isError, isPartial, onRetry }: {
+  name: string;
+  hasReadRelays: boolean;
+  isFetching: boolean;
+  isError: boolean;
+  isPartial: boolean;
+  onRetry: () => void;
+}) {
+  return <div role="status" className="rounded-lg border border-border/70 bg-card/80 p-4 text-sm text-foreground">
+    {!hasReadRelays ? <p>Enable a read relay to load {name} from your Nostr account.</p>
+      : isFetching ? <p>Checking relay responses for {name}…</p>
+        : isError ? <><p>Could not check {name} on your relays. Your library may be incomplete or out of date.</p><p className="mt-1">Try again when your relays are available.</p></>
+          : isPartial ? <><p>Some read relays did not finish. {name} may be incomplete or out of date, and another device may have unseen changes.</p><p className="mt-1">Check again when those relays are available, especially before making changes on another device.</p></>
+            : <p>{name} is loaded from your read relays. Nostr library data is public and relay availability and retention can vary.</p>}
+    <div className="mt-2 flex flex-wrap gap-2">
+      {hasReadRelays && <Button type="button" size="sm" variant="secondary" disabled={isFetching} onClick={onRetry}>{isFetching ? 'Checking…' : isPartial || isError ? 'Retry sync' : 'Sync now'}</Button>}
+      <Button size="sm" variant="outline" asChild><Link to="/settings?tab=relays">Relay settings</Link></Button>
+    </div>
+  </div>;
+}
 
 interface CollectionHeaderProps {
   title: string;
