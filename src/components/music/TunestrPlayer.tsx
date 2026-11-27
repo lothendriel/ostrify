@@ -208,7 +208,7 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
     setPlayback('unknown');
     setStream(nextStream);
     setSize('small');
-    setDocked(nextStream.format !== 'odysee');
+    setDocked(false);
   };
 
   return <TunestrPlayerContext.Provider value={{ openStream: openVideo, openOdysee: openVideo, setContentPane, expanded: !!stream && !docked, stream, playback }}>
