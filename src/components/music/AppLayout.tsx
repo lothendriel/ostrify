@@ -66,7 +66,7 @@ function ChatMessage({ message, name, picture, own, reactions, userPubkey, onRea
           const matching = reactions.filter(reaction => reaction.content === emoji);
           const count = new Set(matching.map(reaction => reaction.pubkey)).size;
           const reacted = matching.some(reaction => reaction.pubkey === userPubkey);
-          return count > 0 ? <button key={emoji} type="button" disabled={pending || reacted} aria-label={`${reactionName}: ${count} ${count === 1 ? 'reaction' : 'reactions'}${reacted ? ', you reacted' : ', react'}`} className={`rounded-full border px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${reacted ? 'border-primary bg-primary/10' : 'border-border bg-secondary hover:bg-accent'}`} onClick={() => onReact(message, emoji)}>{emoji} {count}</button> : null;
+          return count > 0 ? <button key={emoji} type="button" disabled={pending || reacted} aria-label={`${reactionName}: ${count} ${count === 1 ? 'reaction' : 'reactions'}${reacted ? ', you reacted' : ', react'}`} className={`rounded-full border px-1.5 py-0.5 text-[10px] leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${reacted ? 'border-primary bg-primary/10' : 'border-border bg-secondary hover:bg-accent'}`} onClick={() => onReact(message, emoji)}>{emoji} {count}</button> : null;
         })}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-muted-foreground" aria-label={`React to ${own ? 'your' : displayName + "'s"} message`}><SmilePlus className="size-3" /></Button></PopoverTrigger>
