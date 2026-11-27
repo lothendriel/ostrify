@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
-import { ExternalLink, Maximize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
+import { ExternalLink, Maximize2, Minus, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 import { parseN94Stream, parseTunestrStreamEvent, type TunestrStream } from '@/hooks/useTunestrStreams';
 import { PlayerZapButton } from '@/components/music/PlayerZapButton';
@@ -44,6 +44,7 @@ const VIDEO_SESSION_KEY = 'ostrify:tunestr-player:v1';
 type SavedVideoPlayer = {
   stream: VideoStream;
   docked: boolean;
+  minimized: boolean;
   size: PlayerSize;
   position: number;
   playing: boolean;
@@ -91,6 +92,7 @@ function restoreVideoPlayer(owner: string): SavedVideoPlayer | null {
     return {
       stream,
       docked: saved.docked !== false,
+      minimized: saved.docked !== false && saved.minimized === true,
       size: saved.size === 'medium' || saved.size === 'large' ? saved.size : 'small',
       position: typeof saved.position === 'number' && Number.isFinite(saved.position) && saved.position >= 0 ? saved.position : 0,
       playing: saved.playing === true,
@@ -149,6 +151,7 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
   const audioPlayer = useContext(PlayerContext);
   const setVideoActive = audioPlayer?.setVideoActive;
   const [docked, setDocked] = useState(saved?.docked ?? true);
+  const [minimized, setMinimized] = useState(saved?.minimized ?? false);
   const [size, setSize] = useState<PlayerSize>(saved?.size ?? 'small');
   const [contentPane, setContentPane] = useState<HTMLDivElement | null>(null);
   const playbackRef = useRef({ position: saved?.position ?? 0, playing: saved?.playing ?? true });
@@ -203,8 +206,8 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
   }, [location, stream, docked]);
 
   useEffect(() => {
-    saveVideoPlayer(owner, stream ? { stream, docked, size, ...playbackRef.current } : null);
-  }, [stream, docked, size, owner]);
+    saveVideoPlayer(owner, stream ? { stream, docked, minimized, size, ...playbackRef.current } : null);
+  }, [stream, docked, minimized, size, owner]);
 
   const savePlayback = (position: number, playing: boolean) => {
     const changedPlaying = playbackRef.current.playing !== playing;
@@ -213,31 +216,34 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
     const now = Date.now();
     if (stream && (changedPlaying || now - lastPlaybackWrite.current >= 5_000)) {
       lastPlaybackWrite.current = now;
-      saveVideoPlayer(owner, { stream, docked, size, position, playing });
+      saveVideoPlayer(owner, { stream, docked, minimized, size, position, playing });
     }
   };
 
   useEffect(() => {
     const saveOnPageHide = () => {
-      if (stream) saveVideoPlayer(owner, { stream, docked, size, ...playbackRef.current });
+      if (stream) saveVideoPlayer(owner, { stream, docked, minimized, size, ...playbackRef.current });
     };
     window.addEventListener('pagehide', saveOnPageHide);
     return () => window.removeEventListener('pagehide', saveOnPageHide);
-  }, [stream, docked, size, owner]);
+  }, [stream, docked, minimized, size, owner]);
 
   const player = stream && <TunestrVideoPlayer
     key={stream.id}
     stream={stream}
     docked={docked}
+    minimized={minimized}
     size={size}
     initialPosition={saved?.stream.id === stream.id && restoredRef.current ? saved.position : 0}
     initialPlaying={saved?.stream.id === stream.id && restoredRef.current ? saved.playing : true}
     onPlaybackChange={savePlayback}
     onAnalyticsState={playing => playing ? videoAnalyticsRef.current?.onPlaying() : videoAnalyticsRef.current?.onStopped()}
     onSizeChange={setSize}
-    onDock={() => setDocked(true)}
-    onRestore={() => setDocked(false)}
-    onClose={() => { saveVideoPlayer(owner, null); setVideoActive?.(false); setPlayback('unknown'); setDocked(true); setStream(null); }}
+    onDock={() => { setMinimized(false); setDocked(true); }}
+    onMinimize={() => { setDocked(true); setMinimized(true); }}
+    onUnminimize={() => setMinimized(false)}
+    onRestore={() => { setMinimized(false); setDocked(false); }}
+    onClose={() => { saveVideoPlayer(owner, null); setVideoActive?.(false); setPlayback('unknown'); setMinimized(false); setDocked(true); setStream(null); }}
   />;
 
   const openVideo = (nextStream: VideoStream) => {
@@ -247,6 +253,7 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
     playbackRef.current = { position: 0, playing: true };
     setPlayback('unknown');
     setStream(nextStream);
+    setMinimized(false);
     setSize('small');
     setDocked(false);
   };
@@ -369,9 +376,10 @@ function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlayba
   </div>;
 }
 
-function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlaying, onPlaybackChange, onAnalyticsState, onSizeChange, onDock, onRestore, onClose }: {
+function TunestrVideoPlayer({ stream, docked, minimized, size, initialPosition, initialPlaying, onPlaybackChange, onAnalyticsState, onSizeChange, onDock, onMinimize, onUnminimize, onRestore, onClose }: {
   stream: VideoStream;
   docked: boolean;
+  minimized: boolean;
   size: PlayerSize;
   initialPosition: number;
   initialPlaying: boolean;
@@ -379,6 +387,8 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
   onAnalyticsState: (playing: boolean) => void;
   onSizeChange: (size: PlayerSize) => void;
   onDock: () => void;
+  onMinimize: () => void;
+  onUnminimize: () => void;
   onRestore: () => void;
   onClose: () => void;
 }) {
@@ -399,7 +409,7 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
       className={cn(
         '!z-[60] !max-w-none !gap-0 !overflow-hidden !border-border/80 !bg-card !p-0',
         docked
-          ? cn('!fixed !left-auto !top-auto !right-3 !bottom-[calc(7.5rem+env(safe-area-inset-bottom))] !translate-x-0 !translate-y-0 !rounded-2xl !shadow-2xl sm:!right-5 sm:!bottom-[calc(6.5rem+env(safe-area-inset-bottom))]', widths[size])
+          ? cn('!fixed !left-auto !top-auto !right-3 !bottom-[calc(7.5rem+env(safe-area-inset-bottom))] !translate-x-0 !translate-y-0 !rounded-2xl !shadow-2xl sm:!right-5 sm:!bottom-[calc(6.5rem+env(safe-area-inset-bottom))]', minimized ? '!w-[min(240px,calc(100vw-1.5rem))]' : widths[size])
           : '!absolute !inset-0 !h-full !w-full !translate-x-0 !translate-y-0 !rounded-none !border-0 !shadow-none',
       )}
       showPortal={false}
@@ -422,8 +432,8 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {stream.format !== 'odysee' && stream.event && verifyEvent(stream.event) && <PlayerZapButton key={stream.event.id} track={{ ...stream.track, artistPubkey: undefined, pubkey: stream.event.pubkey }} video className="size-9 text-primary" />}
-            <div role="group" aria-label="Player size" className="flex items-center rounded-lg border border-border/70 bg-background/60 p-0.5">
+            {!minimized && stream.format !== 'odysee' && stream.event && verifyEvent(stream.event) && <PlayerZapButton key={stream.event.id} track={{ ...stream.track, artistPubkey: undefined, pubkey: stream.event.pubkey }} video className="size-9 text-primary" />}
+            {!minimized && <div role="group" aria-label="Player size" className="flex items-center rounded-lg border border-border/70 bg-background/60 p-0.5">
               {(['small', 'medium', 'large'] as const).map(option => <button
                 key={option}
                 type="button"
@@ -433,22 +443,23 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
                 onClick={() => { onSizeChange(option); onDock(); }}
                 className={cn('flex size-7 items-center justify-center rounded-md text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary', docked && size === option && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground')}
               >{option[0].toUpperCase()}</button>)}
-            </div>
-            {docked
+            </div>}
+            {docked && <Button type="button" variant="ghost" size="icon" className="size-9" aria-label={minimized ? 'Restore player' : 'Minimize player'} title={minimized ? 'Restore player' : 'Minimize player'} onClick={minimized ? onUnminimize : onMinimize}>{minimized ? <Maximize2 className="size-4" /> : <Minus className="size-4" />}</Button>}
+            {!minimized && (docked
               ? <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Expand player" title="Expand player" onClick={onRestore}><Maximize2 className="size-4" /></Button>
-              : <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Dock player" title="Dock player" onClick={onDock}><PictureInPicture2 className="size-4" /></Button>}
+              : <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Dock player" title="Dock player" onClick={onDock}><PictureInPicture2 className="size-4" /></Button>)}
             <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Close player" title="Close player" onClick={onClose}><X className="size-4" /></Button>
           </div>
         </div>
-        <div className={cn(!docked && 'flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black [&>div]:!h-full [&>div]:!w-full [&>div]:!aspect-auto [&>iframe]:!h-full [&>iframe]:!w-full [&>iframe]:!aspect-auto')}>
+        <div inert={minimized} aria-hidden={minimized} className={cn(minimized && 'pointer-events-none absolute h-px w-px overflow-hidden opacity-0', !docked && 'flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black [&>div]:!h-full [&>div]:!w-full [&>div]:!aspect-auto [&>iframe]:!h-full [&>iframe]:!w-full [&>iframe]:!aspect-auto')}>
           {stream.format === 'odysee' && odysee
             ? <iframe src={odysee.embed} title={`${stream.title} — Odysee player`} sandbox="allow-scripts allow-same-origin allow-presentation" referrerPolicy="no-referrer" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="aspect-video w-full border-0 bg-black" />
             : stream.format === 'n94' && stream.event && stream.variant
               ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} onAnalyticsState={onAnalyticsState} /></Suspense>
               : stream.format !== 'odysee' ? <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} onAnalyticsState={onAnalyticsState} /> : null}
         </div>
-        {usesExternalEmbed && <p className="shrink-0 px-4 py-2 text-xs text-muted-foreground">This embedded video has its own volume controls. Ostrify’s global volume cannot adjust or mute it.</p>}
-        {hasEmbeddedPlayer && sourceUrl && (!docked || stream.format === 'odysee') && <div className="shrink-0 px-4 py-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">{stream.format === 'odysee' ? 'Open on Odysee' : 'Open stream source'}</a></div>}
+        {!minimized && usesExternalEmbed && <p className="shrink-0 px-4 py-2 text-xs text-muted-foreground">This embedded video has its own volume controls. Ostrify’s global volume cannot adjust or mute it.</p>}
+        {!minimized && hasEmbeddedPlayer && sourceUrl && (!docked || stream.format === 'odysee') && <div className="shrink-0 px-4 py-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">{stream.format === 'odysee' ? 'Open on Odysee' : 'Open stream source'}</a></div>}
       </div>
     </DialogContent>
   </Dialog>;
