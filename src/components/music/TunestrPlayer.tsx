@@ -1,8 +1,9 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ExternalLink, Maximize2, Minimize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
+import { ExternalLink, Maximize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
@@ -125,71 +126,65 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   onClose: () => void;
 }) {
   const playerRef = useRef<HTMLDivElement | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [size, setSize] = useState<'small' | 'medium' | 'large'>('medium');
   const sourceUrl = sanitizeUrl(stream.externalUrl);
   const hasEmbeddedPlayer = stream.format === 'n94' && !!stream.event && !!stream.variant || classifyStreamPlayback(stream.url).type !== 'unsupported';
-
-  useEffect(() => {
-    const handleFullscreenChange = () => setFullscreen(document.fullscreenElement === playerRef.current);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  const closePlayer = () => {
-    if (document.fullscreenElement === playerRef.current) void document.exitFullscreen().catch(() => {});
-    onClose();
+  const widths = {
+    small: '!w-[min(320px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
+    medium: '!w-[min(420px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
+    large: '!w-[min(560px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
   };
 
-  const toggleFullscreen = () => {
-    const player = playerRef.current;
-    if (!player) return;
-    if (document.fullscreenElement === player) void document.exitFullscreen().catch(() => {});
-    else void player.requestFullscreen().catch(() => {});
-  };
-
-  const controls = <div className="flex shrink-0 items-center gap-1">
-    {docked
-      ? <Button type="button" variant="ghost" size="icon" aria-label="Restore player" title="Restore player" onClick={onRestore}><Maximize2 className="size-4" /></Button>
-      : <Button type="button" variant="ghost" size="icon" aria-label="Picture in picture" title="Picture in picture" onClick={onDock}><PictureInPicture2 className="size-4" /></Button>}
-    <Button type="button" variant="ghost" size="icon" aria-label={fullscreen ? 'Exit full screen' : 'Full screen'} title={fullscreen ? 'Exit full screen' : 'Full screen'} onClick={toggleFullscreen}>{fullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Button>
-    <Button type="button" variant="ghost" size="icon" aria-label="Close player" title="Close player" onClick={closePlayer}><X className="size-4" /></Button>
-  </div>;
-
-  return <Dialog open modal={!docked}       onOpenChange={open => { if (!open) closePlayer(); }}>
-
+  // Keep the same non-modal dialog and video element mounted as the layout changes.
+  // Recreating the dialog or video would interrupt live streams and embedded players.
+  return <Dialog open modal={false} onOpenChange={open => { if (!open) onClose(); }}>
     <DialogContent
-      className={docked
-        ? '!fixed !left-auto !top-auto !right-3 !bottom-[calc(6rem+env(safe-area-inset-bottom))] !z-[60] !w-[min(420px,calc(100vw-1.5rem))] !max-w-none !translate-x-0 !translate-y-0 !gap-0 !overflow-hidden !rounded-2xl !border-border/80 !bg-card !p-0 !shadow-2xl sm:!right-5 sm:!bottom-[calc(6.5rem+env(safe-area-inset-bottom))] sm:!max-w-none'
-        : 'max-w-4xl overflow-hidden p-0'}
-      showOverlay={!docked}
-      showPortal
+      className={cn(
+        '!z-[60] !max-w-none !gap-0 !overflow-hidden !rounded-2xl !border-border/80 !bg-card !p-0 !shadow-2xl',
+        docked
+          ? cn('!left-auto !top-auto !right-3 !bottom-[calc(7.5rem+env(safe-area-inset-bottom))] !translate-x-0 !translate-y-0 sm:!right-5 sm:!bottom-[calc(6.5rem+env(safe-area-inset-bottom))]', widths[size])
+          : '!w-[min(1200px,calc(100vw-2rem),calc(177.78dvh-16rem))]',
+      )}
+      showOverlay={false}
       showCloseButton={false}
-      onEscapeKeyDown={event => { if (docked) event.preventDefault(); }}
-      onInteractOutside={event => { if (docked) event.preventDefault(); }}
+      onEscapeKeyDown={event => { event.preventDefault(); if (!docked) onDock(); }}
+      onInteractOutside={event => event.preventDefault()}
+      onOpenAutoFocus={event => event.preventDefault()}
     >
-      <div ref={playerRef} className={docked ? 'overflow-hidden rounded-2xl bg-card' : 'overflow-hidden bg-background'}>
-        <div className={docked ? 'flex min-h-14 items-center justify-between gap-3 border-b border-border/60 bg-card/95 px-3 py-2' : 'flex items-start justify-between gap-3 p-5 pb-0 pr-4'}>
+      <div ref={playerRef} className="overflow-hidden bg-card">
+        <div className="flex min-h-14 items-center justify-between gap-1 border-b border-border/60 bg-card px-2 py-2 sm:px-3">
           <div className="min-w-0 flex-1">
-            {docked
-              ? <>
-                <DialogTitle className="sr-only">{stream.title || 'TuneStr stream'}</DialogTitle>
-                <DialogDescription className="sr-only">{stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription>
-                <p className="truncate text-sm font-semibold leading-5">{stream.title || 'TuneStr stream'}</p>
-                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  {stream.isLive && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-red-500" /></span>}
-                  <span>{stream.isLive ? 'LIVE' : 'Recording'}</span>
-                  <span aria-hidden="true">·</span>
-                  <span>TuneStr</span>
-                </div>
-              </>
-              : <DialogHeader className="min-w-0"><DialogTitle className="truncate">{stream.title || 'TuneStr stream'}</DialogTitle><DialogDescription className="line-clamp-2">{stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription></DialogHeader>}
+            <DialogTitle className="truncate text-sm font-semibold leading-5">{stream.title || 'TuneStr stream'}</DialogTitle>
+            <DialogDescription className="sr-only">{stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              {stream.isLive && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-red-500" /></span>}
+              <span>{stream.isLive ? 'LIVE' : 'Recording'}</span>
+              <span aria-hidden="true">·</span>
+              <span>TuneStr</span>
+            </div>
           </div>
-          {controls}
+          <div className="flex shrink-0 items-center gap-1">
+            <div role="group" aria-label="Player size" className="flex items-center rounded-lg border border-border/70 bg-background/60 p-0.5">
+              {(['small', 'medium', 'large'] as const).map(option => <button
+                key={option}
+                type="button"
+                aria-label={`${option[0].toUpperCase()}${option.slice(1)} player`}
+                aria-pressed={docked && size === option}
+                title={`${option[0].toUpperCase()}${option.slice(1)} player`}
+                onClick={() => { setSize(option); onDock(); }}
+                className={cn('flex size-7 items-center justify-center rounded-md text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary', docked && size === option && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground')}
+              >{option[0].toUpperCase()}</button>)}
+            </div>
+            {docked
+              ? <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Expand player" title="Expand player" onClick={onRestore}><Maximize2 className="size-4" /></Button>
+              : <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Dock player" title="Dock player" onClick={onDock}><PictureInPicture2 className="size-4" /></Button>}
+            <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Close player" title="Close player" onClick={onClose}><X className="size-4" /></Button>
+          </div>
         </div>
         {stream.format === 'n94' && stream.event && stream.variant
           ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} /></Suspense>
           : <TunestrVideoSurface stream={stream} />}
-        {!docked && hasEmbeddedPlayer && sourceUrl && <div className="p-4 pt-0"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a><span className="ml-2 text-xs text-muted-foreground">If playback is unavailable here, open the stream on its source site.</span></div>}
+        {!docked && hasEmbeddedPlayer && sourceUrl && <div className="px-4 py-3"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a></div>}
       </div>
     </DialogContent>
   </Dialog>;
