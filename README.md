@@ -1,10 +1,11 @@
 <div align="center">
   <img src="public/ostrify-logo.png" alt="Ostrify logo" width="112" />
   <h1>Ostrify</h1>
+  <p><strong>Version 2</strong></p>
   <p><strong>Open-protocol audio. One player. Your Nostr identity.</strong></p>
   <p>Discover and listen to independent music, podcasts, live streams, and audiobooks—then build a library that belongs to you.</p>
   <p>
-    <a href="https://ostrify.shakespeare.wtf">Open Ostrify</a>
+    <a href="https://ostrify.studio314.us/">Open Ostrify</a>
     ·
     <a href="CHANGELOG.md">Changelog</a>
     ·
@@ -38,11 +39,12 @@ There is no Ostrify account server. Sign in with a Nostr-compatible signer to pu
 
 ### Listen and manage playback
 
-- **Persistent player:** audio continues as you navigate. Use play/pause, previous/next, seek, volume, shuffle, autoplay, repeat, and queue controls. The listening room includes track actions and a full-screen visualizer for compatible audio.
+- **Persistent player:** audio continues as you navigate. Use play/pause, previous/next, seek, volume, shuffle, autoplay, repeat, and queue controls. A green animation circles the player-bar button during playback. The listening room includes track actions and a full-screen visualizer for compatible audio.
 - **Queue and history:** manage upcoming tracks, revisit recent listening, and resume playback from this browser. Playback sessions and the queue are scoped to the active Nostr account.
 - **Track actions and sharing:** like tracks, add supported audio to playlists, use queue actions while browsing, and share audio or pages to Nostr. Audio shares use compact links and can resolve back to a playable track.
 - **Video player:** play supported TuneStr live streams and recordings and Odysee music videos in an expanded or docked player, with adjustable sizes. Video playback coordinates with the audio player; save TuneStr recordings to your library.
-- **Support creators:** send Lightning payments or Nostr zaps to available artist or publisher recipients from the player, using a compatible browser wallet or a Lightning invoice. Availability depends on recipient and wallet support.
+- **Shared volume:** the player-bar volume and mute controls also apply to videos played directly by Ostrify, and native video volume controls update the shared setting. Odysee and other third-party embedded players use their own controls and cannot be muted from Ostrify’s player bar.
+- **Support creators:** send Lightning payments or Nostr zaps to available artist or publisher recipients from the player, using a compatible browser wallet or a Lightning invoice. The video player offers a zap button for Nostr stream publishers with a usable Lightning payment method. Odysee videos do not currently provide a verified Nostr payment recipient in Ostrify. Availability depends on recipient and wallet support.
 - **Daily Discovery:** get a locally personalized selection and give feedback with **More like this**, **Not for me**, and artist-blocking controls.
 - **Analytics:** review private, browser-local listening time, sessions, format breakdowns, top tracks, and a seven-day overview. The Nostr network pulse shows a sampled view of playable audio events and publishers returned by enabled read relays; these are not global counts.
 
@@ -66,7 +68,7 @@ There is no Ostrify account server. Sign in with a Nostr-compatible signer to pu
 - **Private invites:** send NIP-17 encrypted friend invites to a Nostr public key; the recipient chooses whether to follow you back.
 - **Listening status:** share the current track or video as a public NIP-38 status. Sharing is on by default for signed-in accounts without a saved preference; existing off choices are respected. Turn it off per account on this device, and Ostrify reports whether it could publish a clearing update. For embedded video, the status reports that the video is open because playback and pauses cannot be reliably detected.
 - **Relay controls:** manage Ostrify’s recommended read/write relays and Blossom upload servers separately. Optionally include your NIP-65 read relays for broader discovery; Ostrify-specific exclusions do not change your published NIP-65 list.
-- **Privacy and appearance:** opt into or withdraw from the public Ostrify directory, choose which library sections appear on your profile, and select light or dark appearance.
+- **Privacy and appearance:** opt into or withdraw from the public Ostrify directory, choose which library sections appear on your profile, and select light or dark appearance. In December, Home displays a responsive wreath and twinkling lights, and the player-bar play icon becomes a Christmas tree; these disappear automatically afterward.
 
 ## A look around
 

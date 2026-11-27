@@ -2,7 +2,7 @@
 
 All notable user-facing changes to Ostrify are recorded here, newest first.
 
-## Updates — 2026-11-27
+## Version 2 — 2026-11-27
 
 ### Library and sync
 
@@ -15,7 +15,10 @@ All notable user-facing changes to Ostrify are recorded here, newest first.
 
 - Added Odysee music video discovery with pagination and embedded playback. TuneStr and Odysee videos open expanded by default; the video player supports adjustable sizes and docks when navigating.
 - Coordinated video and audio playback and restored TuneStr video after refresh. Added a full-screen listening-room visualizer and track actions.
-- Added artist and publisher Lightning payment options in the player, including compatible browser wallets and invoice payments when supported.
+- Added artist and publisher Lightning payment options in the player, including compatible browser wallets and invoice payments when supported. The video player now offers zaps or Lightning payments for Nostr stream publishers with a usable payment method; Odysee videos do not currently have a verified Nostr payment recipient in Ostrify.
+- Shared player-bar volume and mute settings with directly played videos. Third-party embedded players, including Odysee, retain their own independent volume controls.
+- Added a green chasing ring around the player-bar button while audio is playing, with a static treatment for reduced-motion preferences.
+- Added a responsive wreath and twinkling lights to Home and a Christmas-tree play icon during December; the decorations and icon switch off automatically afterward.
 - Refreshed the app shell and audio cards, added featured audiobooks, and improved Home discovery stability and player controls.
 
 ### Privacy
