@@ -424,11 +424,11 @@ function TunestrVideoPlayer({ stream, docked, minimized, size, initialPosition, 
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-sm font-semibold leading-5">{stream.title || 'TuneStr stream'}</DialogTitle>
             <DialogDescription className="sr-only">{stream.format === 'odysee' ? `Odysee video by ${stream.creator}` : stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription>
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {stream.format !== 'odysee' && stream.isLive && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-red-500" /></span>}
-              <span>{stream.format === 'odysee' ? stream.creator : stream.isLive ? 'LIVE' : 'Recording'}</span>
-              <span aria-hidden="true">·</span>
-              <span>{stream.format === 'odysee' ? 'Odysee' : 'TuneStr'}</span>
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              {stream.format !== 'odysee' && stream.isLive && <span className="relative flex size-2 shrink-0"><span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-red-500" /></span>}
+              <span className="min-w-0 truncate" title={stream.format === 'odysee' ? stream.creator : undefined}>{stream.format === 'odysee' ? stream.creator : stream.isLive ? 'LIVE' : 'Recording'}</span>
+              <span className="shrink-0" aria-hidden="true">·</span>
+              <span className="shrink-0">{stream.format === 'odysee' ? 'Odysee' : 'TuneStr'}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
