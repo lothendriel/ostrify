@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide-react";
-import { ConcordClient, KeyValue, Helpers, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity } from '@jsr/applesauce__concord';
+import { ConcordClient, KeyValue, Helpers, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity, type ConcordStorage } from '@jsr/applesauce__concord';
 import { useNostr } from '@nostrify/react';
 import { verifyEvent } from 'nostr-tools';
 import { queryLibraryEvents } from '@/lib/libraryQuery';
@@ -32,6 +32,38 @@ import { getUserRelayUrls } from '@/lib/appRelays';
 const ARMADA_INVITE = 'https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw';
 const CONCORD_RELAYS = ['wss://jskitty.com/nostr', 'wss://asia.vectorapp.io/nostr', 'wss://relay.ditto.pub', 'wss://relay.dreamith.to'];
 const CHAT_MEMBERSHIP_PREFIX = 'ostrify-armada-chat-joined-v1:';
+const CHAT_CACHE_PREFIX = 'ostrify-armada-cache-v1:';
+const CHAT_DEBUG_KEY = 'ostrify-armada-timing';
+
+// Only the SDK's signed, NIP-44 encrypted list fragments are durable. Its
+// membership mirror and recovery records may contain keys and stay in memory.
+function createChatStorage(pubkey: string): ConcordStorage {
+  const memory = KeyValue.memoryStorage();
+  const fragmentKey = `concord:list-fragments:${pubkey}`;
+  const cacheKey = `${CHAT_CACHE_PREFIX}fragments:${pubkey}`;
+  return {
+    async getItem(key) {
+      if (key !== fragmentKey) return memory.getItem(key);
+      try { return localStorage.getItem(cacheKey); } catch { return null; }
+    },
+    async setItem(key, value) {
+      if (key !== fragmentKey) return memory.setItem(key, value);
+      try { localStorage.setItem(cacheKey, value); } catch { /* Relays remain the source of truth. */ }
+    },
+    async removeItem(key) {
+      if (key !== fragmentKey) return memory.removeItem(key);
+      try { localStorage.removeItem(cacheKey); } catch { /* Storage may be unavailable. */ }
+    },
+  };
+}
+
+function chatTiming(label: string, startedAt: number, details?: object): void {
+  try {
+    if (localStorage.getItem(CHAT_DEBUG_KEY) === '1') {
+      console.info('[Armada timing]', label, `${Math.round(performance.now() - startedAt)}ms`, details ?? '');
+    }
+  } catch { /* Timing diagnostics are optional. */ }
+}
 
 function readJoinedCommunity(pubkey: string): string | null {
   try {
@@ -62,6 +94,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
   const { config } = useAppContext();
   const { nostr } = useNostr();
   const clientRef = useRef<ConcordClient | null>(null);
+  const syncStartedAt = useRef<number | null>(null);
   const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ConcordChannel | null>(null);
@@ -86,7 +119,14 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
 
   useEffect(() => {
     if (!channel) return;
-    const subscription = channel.messages$.subscribe(setMessages);
+    let measured = false;
+    const subscription = channel.messages$.subscribe(next => {
+      if (!measured && next.length && syncStartedAt.current !== null) {
+        measured = true;
+        chatTiming('First messages', syncStartedAt.current, { count: next.length });
+      }
+      setMessages(next);
+    });
     return () => subscription.unsubscribe();
   }, [channel]);
 
@@ -100,22 +140,27 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
     setPhase('joining'); setError(''); setNotice(''); setStatus('Connecting to community relays…');
     const userRelays = getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
     const relays = [...new Set([...CONCORD_RELAYS, ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url), ...userRelays])];
-    // The SDK's default browser store contains community keys in plaintext.
-    // Keep it in memory; persist only its signed/encrypted list through Nostr.
-    const client = new ConcordClient({ signer: user.signer, relays, storage: KeyValue.memoryStorage(), autoUnlock: true, autoSaveCommunityList: false, watchDirectInvites: false });
+    const startedAt = performance.now();
+    syncStartedAt.current = startedAt;
+    const client = new ConcordClient({ signer: user.signer, relays, storage: createChatStorage(user.pubkey), autoUnlock: true, autoSaveCommunityList: false, watchDirectInvites: false });
     clientRef.current = client;
     try {
       // First-time invite discovery runs alongside the account-list sync rather
       // than waiting for it and then waiting for a second relay pool timeout.
       const parsed = Helpers.parseInviteLink(ARMADA_INVITE);
-      const inviteRead = restore ? null : queryLibraryEvents(nostr, parsed.bootstrapRelays, [{ kinds: [33301], authors: [parsed.linkSigner] }], AbortSignal.timeout(8000));
-      const [result] = await Promise.all([inviteRead, client.start()]);
+      const inviteRead = restore ? null : queryLibraryEvents(nostr, parsed.bootstrapRelays, [{ kinds: [33301], authors: [parsed.linkSigner] }], AbortSignal.timeout(8000)).then(result => {
+        chatTiming('Invite lookup', startedAt, { completed: result.completedRelays.length, incomplete: result.incompleteRelays.length });
+        return result;
+      });
+      const startup = client.start().then(() => chatTiming('Account startup', startedAt));
+      const [result] = await Promise.all([inviteRead, startup]);
       if (!alive.current) return;
       let community: ConcordCommunity;
       if (restore && savedCommunityId) {
         const restored = client.getCommunity(savedCommunityId);
         if (!restored) throw new Error('Your saved community could not be restored from your relays. Check your connection and try again.');
         community = restored;
+        chatTiming('Community restored', startedAt);
       } else {
         if (!result) throw new Error('The invite could not be checked.');
         setStatus('Checking the invite and joining…');
@@ -128,6 +173,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
         const bundle = Helpers.validateInviteBundle(Helpers.getInviteBundle(winner, parsed.token));
         if (!bundle) throw new Error('The invite could not be verified.');
         community = await client.joinByBundle(bundle);
+        chatTiming('Community joined', startedAt);
         rememberJoinedCommunity(user.pubkey, community.communityId);
       }
       if (!alive.current) return;
@@ -140,8 +186,13 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
         if (channelRef.current !== next) { channelRef.current = next; setChannel(next); setMessages([]); }
       };
       const channelsSub = community.state$.subscribe(updateChannel);
+      let recordedLive = false;
       const statusSub = community.status$.subscribe(value => {
         if (!alive.current) return;
+        if (!recordedLive && value.phase === 'live' && value.connected) {
+          recordedLive = true;
+          chatTiming('Chat ready', startedAt);
+        }
         setLive(value.phase === 'live' && value.connected);
         setStatus(value.error ? `Chat sync error: ${value.error}` : value.phase === 'live' ? (value.connected ? 'Connected' : 'Relay connection unavailable') : `Syncing community (${value.phase})…`);
       });
@@ -151,6 +202,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
       subscriptionsRef.current.push(channelsSub, statusSub, diagnosticsSub);
       setPhase('connected');
     } catch (cause) {
+      chatTiming('Startup failed', startedAt);
       client.dispose(); if (clientRef.current === client) clientRef.current = null;
       if (alive.current) { setError(cause instanceof Error ? cause.message : 'Unable to connect to Armada.'); setPhase('error'); }
     }
