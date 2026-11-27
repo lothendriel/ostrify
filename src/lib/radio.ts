@@ -1,5 +1,52 @@
 import { inferCategory } from "@/lib/categories";
 import type { Track } from "@/lib/music";
+import type { RadioStation } from "@/hooks/useRadioFavorites";
+import { sanitizeUrl } from "@/lib/sanitize";
+
+const RADIO_DIRECTORY_SERVERS = ['https://de1.api.radio-browser.info', 'https://nl1.api.radio-browser.info', 'https://at1.api.radio-browser.info'];
+export const RADIO_STATION_ID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+
+export async function radioDirectoryRequest(path: string, signal: AbortSignal): Promise<unknown> {
+  for (const server of RADIO_DIRECTORY_SERVERS) {
+    try {
+      const response = await fetch(`${server}${path}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]), referrerPolicy: 'no-referrer' });
+      if (!response.ok) continue;
+      return await response.json() as unknown;
+    } catch (error) {
+      if (signal.aborted) throw error;
+    }
+  }
+  throw new Error('The station directory is unavailable. Please try again.');
+}
+
+export function parseRadioStations(value: unknown): RadioStation[] {
+  if (!Array.isArray(value)) throw new Error('The station directory returned an unexpected response.');
+  return value.flatMap((item: unknown) => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    const text = (key: string) => typeof record[key] === 'string' ? (record[key] as string).trim().slice(0, 300) : '';
+    const id = text('stationuuid');
+    const name = text('name');
+    if (!RADIO_STATION_ID.test(id) || !name) return [];
+    return [{ id, name, url: sanitizeUrl(text('url_resolved')), image: sanitizeUrl(text('favicon')), location: [text('state'), text('country')].filter(Boolean).join(' · '), tags: text('tags').split(',').filter(Boolean).slice(0, 3).join(' · '), hls: record.hls === 1 || /\.m3u8(?:\?|$)/i.test(text('url_resolved')) }];
+  });
+}
+
+export function radioStationTrack(station: RadioStation): Track {
+  return { id: `radio-browser:${station.id}`, source: 'radio-browser', url: station.url ?? '', mimeType: station.hls ? 'application/vnd.apple.mpegurl' : undefined, title: station.name, artist: station.location || 'Live radio', image: station.image, pubkey: '', kind: 'music', topics: [], createdAt: 0 };
+}
+
+export function radioSharePath(track: Pick<Track, 'id' | 'source'>): string | undefined {
+  const stationId = track.id.startsWith('radio-browser:') ? track.id.slice('radio-browser:'.length) : '';
+  return track.source === 'radio-browser' && RADIO_STATION_ID.test(stationId) ? `/audio?radio=${stationId.toLowerCase()}` : undefined;
+}
+
+export async function fetchRadioStation(id: string, signal: AbortSignal): Promise<Track | undefined> {
+  if (!RADIO_STATION_ID.test(id)) return undefined;
+  const stations = parseRadioStations(await radioDirectoryRequest(`/json/stations/byuuid/${id}`, signal));
+  const station = stations.find(item => item.id.toLowerCase() === id.toLowerCase());
+  return station?.url ? radioStationTrack(station) : undefined;
+}
 
 function artistKeys(track: Track): string[] {
   const keys = [track.artistPubkey?.toLowerCase(), track.artistId ? `wavlake:${track.artistId.toLowerCase()}` : undefined];

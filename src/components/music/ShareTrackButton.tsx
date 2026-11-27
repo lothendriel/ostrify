@@ -10,6 +10,7 @@ import { sanitizeUrl } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import type { Track } from '@/lib/music';
 import { audioDetailPath, encodeAudioDetailFallback } from '@/lib/audioDetail';
+import { radioSharePath } from '@/lib/radio';
 
 const PUBLIC_APP_ORIGIN = 'https://ostrify.studio314.us';
 const AUDIO_SHARE_API_URL = '/api/audio-shares';
@@ -52,7 +53,14 @@ function nostrAudioFallbackUrl(track: Track): URL | undefined {
   return fallbackUrl.href.length <= 7000 ? fallbackUrl : undefined;
 }
 
+function radioDetailUrl(track: Track): URL | undefined {
+  const path = radioSharePath(track);
+  return path ? new URL(path, PUBLIC_APP_ORIGIN) : undefined;
+}
+
 function audioDetailUrl(track: Track): URL | undefined {
+  const radioUrl = radioDetailUrl(track);
+  if (radioUrl) return radioUrl;
   const compactUrl = compactAudioDetailUrl(track);
   if (compactUrl) return compactUrl;
   const nostrFallbackUrl = nostrAudioFallbackUrl(track);
@@ -159,6 +167,11 @@ export function ShareTrackButton({ track, className, iconClassName }: { track: T
     setIsPreparingLink(false);
     setMessage(defaultMessage(track));
     setOpen(true);
+    // Radio Browser's stable station ID is already compact and does not need KV.
+    if (fallbackUrl && radioDetailUrl(track)) {
+      shortLinkRef.current = fallbackUrl;
+      return;
+    }
     if (!fallbackUrl || !user) return;
 
     setIsPreparingLink(true);

@@ -23,6 +23,7 @@ import { fountainShowGuid, formatDuration, sanitizeAudioFallbacks, type Track } 
 import { sanitizeUrl } from "@/lib/sanitize";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { decodeAudioDetailFallback } from "@/lib/audioDetail";
+import { fetchRadioStation, RADIO_STATION_ID } from "@/lib/radio";
 
 function resolveTuneStrId(id: string): string {
   if (id.startsWith("tunestr:n94:")) return id.slice("tunestr:n94:".length);
@@ -120,7 +121,16 @@ function sourceHref(track: Track, bookId?: string): string | undefined {
 export default function AudioDetailPage() {
   const [searchParams] = useSearchParams();
   const compressedFallback = useMemo(() => decodeAudioDetailFallback(searchParams.get("fallback")), [searchParams]);
-  const rawId = searchParams.get("track") ?? compressedFallback?.id ?? "";
+  const radioIdParam = searchParams.get("radio");
+  const radioId = radioIdParam && RADIO_STATION_ID.test(radioIdParam) ? radioIdParam.toLowerCase() : undefined;
+  const radioStation = useQuery({
+    queryKey: ["radio-browser", "station", radioId],
+    enabled: !!radioId,
+    queryFn: ({ signal }) => fetchRadioStation(radioId!, signal),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  const rawId = radioId ? `radio-browser:${radioId}` : searchParams.get("track") ?? compressedFallback?.id ?? "";
   const trackId = decodeAudioId(rawId)?.trim() ?? "";
   const sharedTrack = useMemo<Track | undefined>(() => {
     if (compressedFallback?.id === trackId) return compressedFallback;
@@ -170,7 +180,7 @@ export default function AudioDetailPage() {
   const podcastIndexFallback = useMemo(() => parsePodcastIndexFallback(trackId), [trackId]);
   const unsupportedExternalId = !sharedTrack && ((trackId.startsWith("podcast-index:") && !podcastIndexFallback) || (trackId.startsWith("fountain-rss:") && !fountainRss) || (trackId.startsWith("gutenberg:") && !gutenbergChapter) || (trackId.startsWith("librivox:") && !librivoxChapter) || (trackId.startsWith("tunestr:") && !isTuneStrReference(trackId)));
   const directLookup = useTracksByIds(
-    trackId && !sharedTrack && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !unsupportedExternalId ? [nostrLookupId] : undefined,
+    trackId && !radioId && !sharedTrack && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !unsupportedExternalId ? [nostrLookupId] : undefined,
     true,
     [DROPS_MUSIC_RELAY],
   );
@@ -218,24 +228,24 @@ export default function AudioDetailPage() {
         : undefined;
   const podcastShowId = podcastIndexFallback?.episodeId ? podcastIndexEpisode.data?.showId : undefined;
   const nostrTrack = directLookup.data?.tracks.find(item => item.id.toLowerCase() === nostrLookupId.toLowerCase()) ?? directLookup.data?.tracks[0];
-  const resolvedTrack = chapter ?? bookTrack ?? (!librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !sharedTrack && !unsupportedExternalId ? nostrTrack : undefined) ?? fallbackEpisode ?? sharedTrack;
+  const resolvedTrack = radioStation.data ?? chapter ?? bookTrack ?? (!radioId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !sharedTrack && !unsupportedExternalId ? nostrTrack : undefined) ?? fallbackEpisode ?? sharedTrack;
   const tuneStrEventKind = resolvedTrack?.event?.kind ?? (trackId.startsWith("tunestr:n94:") ? 1053 : undefined);
   const trackWithFallbackPublisher = resolvedTrack;
   const fallbackArtistPubkey = searchParams.get("artistPubkey");
   const trackWithFallbackArtist = trackWithFallbackPublisher && fallbackArtistPubkey && !trackWithFallbackPublisher.artistPubkey && /^[0-9a-f]{64}$/i.test(fallbackArtistPubkey) ? { ...trackWithFallbackPublisher, artistPubkey: fallbackArtistPubkey.toLowerCase() } : trackWithFallbackPublisher;
   const trackWithPodcastShowBase = trackWithFallbackArtist && trackWithFallbackArtist.kind === "podcast" && !trackWithFallbackArtist.showId && podcastShowId ? { ...trackWithFallbackArtist, showId: podcastShowId } : trackWithFallbackArtist;
   const trackWithPodcastShow = trackWithPodcastShowBase && (tuneStrEventKind ?? fallbackEventKind) && !trackWithPodcastShowBase.eventKind ? { ...trackWithPodcastShowBase, eventKind: tuneStrEventKind ?? fallbackEventKind } : trackWithPodcastShowBase;
-  const detailLoadError = (!!librivoxChapter && !librivoxBook.data && librivoxBook.isError) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isError) ||
+  const detailLoadError = (!!radioId && radioStation.isError) || (!!librivoxChapter && !librivoxBook.data && librivoxBook.isError) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isError) ||
     (!!fountainRss && (fountainShow.isError || fountainEpisodes.isError) && !fallbackEpisode) ||
     (!!podcastIndexFallback && (podcastIndexFallback.episodeId ? podcastIndexEpisode.isError : podcastIndexEpisodes.isError) && !fallbackEpisode) ||
     (!!wavlakeTrackId && wavlakeDetailQuery.isError && !trackWithPodcastShow) ||
-    (!sharedTrack && !unsupportedExternalId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && directLookup.isError);
+    (!radioId && !sharedTrack && !unsupportedExternalId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && directLookup.isError);
   const isLoading = trackId.length > 0 && !sharedTrack && !unsupportedExternalId && !trackWithPodcastShow && (
-    (!!librivoxChapter && !librivoxBook.data && librivoxBook.isLoading) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isLoading) ||
+    (!!radioId && radioStation.isLoading) || (!!librivoxChapter && !librivoxBook.data && librivoxBook.isLoading) || (!!gutenbergChapter && !gutenbergBook.data && gutenbergBook.isLoading) ||
     (!!fountainRss && !fallbackEpisode && (fountainShow.isLoading || fountainEpisodes.isLoading)) ||
     (!!podcastIndexFallback && !fallbackEpisode && (podcastIndexFallback.episodeId ? podcastIndexEpisode.isLoading : podcastIndexEpisodes.isLoading)) ||
     (!!wavlakeTrackId && !trackWithPodcastShow && wavlakeDetailQuery.isLoading) ||
-    (!librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && directLookup.isLoading)
+    (!radioId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && directLookup.isLoading)
   );
 
   useSeoMeta({ title: trackWithPodcastShow ? `${trackWithPodcastShow.title} — Ostrify` : "Audio — Ostrify" });
@@ -243,6 +253,7 @@ export default function AudioDetailPage() {
   if (!trackId) return <div className="p-6"><h1 className="text-2xl font-bold">Audio item not found</h1><p className="mt-2 text-muted-foreground">This link is missing its track identifier.</p></div>;
 
   if (isLoading) return <div className="space-y-5 p-4 sm:p-6"><Skeleton className="h-72 rounded-xl" /><Skeleton className="h-24 rounded-xl" /></div>;
+  if (!trackWithPodcastShow && radioId) return <div className="space-y-3 p-6"><h1 className="text-2xl font-bold">{detailLoadError ? "Couldn’t load this station" : "Station unavailable"}</h1><p className="max-w-xl text-sm text-muted-foreground">{detailLoadError ? "The Radio Browser directory could not be reached. Please try again." : "This station may have been removed or no longer has a secure stream."}</p><Button variant="outline" onClick={() => void radioStation.refetch()}>Try again</Button> <Link to="/radio" className="text-sm font-semibold text-primary underline">Browse radio stations</Link></div>;
   if (!trackWithPodcastShow) return <div className="space-y-3 p-6"><h1 className="text-2xl font-bold">{detailLoadError ? "Couldn’t load this audio" : "Audio item unavailable"}</h1><p className="max-w-xl text-sm text-muted-foreground">{detailLoadError ? "The source may be temporarily unavailable. Try again, or open the item from its original list." : <>This item is no longer available from the selected relays or catalog. It may have been removed, or your current sources may not include it. <strong className="font-semibold text-foreground">The relay hosting the track may not have responded. Refresh the page and try again.</strong></>}</p>{unsupportedExternalId && <p className="text-sm text-muted-foreground">This external podcast link doesn’t contain a supported episode identifier.</p>}{detailLoadError && <Button variant="outline" onClick={() => { void directLookup.refetch(); void librivoxBook.refetch(); void gutenbergBook.refetch(); void fountainShow.refetch(); void fountainEpisodes.refetch(); void podcastIndexShow.refetch(); void podcastIndexEpisodes.refetch(); void podcastIndexEpisode.refetch(); }}>Try again</Button>}<Link to="/music" className="text-sm font-semibold text-primary underline">Explore music</Link></div>;
 
   const track = trackWithPodcastShow?.id === trackId && trackWithPodcastShow.url

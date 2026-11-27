@@ -10,42 +10,10 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrackArtwork } from '@/components/music/TrackArtwork';
 import { usePlayer } from '@/hooks/usePlayer';
-import type { Track } from '@/lib/music';
-import { sanitizeUrl } from '@/lib/sanitize';
+import { radioDirectoryRequest as directoryRequest, parseRadioStations as parseStations, radioStationTrack as stationTrack } from '@/lib/radio';
 
-const SERVERS = ['https://de1.api.radio-browser.info', 'https://nl1.api.radio-browser.info', 'https://at1.api.radio-browser.info'];
 const PAGE_SIZE = 30;
 type Filters = { name: string; country: string; state: string };
-async function directoryRequest(path: string, signal: AbortSignal): Promise<unknown> {
-  for (const server of SERVERS) {
-    try {
-      const response = await fetch(`${server}${path}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]), referrerPolicy: 'no-referrer' });
-      if (!response.ok) continue;
-      return await response.json() as unknown;
-    } catch (error) {
-      if (signal.aborted) throw error;
-    }
-  }
-  throw new Error('The station directory is unavailable. Please try again.');
-}
-
-function parseStations(value: unknown): Station[] {
-  if (!Array.isArray(value)) throw new Error('The station directory returned an unexpected response.');
-  return value.flatMap((item: unknown) => {
-    if (!item || typeof item !== 'object') return [];
-    const record = item as Record<string, unknown>;
-    const text = (key: string) => typeof record[key] === 'string' ? (record[key] as string).trim().slice(0, 300) : '';
-    const id = text('stationuuid');
-    const name = text('name');
-    if (!/^[\da-f-]{36}$/i.test(id) || !name) return [];
-    return [{ id, name, url: sanitizeUrl(text('url_resolved')), image: sanitizeUrl(text('favicon')), location: [text('state'), text('country')].filter(Boolean).join(' · '), tags: text('tags').split(',').filter(Boolean).slice(0, 3).join(' · '), hls: record.hls === 1 || /\.m3u8(?:\?|$)/i.test(text('url_resolved')) }];
-  });
-}
-
-function stationTrack(station: Station): Track {
-  return { id: `radio-browser:${station.id}`, source: 'radio-browser', url: station.url ?? '', mimeType: station.hls ? 'application/vnd.apple.mpegurl' : undefined, title: station.name, artist: station.location || 'Live radio', image: station.image, pubkey: '', kind: 'music', topics: [], createdAt: 0 };
-}
-
 export default function LocalRadioPage() {
   useSeoMeta({ title: 'Local Radio — Ostrify', description: 'Discover live radio stations around the world.' });
   const { favorites, toggleFavorite } = useRadioFavorites();
