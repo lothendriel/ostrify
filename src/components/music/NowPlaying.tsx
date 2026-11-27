@@ -279,7 +279,8 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
             {status === 'loading' && player.isPlaying && !reducedMotion && <div className="absolute inset-0 flex items-center justify-center text-xs text-white/70" role="status">Connecting visualiser…</div>}
           </div>
           <div className="mt-3 flex items-center justify-center gap-2" aria-label="Listening actions">
-            <ListeningRoomLike key={current.id} track={current} />
+            {/* Keep this control stable; the zap dialog below resets per track. */}
+            <ListeningRoomLike track={current} />
             <ShareTrackButton track={current} className={actionClass} iconClassName="size-5" />
             <PlayerZapButton key={current.id} track={current} className={actionClass} iconClassName="size-5" />
           </div>
