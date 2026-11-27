@@ -172,15 +172,17 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           >
             <SkipBack className="size-5 fill-current" />
           </Button>
-          <Button
-            onClick={player.togglePlay}
-            disabled={!current || player.videoActive}
-            title={player.videoActive ? "Close the video player to resume audio" : undefined}
-            aria-label={player.isPlaying ? "Pause" : "Play"}
-            className="size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
-          >
-            {player.isPlaying ? <Pause className="size-5 fill-current" /> : <SeasonalPlayIcon />}
-          </Button>
+          <span className={cn("player-play-ring", player.isPlaying && "player-play-ring-active")}>
+            <Button
+              onClick={player.togglePlay}
+              disabled={!current || player.videoActive}
+              title={player.videoActive ? "Close the video player to resume audio" : undefined}
+              aria-label={player.isPlaying ? "Pause" : "Play"}
+              className="relative z-10 size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
+            >
+              {player.isPlaying ? <Pause className="size-5 fill-current" /> : <SeasonalPlayIcon />}
+            </Button>
+          </span>
           <Button
             variant="ghost"
             size="icon"
