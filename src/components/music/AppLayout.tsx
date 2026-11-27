@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, Menu, RefreshCw } from "lucide-react";
+import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide-react";
+import { ConcordClient, KeyValue, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity } from '@jsr/applesauce__concord';
+import { useAuthor } from '@/hooks/useAuthor';
+import { genUserName } from '@/lib/sanitize';
+import { Textarea } from '@/components/ui/textarea';
 import { usePreviousLocation } from "@/components/NavigationHistory";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -19,6 +23,130 @@ import { useFollowedPeople } from '@/hooks/useFollowedPeople';
 import { useFriendStatuses } from '@/hooks/useFriendLibrary';
 import { useQueryClient } from '@tanstack/react-query';
 import { HomeSessionProvider } from '@/contexts/HomeSessionContext';
+import { useAppContext } from '@/hooks/useAppContext';
+import { getUserRelayUrls } from '@/lib/appRelays';
+
+const ARMADA_INVITE = 'https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw';
+const CONCORD_RELAYS = ['wss://jskitty.com/nostr', 'wss://asia.vectorapp.io/nostr', 'wss://relay.ditto.pub', 'wss://relay.dreamith.to'];
+
+type ChatUser = NonNullable<ReturnType<typeof useCurrentUser>['user']>;
+
+function ChatMessage({ message }: { message: ConcordChannelMessage }) {
+  const { data } = useAuthor(message.rumor.pubkey);
+  const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(message.rumor.pubkey);
+  const date = new Date(message.rumor.created_at * 1000);
+  const validDate = Number.isFinite(date.getTime());
+  return <article className="min-w-0 rounded-lg bg-secondary/40 p-3">
+    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-semibold">{name}</span>{validDate && <time className="shrink-0 text-xs text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}</div>
+    <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.content}</p>
+    {message.edit && <span className="text-xs text-muted-foreground">Edited</span>}
+  </article>;
+}
+
+function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => void }) {
+  const { config } = useAppContext();
+  const clientRef = useRef<ConcordClient | null>(null);
+  const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<ConcordChannel | null>(null);
+  const alive = useRef(true);
+  const [phase, setPhase] = useState<'intro' | 'joining' | 'connected' | 'error'>('intro');
+  const [status, setStatus] = useState('');
+  const [channel, setChannel] = useState<ConcordChannel | null>(null);
+  const [messages, setMessages] = useState<ConcordChannelMessage[]>([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [canSend, setCanSend] = useState(false);
+  const [live, setLive] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; channelRef.current = null; subscriptionsRef.current.forEach(subscription => subscription.unsubscribe()); subscriptionsRef.current = []; clientRef.current?.dispose(); clientRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    if (!channel) return;
+    const subscription = channel.messages$.subscribe(setMessages);
+    return () => subscription.unsubscribe();
+  }, [channel]);
+
+  useEffect(() => {
+    const viewport = messagesEndRef.current?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  }, [channel, messages.length]);
+
+  const join = async () => {
+    if (!user.signer.nip44) { setError('Your signer must support NIP-44 encryption to join this chat.'); setPhase('error'); return; }
+    setPhase('joining'); setError(''); setStatus('Connecting to community relays…');
+    const userRelays = getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
+    const relays = [...new Set([...CONCORD_RELAYS, ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url), ...userRelays])];
+    const client = new ConcordClient({ signer: user.signer, relays, storage: KeyValue.memoryStorage(), autoUnlock: true, autoSaveCommunityList: false, watchDirectInvites: false });
+    clientRef.current = client;
+    try {
+      await client.start();
+      if (!alive.current) return;
+      setStatus('Checking the invite and joining…');
+      const community: ConcordCommunity = await client.joinByLink(ARMADA_INVITE);
+      if (!alive.current) return;
+      const updateChannel = () => {
+        const state = community.state$.value;
+        const matches = state.channels.filter(item => item.name.toLowerCase() === 'general');
+        setCanSend(!state.banlist.has(user.pubkey) && !state.dissolved);
+        if (matches.length !== 1) { channelRef.current = null; setChannel(null); return; }
+        const next = community.getChannel(matches[0].channel_id) ?? null;
+        if (channelRef.current !== next) { channelRef.current = next; setChannel(next); setMessages([]); }
+      };
+      const channelsSub = community.state$.subscribe(updateChannel);
+      const statusSub = community.status$.subscribe(value => {
+        if (!alive.current) return;
+        setLive(value.phase === 'live' && value.connected);
+        setStatus(value.error ? `Chat sync error: ${value.error}` : value.phase === 'live' ? (value.connected ? 'Connected' : 'Relay connection unavailable') : `Syncing community (${value.phase})…`);
+      });
+      const diagnosticsSub = community.diagnostics$.subscribe(diagnostic => {
+        if (alive.current && diagnostic.stage === 'plane-publish' && diagnostic.plane === 'channel') setError('The message may not have reached a relay. Check your connection before retrying.');
+      });
+      subscriptionsRef.current.push(channelsSub, statusSub, diagnosticsSub);
+      setPhase('connected');
+    } catch (cause) {
+      client.dispose(); if (clientRef.current === client) clientRef.current = null;
+      if (alive.current) { setError(cause instanceof Error ? cause.message : 'Unable to connect to Armada.'); setPhase('error'); }
+    }
+  };
+
+  const send = async () => {
+    const body = text.trim();
+    if (!body || !channel || sending || !canSend || !live || channel.community.phase$.value !== 'live' || channel.community.state$.value.banlist.has(user.pubkey)) return;
+    setSending(true); setError('');
+    try { await channel.sendMessage({ text: body }); if (alive.current) setText(''); }
+    catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : 'Could not send message.'); }
+    finally { if (alive.current) setSending(false); }
+  };
+
+  return <section aria-label="Ostrify Armada chat" className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70">
+    <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-4">
+      <div><h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Armada</h2><p className="mt-1 text-sm text-muted-foreground">#general · Community chat</p></div>
+      <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close chat" onClick={onClose}><X className="size-4" /></Button>
+    </div>
+    {phase === 'intro' || phase === 'error' ? <div className="space-y-4 overflow-y-auto p-4">
+      <p className="text-sm text-muted-foreground">Join the Ostrify Armada community to chat in #general with your Nostr identity.</p>
+      <p className="text-sm text-muted-foreground">This invite is public. Anyone with it can join and read messages in the channels it grants. Joining publishes your membership and an encrypted community list using your signer.</p>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <Button className="w-full" onClick={() => void join()}>{phase === 'error' ? 'Try again' : 'Join chat'}</Button>
+    </div> : phase === 'joining' ? <div className="p-4 text-sm text-muted-foreground" role="status">{status}</div> : <>
+      <div role="status" className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">{status}</div>
+      <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
+        {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #general channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...messages].reverse().slice(-100).map(message => <ChatMessage key={message.rumor.id} message={message} />)}
+      <div ref={messagesEndRef} /></div></ScrollArea>
+      <div className="space-y-2 border-t border-border/70 p-4">
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {!canSend && <p className="text-xs text-muted-foreground">Messaging is unavailable for this account or community.</p>}
+        <Textarea aria-label="Message #general" placeholder="Message #general" value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={!channel || !canSend || !live || sending} />
+        <Button className="w-full" disabled={!channel || !canSend || !live || !text.trim() || sending} onClick={() => void send()}><Send className="size-4" /> {sending ? 'Sending…' : 'Send message'}</Button>
+      </div>
+    </>}
+  </section>;
+}
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -26,7 +154,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [homeSessionScope] = useState(() => crypto.randomUUID());
   const previousHomeAccount = useRef<string | undefined>(undefined);
-  const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | null>(null);
+  const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | 'chat' | null>(null);
   const { pathname } = useLocation();
   const friendsPageOpen = pathname === '/friends';
   const { user } = useCurrentUser();
@@ -48,7 +176,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if ((!friendsPageOpen && activePanel !== 'friends') || !user || !followedPeople.hasReadRelays || !followedPeople.people.length) return;
     void statuses.refetch();
   }, [friendsPageOpen, activePanel, user, followedPeople.hasReadRelays, friendKey, statuses.refetch]);
-  const togglePanel = (panel: 'friends' | 'queue' | 'notifications') => setActivePanel(current => current === panel ? null : panel);
+  const togglePanel = (panel: 'friends' | 'queue' | 'notifications' | 'chat') => setActivePanel(current => current === panel ? null : panel);
+  const visiblePanel = activePanel === 'chat' && !user ? null : activePanel;
 
   return (
     <div className="ostrify-shell fixed inset-x-0 top-0 flex h-svh flex-col overflow-hidden text-foreground">
@@ -91,6 +220,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="hidden shrink-0 items-center gap-1 sm:flex">
+              {user && <Button type="button" variant="ghost" size="icon" className={`rounded-full ${visiblePanel === 'chat' ? 'bg-accent' : ''}`} aria-label="Ostrify Armada chat" aria-pressed={visiblePanel === 'chat'} onClick={() => togglePanel('chat')}><MessageCircle className="size-5" /></Button>}
               <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
               <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
             </div>
@@ -99,6 +229,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex w-full items-center justify-between border-t border-border/40 pt-1 sm:hidden">
               <div className="flex items-center gap-2">
+                {user && <Button type="button" variant="ghost" size="icon" className={`rounded-full ${visiblePanel === 'chat' ? 'bg-accent' : ''}`} aria-label="Ostrify Armada chat" aria-pressed={visiblePanel === 'chat'} onClick={() => togglePanel('chat')}><MessageCircle className="size-5" /></Button>}
                 <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
                 <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
                 <Button type="button" variant="ghost" size="icon" className="rounded-full" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>
@@ -120,17 +251,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        {!isMobile && <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue' && activePanel !== 'notifications'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : activePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : activePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
-          {activePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
-          {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
-          {activePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
+        {!isMobile && <aside aria-hidden={!visiblePanel} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${visiblePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : visiblePanel === 'queue' || visiblePanel === 'chat' ? 'w-80 opacity-100 xl:w-96' : visiblePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
+          {visiblePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
+          {visiblePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
+          {visiblePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
+          {visiblePanel === 'chat' && user && <ArmadaChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />}
         </aside>}
-        {isMobile && activePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-28 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
-        {isMobile && <div className={`fixed inset-x-0 bottom-28 z-40 transition-[transform,opacity] duration-300 ease-in-out ${activePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!activePanel} inert={!activePanel}>
+        {isMobile && visiblePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-28 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
+        {isMobile && <div className={`fixed inset-x-0 bottom-28 z-40 transition-[transform,opacity] duration-300 ease-in-out ${visiblePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!visiblePanel} inert={!visiblePanel}>
           <div className="mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl pb-[env(safe-area-inset-bottom)]">
-            {activePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
-            {activePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
-            {activePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
+            {visiblePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
+            {visiblePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
+            {visiblePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
+            {visiblePanel === 'chat' && user && <ArmadaChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />}
           </div>
         </div>}
         </div>
