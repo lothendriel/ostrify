@@ -543,39 +543,26 @@
   border-color: #df547e;
   box-shadow: 0 0 10px rgb(255 73 133 / 20%);
 }
-.valentines .ostrify-logo-link > span:first-child::after {
-  content: '';
-  position: absolute;
-  inset: -5px;
-  background: var(--valentines-heart) center / contain no-repeat;
-  pointer-events: none;
-}
 .valentines .ostrify-player {
   background: radial-gradient(ellipse at 50% 0%, #641127, transparent 54%), linear-gradient(90deg, #300712, #3e0714 50%, #300712);
   border-color: #ff5d91;
   box-shadow: 0 -2px 14px rgb(255 46 112 / 40%);
 }
-.valentines .ostrify-player::before,
-.valentines .ostrify-player::after {
-  content: '';
-  position: absolute;
-  pointer-events: none;
-  bottom: 0;
-  width: 150px;
-  height: 90px;
-  opacity: .65;
-  background: var(--valentines-roses) center bottom / contain no-repeat;
-}
-.valentines .ostrify-player::before { left: 24%; }
-.valentines .ostrify-player::after { right: 24%; transform: scaleX(-1); }
 .valentines .player-play-button {
-  color: white;
+  color: #4b0922;
   background: transparent;
   overflow: visible;
 }
 .valentines .player-play-button:hover { background: transparent; }
-.valentines .valentines-player-heart { z-index: 0; }
-.valentines .player-play-button > svg { position: relative; z-index: 1; }
+.valentines .player-play-button > .valentines-player-fill {
+  position: absolute;
+  z-index: 0;
+  fill: #ff96c2;
+  stroke: none;
+  transform: scale(.88);
+}
+.valentines .valentines-player-heart { z-index: 1; }
+.valentines .player-play-button > svg:not(.valentines-player-fill) { position: relative; z-index: 2; }
 .valentines .player-play-ring-active::before {
   background: conic-gradient(from 0deg, transparent 0deg, transparent 255deg, #ff548d 345deg, #ffe7f1 360deg);
 }
@@ -606,7 +593,6 @@
 .valentines .ostrify-audio-card:hover { border-color: #ffc4d7; }
 @media (max-width: 767px) {
   .valentines .ostrify-atmosphere { height: 390px; background-position: center, 62% top; }
-  .valentines .ostrify-player::before, .valentines .ostrify-player::after { display: none; }
 }
 
 /* A small holiday garland, with a static treatment for reduced-motion users. */

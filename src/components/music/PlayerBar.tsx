@@ -11,6 +11,7 @@ import {
   Volume1,
   VolumeX,
   AudioLines,
+  Heart,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -184,7 +185,10 @@ export function PlayerBar({ onQueueToggle, queueOpen = false, nowPlayingOpen, on
               aria-label={player.isPlaying ? "Pause" : "Play"}
               className="player-play-button relative z-10 size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
             >
-              {isValentines && <img src="/images/valentines-heart.webp" alt="" aria-hidden="true" className="valentines-player-heart pointer-events-none absolute inset-0 size-full object-contain" />}
+              {isValentines && <>
+                <Heart aria-hidden="true" className="valentines-player-fill pointer-events-none absolute inset-0 size-full" />
+                <img src="/images/valentines-heart.webp" alt="" aria-hidden="true" className="valentines-player-heart pointer-events-none absolute inset-0 size-full object-contain" />
+              </>}
               {player.isPlaying ? <Pause className="size-5 fill-current" /> : <SeasonalPlayIcon />}
             </Button>
           </span>

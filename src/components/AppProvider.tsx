@@ -203,12 +203,11 @@ export function AppProvider(props: AppProviderProps) {
   }, [isDecember]);
   useEffect(() => {
     const root = document.documentElement;
-    const art = ['--valentines-art', '--valentines-heart', '--valentines-roses'];
+    const art = ['--valentines-art', '--valentines-heart'];
     root.classList.toggle('valentines', isValentines);
     if (isValentines) {
       root.style.setProperty(art[0], 'url("/images/valentines-sunset.webp")');
       root.style.setProperty(art[1], 'url("/images/valentines-heart.webp")');
-      root.style.setProperty(art[2], 'url("/images/valentines-roses.webp")');
     } else {
       for (const name of art) root.style.removeProperty(name);
     }
