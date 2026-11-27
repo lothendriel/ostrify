@@ -152,7 +152,11 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
   const waiting = CHAT_RELAYS.some(relay => !relayStatus[relay] || relayStatus[relay] === 'connecting');
   return <section aria-label="Ostrify Chat" className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70">
     <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-4">
-      <div><h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Chat</h2><p className="mt-1 text-sm text-muted-foreground">Public Nostr community</p></div>
+      <div>
+        <h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Chat</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Public Nostr community</p>
+        <a href="https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Join Ostrify on Armada <span className="sr-only">(opens in a new tab)</span></a>
+      </div>
       <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close chat" onClick={onClose}><X className="size-4" /></Button>
     </div>
     <div className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground" role="status">{waiting && !connected ? 'Connecting to chat relays…' : `${connected} of ${CHAT_RELAYS.length} chat relays connected${connected < CHAT_RELAYS.length ? ' · Messages may be incomplete' : ''}`}</div>
