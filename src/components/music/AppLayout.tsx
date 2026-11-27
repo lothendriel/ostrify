@@ -91,7 +91,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
       if (!alive.current) return;
       const updateChannel = () => {
         const state = community.state$.value;
-        const matches = state.channels.filter(item => item.name.toLowerCase() === 'general');
+        const matches = state.channels.filter(item => item.name.toLowerCase() === 'ostrify-site-chat');
         setCanSend(!state.banlist.has(user.pubkey) && !state.dissolved);
         if (matches.length !== 1) { channelRef.current = null; setChannel(null); return; }
         const next = community.getChannel(matches[0].channel_id) ?? null;
@@ -125,23 +125,23 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
 
   return <section aria-label="Ostrify Armada chat" className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70">
     <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-4">
-      <div><h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Armada</h2><p className="mt-1 text-sm text-muted-foreground">#general · Community chat</p></div>
+      <div><h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Armada</h2><p className="mt-1 text-sm text-muted-foreground">#ostrify-site-chat · Community chat</p></div>
       <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close chat" onClick={onClose}><X className="size-4" /></Button>
     </div>
     {phase === 'intro' || phase === 'error' ? <div className="space-y-4 overflow-y-auto p-4">
-      <p className="text-sm text-muted-foreground">Join the Ostrify Armada community to chat in #general with your Nostr identity.</p>
+      <p className="text-sm text-muted-foreground">Join the Ostrify Armada community to chat in #ostrify-site-chat with your Nostr identity.</p>
       <p className="text-sm text-muted-foreground">This invite is public. Anyone with it can join and read messages in the channels it grants. Joining publishes your membership and an encrypted community list using your signer.</p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <Button className="w-full" onClick={() => void join()}>{phase === 'error' ? 'Try again' : 'Join chat'}</Button>
     </div> : phase === 'joining' ? <div className="p-4 text-sm text-muted-foreground" role="status">{status}</div> : <>
       <div role="status" className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">{status}</div>
       <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
-        {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #general channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...messages].reverse().slice(-100).map(message => <ChatMessage key={message.rumor.id} message={message} />)}
+        {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #ostrify-site-chat channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...messages].reverse().slice(-100).map(message => <ChatMessage key={message.rumor.id} message={message} />)}
       <div ref={messagesEndRef} /></div></ScrollArea>
       <div className="space-y-2 border-t border-border/70 p-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {!canSend && <p className="text-xs text-muted-foreground">Messaging is unavailable for this account or community.</p>}
-        <Textarea aria-label="Message #general" placeholder="Message #general" value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={!channel || !canSend || !live || sending} />
+        <Textarea aria-label="Message #ostrify-site-chat" placeholder="Message #ostrify-site-chat" value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={!channel || !canSend || !live || sending} />
         <Button className="w-full" disabled={!channel || !canSend || !live || !text.trim() || sending} onClick={() => void send()}><Send className="size-4" /> {sending ? 'Sending…' : 'Send message'}</Button>
       </div>
     </>}

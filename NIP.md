@@ -5,7 +5,7 @@ not define any new event kinds — it aggregates and reuses existing NIPs.
 
 ## Ostrify Armada chat
 
-The signed-in chat panel joins the public Ostrify Armada invite using the existing [Concord protocol](https://concordprotocol.org/spec/) and displays the community's `general` channel. Concord uses kind `33301` for the encrypted invite bundle, kind `1059` for encrypted community streams, and encrypted community-list events (including kinds `13302` and `33302`). Ostrify does not define a separate chat schema. The invite is public: anyone holding it can join and read the channels it grants. The panel uses session-only local storage for Concord membership material; the Concord client also publishes the user's encrypted community list to relays. Relay availability and signer NIP-44 support affect joining and syncing. Messages shown optimistically may not have been accepted by a relay.
+The signed-in chat panel joins the public Ostrify Armada invite using the existing [Concord protocol](https://concordprotocol.org/spec/) and displays the community's `ostrify-site-chat` channel. Concord uses kind `33301` for the encrypted invite bundle, kind `1059` for encrypted community streams, and encrypted community-list events (including kinds `13302` and `33302`). Ostrify does not define a separate chat schema. The invite is public: anyone holding it can join and read the channels it grants. The panel uses session-only local storage for Concord membership material; the Concord client also publishes the user's encrypted community list to relays. Relay availability and signer NIP-44 support affect joining and syncing. Messages shown optimistically may not have been accepted by a relay.
 
 ## Event kinds consumed
 
