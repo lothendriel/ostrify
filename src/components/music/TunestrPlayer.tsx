@@ -1,5 +1,6 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocation } from 'react-router-dom';
 import { ExternalLink, Maximize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 import { parseN94Stream, type TunestrStream } from '@/hooks/useTunestrStreams';
@@ -92,6 +93,9 @@ interface TunestrPlayerContextValue {
 const TunestrPlayerContext = createContext<TunestrPlayerContextValue | null>(null);
 
 export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
+  const { pathname, search } = useLocation();
+  const location = `${pathname}${search}`;
+  const previousLocation = useRef(location);
   const [saved] = useState(restoreVideoPlayer);
   const [stream, setStream] = useState<TunestrStream | null>(saved?.stream ?? null);
   const [docked, setDocked] = useState(saved?.docked ?? true);
@@ -100,6 +104,15 @@ export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
   const playbackRef = useRef({ position: saved?.position ?? 0, playing: saved?.playing ?? true });
   const restoredRef = useRef(!!saved);
   const lastPlaybackWrite = useRef(0);
+
+  useEffect(() => {
+    if (previousLocation.current === location) return;
+    previousLocation.current = location;
+    if (stream && !docked) {
+      setSize('small');
+      setDocked(true);
+    }
+  }, [location, stream, docked]);
 
   useEffect(() => {
     saveVideoPlayer(stream ? { stream, docked, size, ...playbackRef.current } : null);
