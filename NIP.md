@@ -176,7 +176,11 @@ copy to the sender's DM relays. DM relay availability and the latest 100 message
 limit recovery; the list is not a public NIP-51 list.
 
 Listening status uses NIP-38 kind `30315` with `d=music` and an expiration. It is
-public, opt-in per device, and a cleared status is sent on pause or disable.
+public and enabled by default for signed-in accounts without a saved preference;
+existing off choices are respected. The preference is stored per account on this
+device. Ostrify attempts to publish a clearing status on pause or disable, but
+relays or clients may retain older copies. Embedded video status reports that the
+video is open because playback and pauses cannot reliably be detected.
 
 ### Playlist deletion — NIP-09 (kind `5`)
 
