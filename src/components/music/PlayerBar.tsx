@@ -93,7 +93,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             <>
               <TrackArtwork track={current} className="size-10 shrink-0 sm:size-14" />
               <div className="min-w-0 flex-1 overflow-hidden">
-                <span className="mb-1 hidden text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet sm:block">{player.isPlaying ? "Now playing" : "Ready to play"}</span>
+                <span className="mb-1 hidden text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet sm:block">{player.videoActive ? "Audio paused · video open" : player.isPlaying ? "Now playing" : "Ready to play"}</span>
                 <Link to={isRadio ? '/radio' : audioDetailPath(current)} className="block min-w-0 truncate text-ellipsis text-xs font-medium hover:underline sm:text-sm" aria-label={isRadio ? `Radio: ${current.title}` : `View details for ${current.title}`} title={current.title}>{current.title}</Link>
                 <div className="truncate text-[11px] text-muted-foreground sm:text-xs">
                   {player.playbackError ? <span role="status" className="text-destructive" title={player.playbackError}>{player.playbackError}</span> : isRadio ? <span>{current.artist || 'Live radio'}</span> : current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
@@ -118,7 +118,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleShuffleAutoplay}
-            disabled={isRadio}
+            disabled={isRadio || player.videoActive}
             aria-label={player.shuffle ? "Shuffle on" : player.autoplay ? "Autoplay similar music on" : "Shuffle and autoplay off"}
             aria-pressed={player.shuffle || player.autoplay}
             title={player.shuffle ? "Shuffle on — click for autoplay" : player.autoplay ? "Autoplay on — click to turn off" : "Shuffle and autoplay off — click to shuffle"}
@@ -130,7 +130,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleRepeat}
-            disabled={isRadio}
+            disabled={isRadio || player.videoActive}
             aria-label={`Repeat: ${player.repeat}`}
             aria-pressed={player.repeat !== "off"}
             title={player.repeat === "off" ? "Repeat off — click to repeat queue" : player.repeat === "all" ? "Repeat queue — click to repeat current track" : "Repeat current track — click to turn off"}
@@ -143,6 +143,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
         </div>
       </div>
 
+      {player.videoActive && <span role="status" className="sr-only">Audio playback is paused while a video is open. Close the video to resume audio.</span>}
       {/* Controls */}
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-row items-center gap-2 sm:flex-col sm:items-center sm:gap-1">
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
@@ -150,7 +151,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleShuffleAutoplay}
-            disabled={isRadio}
+            disabled={isRadio || player.videoActive}
             aria-label={player.shuffle ? "Shuffle on" : player.autoplay ? "Autoplay similar music on" : "Shuffle and autoplay off"}
             aria-pressed={player.shuffle || player.autoplay}
             title={player.shuffle ? "Shuffle on — click for autoplay" : player.autoplay ? "Autoplay on — click to turn off" : "Shuffle and autoplay off — click to shuffle"}
@@ -162,7 +163,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.previous}
-            disabled={!current || isRadio}
+            disabled={!current || isRadio || player.videoActive}
             aria-label="Previous"
             className="rounded-full size-10 text-muted-foreground hover:text-foreground sm:size-8"
           >
@@ -170,7 +171,8 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
           </Button>
           <Button
             onClick={player.togglePlay}
-            disabled={!current}
+            disabled={!current || player.videoActive}
+            title={player.videoActive ? "Close the video player to resume audio" : undefined}
             aria-label={player.isPlaying ? "Pause" : "Play"}
             className="size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
           >
@@ -180,7 +182,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.next}
-            disabled={!canGoNext}
+            disabled={!canGoNext || player.videoActive}
             aria-label="Next"
             title={canGoNext ? "Next track" : player.autoplay && current?.kind === "music" ? "Similar music can start automatically when this track ends" : "No next track in the queue"}
             className="rounded-full size-10 text-muted-foreground hover:text-foreground sm:size-8"
@@ -191,7 +193,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             variant="ghost"
             size="icon"
             onClick={player.cycleRepeat}
-            disabled={isRadio}
+            disabled={isRadio || player.videoActive}
             aria-label={`Repeat: ${player.repeat}`}
             className={cn("rounded-full size-8 hidden sm:inline-flex", player.repeat !== "off" ? "text-primary" : "text-muted-foreground")}
           >
@@ -212,6 +214,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
               if (player.duration) player.seek((v / 100) * player.duration);
             }}
             aria-label="Seek"
+            disabled={player.videoActive}
             className="flex-1"
           />
           <span className="text-[11px] text-muted-foreground tabular-nums w-10">

@@ -253,7 +253,7 @@ const SettingsPage = () => {
       <Card>
         <CardHeader>
           <CardTitle>Listening activity</CardTitle>
-          <CardDescription id="listening-sharing-description">When sharing is on, Ostrify publishes the name of your current track as a public Nostr status that other people can see. When off, Ostrify stops publishing new statuses and attempts to publish a clearing update. This preference is saved on this device; a failed update can leave an earlier status visible until it expires, and relays or other clients may retain older copies.</CardDescription>
+          <CardDescription id="listening-sharing-description">When sharing is on, Ostrify publishes your current track or video as a public Nostr status that other people can see. For embedded videos, Ostrify reports that the video is open because it cannot reliably detect playback or pauses. When off, Ostrify stops publishing new statuses and attempts to publish a clearing update. This preference is saved on this device; a failed update can leave an earlier status visible until it expires, and relays or other clients may retain older copies.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -263,10 +263,10 @@ const SettingsPage = () => {
               checked={sharing.enabled}
               disabled={!user}
               className={sharing.enabled ? 'data-[state=checked]:bg-emerald-600' : 'data-[state=unchecked]:bg-destructive'}
-              onCheckedChange={value => { try { setClearResult(null); sharing.setEnabled(value); toast({ title: value ? 'Listening activity sharing enabled' : 'Sharing is off in Ostrify', description: value ? 'Your current track may be published publicly.' : 'Ostrify is attempting to publish a clearing update; this does not confirm that relays removed an earlier status.' }); } catch (error) { toast({ title: 'Could not update listening privacy', description: error instanceof Error ? error.message : 'Try again.', variant: 'destructive' }); } }}
+              onCheckedChange={value => { try { setClearResult(null); sharing.setEnabled(value); toast({ title: value ? 'Listening activity sharing enabled' : 'Sharing is off in Ostrify', description: value ? 'Your current track or video may be published publicly.' : 'Ostrify is attempting to publish a clearing update; this does not confirm that relays removed an earlier status.' }); } catch (error) { toast({ title: 'Could not update listening privacy', description: error instanceof Error ? error.message : 'Try again.', variant: 'destructive' }); } }}
             />
             <label htmlFor="listening-sharing" className={`text-sm font-semibold ${sharing.enabled ? 'text-emerald-700 dark:text-emerald-400' : 'text-destructive'}`}>
-              {sharing.enabled ? 'Public — share my current track' : 'Sharing off in Ostrify — do not publish new statuses'}
+              {sharing.enabled ? 'Public — share my current track or video' : 'Sharing off in Ostrify — do not publish new statuses'}
             </label>
           </div>
           {!sharing.enabled && clearResult?.state === 'pending' && <p role="status" className="text-sm text-muted-foreground">Sharing is off in Ostrify. Publishing a clearing update…</p>}

@@ -13,6 +13,9 @@ export interface PlayerState {
   /** The currently loaded track, if any. */
   current: Track | undefined;
   isPlaying: boolean;
+  /** Audio playback is suspended while a video player is open. */
+  videoActive: boolean;
+  setVideoActive: (active: boolean) => void;
   /** An audio playback request was blocked or failed. */
   playbackError?: string;
   /** The existing playback element, for read-only synchronisation with optional visualisations. */

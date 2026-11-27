@@ -271,6 +271,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 function PlayerSession({ children, owner }: { children: React.ReactNode; owner: string }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playAttemptRef = useRef(0);
+  const videoActiveRef = useRef(false);
+  const [videoActive, setVideoActiveState] = useState(false);
   const autoplayEpochRef = useRef(0);
   const wantsPlaybackRef = useRef(false);
   const sourceRef = useRef<{ urls: string[]; index: number }>({ urls: [], index: 0 });
@@ -376,6 +378,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     }
   }, [owner]);
   const playAudio = useCallback((audio: HTMLAudioElement) => {
+    if (videoActiveRef.current) return;
     const attempt = ++playAttemptRef.current;
     const intendedUrl = sourceRef.current.urls[sourceRef.current.index];
     const hls = hlsRef.current;
@@ -402,6 +405,19 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     }
   }, [handlePlaybackFailure]);
   playAudioRef.current = playAudio;
+
+  const setVideoActive = useCallback((active: boolean) => {
+    videoActiveRef.current = active;
+    setVideoActiveState(active);
+    if (!active) return;
+    autoplayEpochRef.current++;
+    playAttemptRef.current++;
+    pendingAutoplayRef.current = false;
+    wantsPlaybackRef.current = false;
+    audioRef.current?.pause();
+    hlsRef.current?.player?.stopLoad();
+    setIsPlaying(false);
+  }, []);
 
   const stopHls = useCallback((audio: HTMLAudioElement) => {
     const session = hlsRef.current;
@@ -650,6 +666,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, []);
 
   const selectQueueIndex = useCallback((nextQueue: Track[], nextIndex: number) => {
+    if (videoActiveRef.current) return;
     const previousTrack = queueRef.current[indexRef.current];
     const target = nextQueue[nextIndex];
     if (!target) return;
@@ -673,6 +690,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [commitQueue, playAudio]);
 
   const previous = useCallback(() => {
+    if (videoActiveRef.current) return;
     autoplayEpochRef.current++;
     autoplayQueueKeyRef.current = "";
     const audio = audioRef.current;
@@ -727,6 +745,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [history, nostrTracks.refetch, wavlake.refetch, selectQueueIndex]);
 
   const next = useCallback(() => {
+    if (videoActiveRef.current) return;
     const nextIndex = pickNextIndex(indexRef.current);
     // End of queue is a no-op; do not falsely mark still-playing audio as paused.
     if (nextIndex >= 0) selectQueueIndex(queueRef.current, nextIndex);
@@ -764,6 +783,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     };
     const onPlay = () => {
       if (audio.paused) return;
+      if (videoActiveRef.current) { audio.pause(); return; }
       setPlaybackError(undefined);
       setIsPlaying(true);
       lastAnalyticsTime = audio.currentTime;
@@ -821,7 +841,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [current, recordPlayedTrack, continueWithAutoplay, pickNextIndex, selectQueueIndex, playAudio, handlePlaybackFailure, owner]);
 
   const playQueue = useCallback((tracks: Track[], startIndex = 0) => {
-    if (tracks.length === 0) return;
+    if (videoActiveRef.current || tracks.length === 0) return;
     autoplayQueueKeyRef.current = "";
     autoplayEpochRef.current++;
     const target = Math.max(0, Math.min(Number.isFinite(startIndex) ? Math.floor(startIndex) : 0, tracks.length - 1));
@@ -840,6 +860,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [commitQueue, playAudio, selectQueueIndex]);
 
   const playTrack = useCallback((track: Track) => {
+    if (videoActiveRef.current) return;
     autoplayQueueKeyRef.current = "";
     const currentQueue = queueRef.current;
     const position = indexRef.current;
@@ -856,6 +877,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [selectQueueIndex]);
 
   const playStation = useCallback((station: Track) => {
+    if (videoActiveRef.current) return;
     const existing = queueRef.current;
     const position = indexRef.current;
     const before = existing.slice(0, Math.max(0, position + 1)).filter(track => track.source !== "radio-browser");
@@ -907,6 +929,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     autoplayQueueKeyRef.current = "";
     autoplayEpochRef.current++;
     if (queueIndex === position) {
+      if (videoActiveRef.current) return;
       // Already-played entries must not become the current track again.
       const upcoming = currentQueue.slice(queueIndex + 1);
       if (upcoming.length) selectQueueIndex(upcoming, 0);
@@ -961,6 +984,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [commitQueue]);
 
   const togglePlay = useCallback(() => {
+    if (videoActiveRef.current) return;
     const audio = audioRef.current;
     if (!audio || !queueRef.current[indexRef.current]) return;
     autoplayEpochRef.current++;
@@ -996,6 +1020,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   }, [playAudio, startHls]);
 
   const seek = useCallback((seconds: number) => {
+    if (videoActiveRef.current) return;
     const audio = audioRef.current;
     if (!audio || !Number.isFinite(seconds)) return;
     autoplayEpochRef.current++;
@@ -1059,6 +1084,8 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       index,
       current,
       isPlaying,
+      videoActive,
+      setVideoActive,
       playbackError,
       getPlaybackElement,
       progress,
@@ -1093,6 +1120,8 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       index,
       current,
       isPlaying,
+      videoActive,
+      setVideoActive,
       playbackError,
       getPlaybackElement,
       progress,

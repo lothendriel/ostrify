@@ -241,7 +241,7 @@ export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlayb
   }, [nostr, relayKey, event, variant, initialPlaying]);
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onPlay={() => onPlaybackChange?.(0, true)} onPause={() => onPlaybackChange?.(0, false)} />
+    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onPlay={() => onPlaybackChange?.(0, true)} onPause={() => onPlaybackChange?.(0, false)} onEnded={() => onPlaybackChange?.(0, false)} onError={() => onPlaybackChange?.(0, false)} />
     {error && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
   </div>;
 }

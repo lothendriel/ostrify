@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { accountStorageKey, cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { PlayerContext } from '@/contexts/PlayerContext';
 import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
@@ -119,6 +120,8 @@ interface TunestrPlayerContextValue {
   openOdysee: (video: OdyseeVideo) => void;
   setContentPane: (element: HTMLDivElement | null) => void;
   expanded: boolean;
+  stream: VideoStream | null;
+  playback: 'playing' | 'paused' | 'unknown';
 }
 
 const TunestrPlayerContext = createContext<TunestrPlayerContextValue | null>(null);
@@ -135,12 +138,21 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
   const previousLocation = useRef(location);
   const [saved] = useState(() => restoreVideoPlayer(owner));
   const [stream, setStream] = useState<VideoStream | null>(saved?.stream ?? null);
+  const [playback, setPlayback] = useState<'playing' | 'paused' | 'unknown'>('unknown');
+  const audioPlayer = useContext(PlayerContext);
+  const setVideoActive = audioPlayer?.setVideoActive;
   const [docked, setDocked] = useState(saved?.docked ?? true);
   const [size, setSize] = useState<PlayerSize>(saved?.size ?? 'small');
   const [contentPane, setContentPane] = useState<HTMLDivElement | null>(null);
   const playbackRef = useRef({ position: saved?.position ?? 0, playing: saved?.playing ?? true });
   const restoredRef = useRef(!!saved);
   const lastPlaybackWrite = useRef(0);
+
+  const hasVideo = !!stream;
+  useEffect(() => {
+    setVideoActive?.(hasVideo);
+    return () => setVideoActive?.(false);
+  }, [hasVideo, setVideoActive]);
 
   useEffect(() => {
     if (previousLocation.current === location) return;
@@ -158,6 +170,7 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
   const savePlayback = (position: number, playing: boolean) => {
     const changedPlaying = playbackRef.current.playing !== playing;
     playbackRef.current = { position, playing };
+    setPlayback(playing ? 'playing' : 'paused');
     const now = Date.now();
     if (stream && (changedPlaying || now - lastPlaybackWrite.current >= 5_000)) {
       lastPlaybackWrite.current = now;
@@ -184,19 +197,21 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
     onSizeChange={setSize}
     onDock={() => setDocked(true)}
     onRestore={() => setDocked(false)}
-    onClose={() => { saveVideoPlayer(owner, null); setDocked(true); setStream(null); }}
+    onClose={() => { saveVideoPlayer(owner, null); setVideoActive?.(false); setPlayback('unknown'); setDocked(true); setStream(null); }}
   />;
 
   const openVideo = (nextStream: VideoStream) => {
     if (nextStream.format === 'odysee' && !odyseeUrls(nextStream)) return;
+    setVideoActive?.(true);
     restoredRef.current = false;
     playbackRef.current = { position: 0, playing: true };
+    setPlayback('unknown');
     setStream(nextStream);
     setSize('small');
     setDocked(nextStream.format !== 'odysee');
   };
 
-  return <TunestrPlayerContext.Provider value={{ openStream: openVideo, openOdysee: openVideo, setContentPane, expanded: !!stream && !docked }}>
+  return <TunestrPlayerContext.Provider value={{ openStream: openVideo, openOdysee: openVideo, setContentPane, expanded: !!stream && !docked, stream, playback }}>
     {children}
     {contentPane ? createPortal(player, contentPane) : player}
   </TunestrPlayerContext.Provider>;
@@ -303,7 +318,8 @@ function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlayba
       onTimeUpdate={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, !event.currentTarget.paused)}
       onPlay={event => { setAutoplayBlocked(false); onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, true); }}
       onPause={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false)}
-      onError={() => setError('This video could not be loaded. Check the source or try again.')} />
+      onEnded={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false)}
+      onError={event => { onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false); setError('This video could not be loaded. Check the source or try again.'); }} />
     {(error || autoplayBlocked) && <div role="status" className="absolute inset-x-3 bottom-14 rounded-lg bg-black/80 p-3 text-sm text-white">{error || 'Press play to resume this video.'}</div>}
   </div>;
 }
