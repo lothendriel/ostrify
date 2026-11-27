@@ -195,6 +195,42 @@
   --sidebar-ring: hsl(141 76% 48%);
 }
 
+/* October is a temporary local-calendar treatment, independent of the saved theme. */
+:root.october {
+  color-scheme: dark;
+  --background: #0d0612;
+  --foreground: #fff7ff;
+  --card: #1a0b22;
+  --card-foreground: #fff7ff;
+  --popover: #1c0d24;
+  --popover-foreground: #fff7ff;
+  --primary: #ff9d25;
+  --primary-foreground: #1c0b00;
+  --secondary: #30163b;
+  --secondary-foreground: #fff7ff;
+  --muted: #30163b;
+  --muted-foreground: #d6c4d9;
+  --accent: #a94c0c;
+  --accent-foreground: #fff7ff;
+  --border: #67376f;
+  --input: #805085;
+  --ring: #ff9d25;
+  --brand-violet: #ffad46;
+  --brand-surface: #3d1848;
+  --shell-glow: rgb(125 28 143 / 45%);
+  --shell-glow-green: rgb(255 120 0 / 12%);
+  --shell-panel: #240e2f;
+  --shell-edge: rgb(204 89 204 / 50%);
+  --sidebar: #14091b;
+  --sidebar-foreground: #f9effb;
+  --sidebar-primary: #ff9d25;
+  --sidebar-primary-foreground: #1c0b00;
+  --sidebar-accent: #3d1848;
+  --sidebar-accent-foreground: #fff7ff;
+  --sidebar-border: #67376f;
+  --sidebar-ring: #ff9d25;
+}
+
 @layer components {
   .ostrify-shell {
     background: radial-gradient(ellipse at 5% 0%, var(--shell-glow), transparent 42%), var(--background);
@@ -266,6 +302,60 @@
   @media (prefers-reduced-motion: reduce) {
     .ostrify-audio-card { transition: none; }
   }
+}
+
+/* Halloween details are purely decorative and leave all controls accessible. */
+.october .ostrify-atmosphere {
+  height: 460px;
+  background: linear-gradient(180deg, rgb(15 5 21 / 15%) 0%, rgb(26 11 34 / 15%) 55%, var(--card) 100%),
+    url('../public/images/october-night.webp') center 38% / cover no-repeat;
+}
+.october .ostrify-header {
+  background: rgb(20 7 28 / 88%);
+  border-color: rgb(189 74 194 / 45%);
+}
+.october .ostrify-sidebar-panel {
+  background: linear-gradient(160deg, #2c1134, #14091b 75%);
+  border-color: rgb(255 143 37 / 60%);
+}
+.october .ostrify-player {
+  background: linear-gradient(90deg, rgb(20 5 28 / 86%), rgb(20 5 28 / 75%)),
+    url('../public/images/october-night.webp') center 83% / cover no-repeat;
+  border-color: #e66a1b;
+  box-shadow: 0 -2px 16px rgb(255 105 0 / 22%);
+}
+.october .player-play-button {
+  background: #210a17;
+  box-shadow: 0 0 0 2px #f57916, 0 0 18px rgb(255 115 0 / 75%);
+  overflow: visible;
+}
+.october .player-play-button:hover { background: #3a101c; }
+.october .player-play-ring-active::before {
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 255deg, #ff8a16 345deg, #fff0ac 360deg);
+}
+.october .home-greeting,
+.october .home-page h2,
+.october .home-page h3 { font-family: Georgia, 'Times New Roman', serif; }
+.october .home-greeting { text-shadow: 0 2px 12px #120317; }
+.october .home-genres { text-shadow: 0 1px 6px #100216; }
+.october .genre-pill {
+  background: linear-gradient(#ffb01c, #f36a08);
+  border-color: #ff9d25;
+  color: #1b0a00;
+  text-shadow: none;
+  box-shadow: 0 0 12px rgb(255 118 0 / 25%);
+}
+.october .genre-pill:hover { background: #ffc15a; border-color: #ffc15a; }
+.october .made-for-you-section {
+  background: linear-gradient(120deg, rgb(37 10 46 / 94%), rgb(35 9 50 / 90%)),
+    url('../public/images/october-night.webp') center / cover;
+  border-color: #a93ca8;
+  box-shadow: inset 0 1px 12px rgb(255 122 25 / 15%);
+}
+.october .ostrify-audio-card { border-color: rgb(255 132 23 / 70%); }
+.october .ostrify-audio-card:hover { border-color: #ffb84f; }
+@media (max-width: 640px) {
+  .october .ostrify-atmosphere { height: 380px; background-position: center, 68% top; }
 }
 
 /* A small holiday garland, with a static treatment for reduced-motion users. */

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
 import { APP_RELAYS, isRequiredAppRelay } from '@/lib/appRelays';
+import { useOctober } from '@/hooks/useDecember';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -168,8 +169,13 @@ export function AppProvider(props: AppProviderProps) {
     updateConfig,
   };
 
-  // Apply theme effects to document
+  // The seasonal palette is temporary and never modifies the saved preference.
+  const isOctober = useOctober();
   useApplyTheme(config.theme);
+  useEffect(() => {
+    document.documentElement.classList.toggle('october', isOctober);
+    return () => document.documentElement.classList.remove('october');
+  }, [isOctober]);
 
   return (
     <AppContext.Provider value={appContextValue}>

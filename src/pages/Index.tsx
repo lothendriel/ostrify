@@ -20,6 +20,7 @@ import { DeferredHomeSection } from "@/components/music/DeferredHomeSection";
 import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
 import { FeaturedAudiobooks } from "@/components/music/FeaturedAudiobooks";
 import { ChristmasLights } from "@/components/music/ChristmasLights";
+import { useOctober } from "@/hooks/useDecember";
 import { CATEGORIES, categoriesForTrack, groupTracksByCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
@@ -109,6 +110,7 @@ const Index = () => {
   const { ref: discoveryTriggerRef, isNearViewport: discoveryEnabled } = useNearViewport<HTMLDivElement>("100px 0px");
   const { ref: featuredAudiobooksRef, isNearViewport: featuredAudiobooksEnabled } = useNearViewport<HTMLDivElement>("300px 0px");
   const { user } = useCurrentUser();
+  const isOctober = useOctober();
   const homeAccountScope = useHomeSessionScope();
   const shelfSessionScope = user?.pubkey ?? "public";
   const homeTracksQuery = useHomeTracks(discoveryEnabled, homeAccountScope);
@@ -233,19 +235,20 @@ const Index = () => {
   })();
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
-      <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight">
+    <div className="home-page w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
+      <h1 className="home-greeting flex items-center gap-3 text-3xl font-bold tracking-tight">
         <span>{greeting}</span>
-        <img src={greetingImage} alt="" aria-hidden="true" fetchPriority="high" decoding="async" className="size-10 shrink-0 object-contain" />
+        <img src={isOctober ? "/images/october-pumpkin.webp" : greetingImage} alt="" aria-hidden="true" fetchPriority="high" decoding="async" className="size-10 shrink-0 object-contain" />
       </h1>
 
-      <section aria-labelledby="browse-genres-heading" className="space-y-3 text-center">
+      <section aria-labelledby="browse-genres-heading" className="home-genres relative space-y-3 text-center">
+        {isOctober && <img src="/images/october-ghost.webp" alt="" aria-hidden="true" className="october-ghost pointer-events-none absolute left-0 top-0 hidden w-20 lg:block" />}
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
           <h2 id="browse-genres-heading" className="text-sm font-semibold text-muted-foreground">Browse genres</h2>
           <Link to="/music" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">All music <ChevronRight className="size-3.5" /></Link>
         </div>
         <nav aria-label="Browse music genres" className="flex flex-wrap justify-center gap-2 pb-1">
-          {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="rounded-full border border-[#00ed69] bg-[#00ed69] px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:border-[#00d95f] hover:bg-[#00d95f] focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
+          {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="genre-pill rounded-full border border-[#00ed69] bg-[#00ed69] px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:border-[#00d95f] hover:bg-[#00d95f] focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
         </nav>
         <ChristmasLights />
       </section>

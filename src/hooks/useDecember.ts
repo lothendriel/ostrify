@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 
 /** Follow the listener's local calendar, including while the app remains open. */
-export function useDecember() {
-  const [isDecember, setIsDecember] = useState(() => new Date().getMonth() === 11);
+function useCalendarMonth(month: number) {
+  const [isMonth, setIsMonth] = useState(() => new Date().getMonth() === month);
 
   useEffect(() => {
-    const update = () => setIsDecember(new Date().getMonth() === 11);
+    const update = () => setIsMonth(new Date().getMonth() === month);
     const timer = window.setInterval(update, 60_000);
     document.addEventListener('visibilitychange', update);
     window.addEventListener('focus', update);
@@ -14,7 +14,15 @@ export function useDecember() {
       document.removeEventListener('visibilitychange', update);
       window.removeEventListener('focus', update);
     };
-  }, []);
+  }, [month]);
 
-  return isDecember;
+  return isMonth;
+}
+
+export function useDecember() {
+  return useCalendarMonth(11);
+}
+
+export function useOctober() {
+  return useCalendarMonth(9);
 }

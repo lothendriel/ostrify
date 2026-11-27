@@ -201,7 +201,7 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
   const refreshMixes = () => setVariationState({ scope: snapshotScope, value: mixVariation + 1 });
 
   return (
-    <section aria-labelledby="made-for-you-heading" className="overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-violet-950/65 via-indigo-950/35 to-card">
+    <section aria-labelledby="made-for-you-heading" className="made-for-you-section overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-violet-950/65 via-indigo-950/35 to-card">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-violet-100"><Sparkles className="size-4" aria-hidden="true" /></div>
