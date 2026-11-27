@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { nip19 } from "nostr-tools";
-import { BookOpen, Music2, Pause, Play, Radio } from "lucide-react";
+import { BookOpen, ExternalLink, Globe2, Languages, MapPin, Music2, Pause, Play, Radio, Signal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrackRow } from "@/components/music/TrackRow";
@@ -13,6 +13,7 @@ import { LikeButton } from "@/components/music/LikeButton";
 import { AddToPlaylistMenu } from "@/components/music/AddToPlaylistMenu";
 import { QueueActionsMenu } from "@/components/music/QueueActionsMenu";
 import { ShareTrackButton } from "@/components/music/ShareTrackButton";
+import { RadioFavoriteButton } from "@/components/music/NowPlaying";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { useLibriVoxBook } from "@/hooks/useLibriVox";
@@ -23,7 +24,7 @@ import { fountainShowGuid, formatDuration, sanitizeAudioFallbacks, type Track } 
 import { sanitizeUrl } from "@/lib/sanitize";
 import { DROPS_MUSIC_RELAY } from "@/lib/sources";
 import { decodeAudioDetailFallback } from "@/lib/audioDetail";
-import { fetchRadioStation, RADIO_STATION_ID } from "@/lib/radio";
+import { fetchRadioStationDetails, RADIO_STATION_ID } from "@/lib/radio";
 
 function resolveTuneStrId(id: string): string {
   if (id.startsWith("tunestr:n94:")) return id.slice("tunestr:n94:".length);
@@ -122,11 +123,13 @@ export default function AudioDetailPage() {
   const [searchParams] = useSearchParams();
   const compressedFallback = useMemo(() => decodeAudioDetailFallback(searchParams.get("fallback")), [searchParams]);
   const radioIdParam = searchParams.get("radio");
-  const radioId = radioIdParam && RADIO_STATION_ID.test(radioIdParam) ? radioIdParam.toLowerCase() : undefined;
+  const legacyRadioId = /^radio-browser:([\da-f-]{36})$/i.exec(searchParams.get("track") ?? "")?.[1];
+  const requestedRadioId = radioIdParam ?? (searchParams.get("source") === "radio-browser" ? legacyRadioId : undefined);
+  const radioId = requestedRadioId && RADIO_STATION_ID.test(requestedRadioId) ? requestedRadioId.toLowerCase() : undefined;
   const radioStation = useQuery({
     queryKey: ["radio-browser", "station", radioId],
     enabled: !!radioId,
-    queryFn: ({ signal }) => fetchRadioStation(radioId!, signal),
+    queryFn: async ({ signal }) => (await fetchRadioStationDetails(radioId!, signal)) ?? null,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -228,7 +231,7 @@ export default function AudioDetailPage() {
         : undefined;
   const podcastShowId = podcastIndexFallback?.episodeId ? podcastIndexEpisode.data?.showId : undefined;
   const nostrTrack = directLookup.data?.tracks.find(item => item.id.toLowerCase() === nostrLookupId.toLowerCase()) ?? directLookup.data?.tracks[0];
-  const resolvedTrack = radioStation.data ?? chapter ?? bookTrack ?? (!radioId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !sharedTrack && !unsupportedExternalId ? nostrTrack : undefined) ?? fallbackEpisode ?? sharedTrack;
+  const resolvedTrack = radioStation.data?.track ?? chapter ?? bookTrack ?? (!radioId && !librivoxChapter && !gutenbergChapter && !fountainRss && !podcastIndexFallback && !sharedTrack && !unsupportedExternalId ? nostrTrack : undefined) ?? fallbackEpisode ?? sharedTrack;
   const tuneStrEventKind = resolvedTrack?.event?.kind ?? (trackId.startsWith("tunestr:n94:") ? 1053 : undefined);
   const trackWithFallbackPublisher = resolvedTrack;
   const fallbackArtistPubkey = searchParams.get("artistPubkey");
@@ -303,6 +306,7 @@ export default function AudioDetailPage() {
 
     <div className="flex flex-wrap items-center gap-2">
       <Button type="button" className="rounded-full" onClick={() => isCurrent ? player.togglePlay() : track.source === 'radio-browser' ? player.playStation(track) : player.playTrack(track)}><span className="mr-2">{isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</span>{isPlaying ? "Pause" : "Play"}</Button>
+      {track.source === "radio-browser" && <RadioFavoriteButton track={track} station={radioStation.data?.station} className="size-10" iconClassName="size-5" />}
       {track.kind === "music" && track.source !== "tunestr" && track.source !== "radio-browser" && <LikeButton trackId={track.id} />}
       <ShareTrackButton track={shareTrack} />
       {track.kind !== "audiobook" && track.source !== "tunestr" && track.source !== "radio-browser" && <QueueActionsMenu track={track} />}
@@ -310,6 +314,18 @@ export default function AudioDetailPage() {
       {externalSource && <a href={externalSource} target="_blank" rel="noreferrer" className="rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-accent">View original source</a>}
     </div>
 
+    {track.source === "radio-browser" && <section aria-labelledby="station-details-heading" className="max-w-3xl space-y-5 rounded-2xl border border-border/60 bg-card/60 p-5 sm:p-6">
+      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">From the directory</p><h2 id="station-details-heading" className="mt-2 text-xl font-bold">About this station</h2><p className="mt-1 text-sm text-muted-foreground">Station information is provided by Radio Browser and may change.</p></div>
+      <dl className="grid gap-5 sm:grid-cols-2">
+        {track.artist && track.artist !== "Live radio" && <div className="flex gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><div><dt className="text-xs font-medium text-muted-foreground">Location</dt><dd className="mt-1 text-sm font-medium">{track.artist}</dd></div></div>}
+        {radioStation.data?.language && <div className="flex gap-3"><Languages className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><div><dt className="text-xs font-medium text-muted-foreground">Language</dt><dd className="mt-1 text-sm font-medium capitalize">{radioStation.data.language}</dd></div></div>}
+        {(radioStation.data?.codec || radioStation.data?.bitrate) && <div className="flex gap-3"><Signal className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><div><dt className="text-xs font-medium text-muted-foreground">Stream format</dt><dd className="mt-1 text-sm font-medium">{[radioStation.data.codec, radioStation.data.bitrate ? `${radioStation.data.bitrate} kbps` : undefined].filter(Boolean).join(" · ")}</dd></div></div>}
+        {radioStation.data?.homepage && <div className="flex min-w-0 gap-3"><Globe2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><div className="min-w-0"><dt className="text-xs font-medium text-muted-foreground">Website</dt><dd className="mt-1"><a href={radioStation.data.homepage} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Visit station website <ExternalLink className="size-3" aria-hidden="true" /></a></dd></div></div>}
+      </dl>
+      {!!radioStation.data?.genres.length && <div><h3 className="text-xs font-medium text-muted-foreground">Genres &amp; tags</h3><div className="mt-2 flex flex-wrap gap-2">{radioStation.data.genres.map((genre, index) => <span key={`${genre}-${index}`} className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">{genre}</span>)}</div></div>}
+      {radioStation.isError && <p role="status" className="text-sm text-muted-foreground">More station details are temporarily unavailable. <button type="button" className="font-medium text-primary underline" onClick={() => void radioStation.refetch()}>Try again</button></p>}
+      <p className="text-xs leading-relaxed text-muted-foreground">Streams may be offline, region-restricted, or incompatible with your browser.</p>
+    </section>}
     {track.topics.length > 0 && <section aria-label="Audio tags" className="flex flex-wrap gap-2">{track.topics.slice(0, 12).map(topic => <span key={topic} className="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{topic.startsWith("#") ? topic : `#${topic}`}</span>)}</section>}
     {track.kind === "podcast" && <section className="rounded-xl border border-border/60 p-4"><h2 className="font-semibold">Podcast episode</h2><p className="mt-1 text-sm text-muted-foreground">Explore the show for more episodes.</p>{fountainGuid && <Link to={`/podcasts/fountain/${encodeURIComponent(fountainGuid)}`} className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">View podcast show</Link>}{podcastIndexShowId && <Link to={`/podcasts?source=directory&show=${encodeURIComponent(podcastIndexShowId)}`} className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">View podcast show</Link>}{!fountainGuid && !podcastIndexShowId && <Link to="/podcasts" className="mt-2 inline-block text-sm font-semibold text-primary hover:underline">Browse podcasts</Link>}</section>}
     {hasBookDetail && book && <section className="space-y-3"><div><h2 className="text-2xl font-bold">{book.title}</h2><p className="text-sm text-muted-foreground">{book.chapters.length} recordings · {book.author}</p></div><div className="rounded-xl border border-border/60">{book.chapters.map((item, index) => <TrackRow key={item.id} track={item} index={index} />)}</div></section>}

@@ -41,11 +41,38 @@ export function radioSharePath(track: Pick<Track, 'id' | 'source'>): string | un
   return track.source === 'radio-browser' && RADIO_STATION_ID.test(stationId) ? `/audio?radio=${stationId.toLowerCase()}` : undefined;
 }
 
-export async function fetchRadioStation(id: string, signal: AbortSignal): Promise<Track | undefined> {
+export type RadioStationDetails = {
+  station: RadioStation;
+  track: Track;
+  genres: string[];
+  language?: string;
+  homepage?: string;
+  codec?: string;
+  bitrate?: number;
+};
+
+export async function fetchRadioStationDetails(id: string, signal: AbortSignal): Promise<RadioStationDetails | undefined> {
   if (!RADIO_STATION_ID.test(id)) return undefined;
-  const stations = parseRadioStations(await radioDirectoryRequest(`/json/stations/byuuid/${id}`, signal));
-  const station = stations.find(item => item.id.toLowerCase() === id.toLowerCase());
-  return station?.url ? radioStationTrack(station) : undefined;
+  const response = await radioDirectoryRequest(`/json/stations/byuuid/${id}`, signal);
+  const station = parseRadioStations(response).find(item => item.id.toLowerCase() === id.toLowerCase());
+  if (!station?.url || !Array.isArray(response)) return undefined;
+  const record = response.find((item: unknown) => item && typeof item === 'object' && 'stationuuid' in item && typeof item.stationuuid === 'string' && item.stationuuid.toLowerCase() === id.toLowerCase()) as Record<string, unknown> | undefined;
+  if (!record) return undefined;
+  const text = (key: string) => typeof record[key] === 'string' ? record[key].trim().slice(0, 300) : '';
+  const bitrate = typeof record.bitrate === 'number' && Number.isFinite(record.bitrate) && record.bitrate > 0 && record.bitrate <= 10000 ? record.bitrate : undefined;
+  return {
+    station,
+    track: radioStationTrack(station),
+    genres: text('tags').split(',').map(tag => tag.trim()).filter(Boolean).slice(0, 12),
+    language: text('language') || undefined,
+    homepage: sanitizeUrl(text('homepage')),
+    codec: text('codec') || undefined,
+    bitrate,
+  };
+}
+
+export async function fetchRadioStation(id: string, signal: AbortSignal): Promise<Track | undefined> {
+  return (await fetchRadioStationDetails(id, signal))?.track;
 }
 
 function artistKeys(track: Track): string[] {

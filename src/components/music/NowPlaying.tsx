@@ -4,7 +4,7 @@ import { nip19 } from 'nostr-tools';
 import { AudioLines, ChevronDown, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePlayer } from '@/hooks/usePlayer';
-import { useRadioFavorites } from '@/hooks/useRadioFavorites';
+import { useRadioFavorites, type RadioStation } from '@/hooks/useRadioFavorites';
 import { useAudiobookLibrary, type AudiobookSource, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
 import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
 import { useLibriVoxBook } from '@/hooks/useLibriVox';
@@ -190,13 +190,13 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
 
 const actionClass = 'size-11 rounded-full text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300';
 
-export function RadioFavoriteButton({ track, className, iconClassName }: { track: Track; className?: string; iconClassName?: string }) {
+export function RadioFavoriteButton({ track, station, className, iconClassName }: { track: Track; station?: RadioStation; className?: string; iconClassName?: string }) {
   const { favorites, toggleFavorite } = useRadioFavorites();
   const id = /^radio-browser:([\da-f-]{36})$/i.exec(track.id)?.[1];
   const saved = favorites.find(station => station.id === id);
-  return <Button type="button" variant="ghost" size="icon" className={cn('size-8 rounded-full text-muted-foreground hover:text-foreground', saved && 'text-primary', className)} aria-label={`${saved ? 'Remove' : 'Add'} ${track.title} ${saved ? 'from' : 'to'} favorite radio stations`} aria-pressed={!!saved} disabled={!id} onClick={() => {
+  return <Button type="button" variant="ghost" size="icon" className={cn('size-8 rounded-full text-muted-foreground hover:text-foreground', saved && 'text-primary', className)} aria-label={`${saved ? 'Remove' : 'Add'} ${track.title} ${saved ? 'from' : 'to'} favorite radio stations`} title={saved ? 'Remove from favorite radio stations' : 'Save to favorite radio stations'} aria-pressed={!!saved} disabled={!id} onClick={() => {
     if (!id) return;
-    toggleFavorite(saved ?? { id, name: track.title, url: sanitizeUrl(track.url), image: sanitizeUrl(track.image), location: track.artist === 'Live radio' ? '' : track.artist ?? '', tags: track.topics.join(' · '), hls: track.mimeType === 'application/vnd.apple.mpegurl' || /\.m3u8(?:[?#]|$)/i.test(track.url) });
+    toggleFavorite(saved ?? (station?.id.toLowerCase() === id.toLowerCase() ? station : { id, name: track.title, url: sanitizeUrl(track.url), image: sanitizeUrl(track.image), location: track.artist === 'Live radio' ? '' : track.artist ?? '', tags: track.topics.join(' · '), hls: track.mimeType === 'application/vnd.apple.mpegurl' || /\.m3u8(?:[?#]|$)/i.test(track.url) }));
   }}><Heart className={cn('size-4', iconClassName, saved && 'fill-current')} /></Button>;
 }
 
