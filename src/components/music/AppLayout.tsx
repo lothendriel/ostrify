@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide-react";
-import { ConcordClient, KeyValue, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity } from '@jsr/applesauce__concord';
+import { ConcordClient, KeyValue, Helpers, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity } from '@jsr/applesauce__concord';
+import { useNostr } from '@nostrify/react';
+import { verifyEvent } from 'nostr-tools';
+import { queryLibraryEvents } from '@/lib/libraryQuery';
 import { useAuthor } from '@/hooks/useAuthor';
 import { genUserName } from '@/lib/sanitize';
 import { Textarea } from '@/components/ui/textarea';
@@ -45,6 +48,7 @@ function ChatMessage({ message }: { message: ConcordChannelMessage }) {
 
 function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => void }) {
   const { config } = useAppContext();
+  const { nostr } = useNostr();
   const clientRef = useRef<ConcordClient | null>(null);
   const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -87,7 +91,29 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
       await client.start();
       if (!alive.current) return;
       setStatus('Checking the invite and joining…');
-      const community: ConcordCommunity = await client.joinByLink(ARMADA_INVITE);
+      let community: ConcordCommunity;
+      try {
+        community = await client.joinByLink(ARMADA_INVITE);
+      } catch (cause) {
+        if (!(cause instanceof Error) || cause.message !== 'invite bundle not found or revoked') throw cause;
+        // The Concord pool can time out when a slow relay never sends EOSE,
+        // discarding events already returned by the other relays. Retry through
+        // independent bounded subscriptions and verify the winning coordinate.
+        setStatus('Checking additional relays for the invite…');
+        const parsed = Helpers.parseInviteLink(ARMADA_INVITE);
+        const result = await queryLibraryEvents(nostr, parsed.bootstrapRelays, [{ kinds: [33301], authors: [parsed.linkSigner] }], AbortSignal.timeout(8000), { waitForAll: true });
+        if (!alive.current) return;
+        // A partial read can never rule out a newer revocation on an unreachable relay.
+        if (!result.complete) setError('Some invite relays did not respond; a newer revocation may not have been seen.');
+        const events = result.events.filter(event => event.kind === 33301 && event.pubkey === parsed.linkSigner && event.tags.some(tag => tag[0] === 'd' && tag[1] === '') && verifyEvent(event))
+          .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id));
+        const winner = events[0];
+        if (!winner) throw new Error('The invite was not found on the responding relays. Please try again.');
+        if (Helpers.isInviteBundleRevoked(winner)) throw new Error('This invite has been revoked. A new invite is needed.');
+        const bundle = Helpers.validateInviteBundle(Helpers.getInviteBundle(winner, parsed.token));
+        if (!bundle) throw new Error('The invite could not be verified.');
+        community = await client.joinByBundle(bundle);
+      }
       if (!alive.current) return;
       const updateChannel = () => {
         const state = community.state$.value;
@@ -150,6 +176,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [chatOpened, setChatOpened] = useState(false);
   const { setContentPane, expanded } = useTunestrPlayer();
   const queryClient = useQueryClient();
   const [homeSessionScope] = useState(() => crypto.randomUUID());
@@ -176,7 +203,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if ((!friendsPageOpen && activePanel !== 'friends') || !user || !followedPeople.hasReadRelays || !followedPeople.people.length) return;
     void statuses.refetch();
   }, [friendsPageOpen, activePanel, user, followedPeople.hasReadRelays, friendKey, statuses.refetch]);
-  const togglePanel = (panel: 'friends' | 'queue' | 'notifications' | 'chat') => setActivePanel(current => current === panel ? null : panel);
+  const togglePanel = (panel: 'friends' | 'queue' | 'notifications' | 'chat') => {
+    if (panel === 'chat') setChatOpened(true);
+    setActivePanel(current => current === panel ? null : panel);
+  };
   const visiblePanel = activePanel === 'chat' && !user ? null : activePanel;
 
   return (
@@ -251,20 +281,29 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        {!isMobile && <aside aria-hidden={!visiblePanel} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${visiblePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : visiblePanel === 'queue' || visiblePanel === 'chat' ? 'w-80 opacity-100 xl:w-96' : visiblePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
+        {!isMobile && <aside aria-hidden={!visiblePanel || visiblePanel === 'chat'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${visiblePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : visiblePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : visiblePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
           {visiblePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
           {visiblePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
           {visiblePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
-          {visiblePanel === 'chat' && user && <ArmadaChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />}
+
         </aside>}
         {isMobile && visiblePanel && <button type="button" className="fixed inset-x-0 top-0 bottom-28 z-30 bg-black/45 backdrop-blur-[1px]" aria-label="Close open panel" onClick={() => setActivePanel(null)} />}
-        {isMobile && <div className={`fixed inset-x-0 bottom-28 z-40 transition-[transform,opacity] duration-300 ease-in-out ${visiblePanel ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!visiblePanel} inert={!visiblePanel}>
+        {isMobile && <div className={`fixed inset-x-0 bottom-28 z-40 transition-[transform,opacity] duration-300 ease-in-out ${visiblePanel && visiblePanel !== 'chat' ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`} aria-hidden={!visiblePanel || visiblePanel === 'chat'} inert={!visiblePanel || visiblePanel === 'chat'}>
           <div className="mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl pb-[env(safe-area-inset-bottom)]">
             {visiblePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
             {visiblePanel === 'queue' && <QueuePanel open onClose={() => setActivePanel(null)} />}
             {visiblePanel === 'notifications' && <NotificationsPanel onClose={() => setActivePanel(null)} />}
-            {visiblePanel === 'chat' && user && <ArmadaChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />}
+
           </div>
+        </div>}
+        {chatOpened && user && <div
+          aria-hidden={visiblePanel !== 'chat'}
+          inert={visiblePanel !== 'chat'}
+          className={isMobile
+            ? `fixed inset-x-0 bottom-28 z-40 mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl transition-[transform,opacity] duration-300 ${visiblePanel === 'chat' ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`
+            : `h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ${visiblePanel === 'chat' ? 'w-80 opacity-100 xl:w-96' : 'w-0 opacity-0'}`}
+        >
+          <ArmadaChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />
         </div>}
         </div>
       </div>
