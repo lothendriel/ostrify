@@ -173,8 +173,14 @@ export function AppProvider(props: AppProviderProps) {
   const isOctober = useOctober();
   useApplyTheme(config.theme);
   useEffect(() => {
-    document.documentElement.classList.toggle('october', isOctober);
-    return () => document.documentElement.classList.remove('october');
+    const root = document.documentElement;
+    root.classList.toggle('october', isOctober);
+    if (isOctober) root.style.setProperty('--october-art', 'url("/images/october-night.webp")');
+    else root.style.removeProperty('--october-art');
+    return () => {
+      root.classList.remove('october');
+      root.style.removeProperty('--october-art');
+    };
   }, [isOctober]);
 
   return (

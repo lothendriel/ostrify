@@ -308,7 +308,7 @@
 .october .ostrify-atmosphere {
   height: 460px;
   background: linear-gradient(180deg, rgb(15 5 21 / 15%) 0%, rgb(26 11 34 / 15%) 55%, var(--card) 100%),
-    url('../public/images/october-night.webp') center 38% / cover no-repeat;
+    var(--october-art) center 38% / cover no-repeat;
 }
 .october .ostrify-header {
   background: rgb(20 7 28 / 88%);
@@ -320,16 +320,24 @@
 }
 .october .ostrify-player {
   background: linear-gradient(90deg, rgb(20 5 28 / 86%), rgb(20 5 28 / 75%)),
-    url('../public/images/october-night.webp') center 83% / cover no-repeat;
+    var(--october-art) center 83% / cover no-repeat;
   border-color: #e66a1b;
   box-shadow: 0 -2px 16px rgb(255 105 0 / 22%);
 }
 .october .player-play-button {
-  background: #210a17;
-  box-shadow: 0 0 0 2px #f57916, 0 0 18px rgb(255 115 0 / 75%);
+  background: #16070b;
+  color: #ffad3d;
+  box-shadow: 0 0 0 2px #f57916, 0 0 18px 4px rgb(255 95 0 / 80%);
   overflow: visible;
 }
-.october .player-play-button:hover { background: #3a101c; }
+.october .player-play-button:hover { background: #2c0d13; }
+.october .october-player-pumpkin {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  max-width: none;
+  filter: drop-shadow(0 0 5px #ff6900);
+}
 .october .player-play-ring-active::before {
   background: conic-gradient(from 0deg, transparent 0deg, transparent 255deg, #ff8a16 345deg, #fff0ac 360deg);
 }
@@ -338,6 +346,10 @@
 .october .home-page h3 { font-family: Georgia, 'Times New Roman', serif; }
 .october .home-greeting { text-shadow: 0 2px 12px #120317; }
 .october .home-genres { text-shadow: 0 1px 6px #100216; }
+/* Reserve the ghost's own column so wrapping genre links never run beneath it. */
+@media (min-width: 1024px) {
+  .october .home-genres { padding-left: 5.5rem; }
+}
 .october .genre-pill {
   background: linear-gradient(#ffb01c, #f36a08);
   border-color: #ff9d25;
@@ -348,7 +360,7 @@
 .october .genre-pill:hover { background: #ffc15a; border-color: #ffc15a; }
 .october .made-for-you-section {
   background: linear-gradient(120deg, rgb(37 10 46 / 94%), rgb(35 9 50 / 90%)),
-    url('../public/images/october-night.webp') center / cover;
+    var(--october-art) center / cover;
   border-color: #a93ca8;
   box-shadow: inset 0 1px 12px rgb(255 122 25 / 15%);
 }

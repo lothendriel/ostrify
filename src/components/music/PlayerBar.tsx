@@ -52,7 +52,7 @@ function SeasonalPlayIcon() {
     };
   }, []);
 
-  if (isOctober) return <img src="/images/october-pumpkin.webp" alt="" aria-hidden="true" className="size-10 shrink-0 object-contain" />;
+  if (isOctober) return <img src="/images/october-player-pumpkin.webp" alt="" aria-hidden="true" className="october-player-pumpkin pointer-events-none size-16 shrink-0 object-contain" />;
   if (isDecember) return <svg viewBox="0 0 24 24" className="size-6 shrink-0 fill-current" aria-hidden="true"><path d="M12 1 7.3 7h2L5.5 12h2L3 17.8h7.2V22h3.6v-4.2H21L16.5 12h2l-3.8-5h2L12 1Z" /></svg>;
   return showTurkey
     ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[3.3] object-contain mix-blend-multiply" />
