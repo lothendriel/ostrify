@@ -150,6 +150,7 @@ export default function AudioDetailPage() {
       showId: searchParams.get("showId")?.slice(0, 256) || undefined,
       url,
       fallbackUrls: sanitizeAudioFallbacks(searchParams.getAll("audioFallback"), url),
+      mimeType: source === "radio-browser" && searchParams.get("mimeType") === "application/vnd.apple.mpegurl" ? "application/vnd.apple.mpegurl" : undefined,
       title,
       artist: searchParams.get("artist")?.slice(0, 300) || undefined,
       album: searchParams.get("album")?.slice(0, 300) || undefined,

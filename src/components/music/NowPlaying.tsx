@@ -190,14 +190,14 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
 
 const actionClass = 'size-11 rounded-full text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300';
 
-function RadioFavoriteButton({ track }: { track: Track }) {
+export function RadioFavoriteButton({ track, className, iconClassName }: { track: Track; className?: string; iconClassName?: string }) {
   const { favorites, toggleFavorite } = useRadioFavorites();
   const id = /^radio-browser:([\da-f-]{36})$/i.exec(track.id)?.[1];
   const saved = favorites.find(station => station.id === id);
-  return <Button type="button" variant="ghost" size="icon" className={cn(actionClass, saved && 'text-green-300')} aria-label={`${saved ? 'Remove' : 'Add'} ${track.title} ${saved ? 'from' : 'to'} favorite radio stations`} aria-pressed={!!saved} disabled={!id} onClick={() => {
+  return <Button type="button" variant="ghost" size="icon" className={cn('size-8 rounded-full text-muted-foreground hover:text-foreground', saved && 'text-primary', className)} aria-label={`${saved ? 'Remove' : 'Add'} ${track.title} ${saved ? 'from' : 'to'} favorite radio stations`} aria-pressed={!!saved} disabled={!id} onClick={() => {
     if (!id) return;
     toggleFavorite(saved ?? { id, name: track.title, url: sanitizeUrl(track.url), image: sanitizeUrl(track.image), location: track.artist === 'Live radio' ? '' : track.artist ?? '', tags: track.topics.join(' · '), hls: track.mimeType === 'application/vnd.apple.mpegurl' || /\.m3u8(?:[?#]|$)/i.test(track.url) });
-  }}><Heart className={cn('size-5', saved && 'fill-current')} /></Button>;
+  }}><Heart className={cn('size-4', iconClassName, saved && 'fill-current')} /></Button>;
 }
 
 function AudiobookFavoriteButton({ track, source, catalogId }: { track: Track; source: AudiobookSource; catalogId: string }) {
@@ -214,7 +214,7 @@ function AudiobookFavoriteButton({ track, source, catalogId }: { track: Track; s
 }
 
 function ListeningRoomLike({ track }: { track: Track }) {
-  if (track.source === 'radio-browser') return <RadioFavoriteButton track={track} />;
+  if (track.source === 'radio-browser') return <RadioFavoriteButton track={track} className={cn(actionClass, 'aria-pressed:text-green-300')} iconClassName="size-5" />;
   const chapter = /^(librivox|gutenberg):([a-z0-9][a-z0-9_-]{0,159})(?::|$)/i.exec(track.id);
   if (track.kind === 'audiobook' && chapter && (chapter[1] === 'librivox' || chapter[1] === 'gutenberg')) return <AudiobookFavoriteButton track={track} source={chapter[1]} catalogId={chapter[2]} />;
   return <LikeButton trackId={track.id} collection={track.source === 'tunestr' ? 'tunestr' : undefined} size={20} className={`${actionClass} aria-pressed:text-green-300`} />;

@@ -68,6 +68,7 @@ function audioDetailUrl(track: Track): URL | undefined {
   if (track.image && sanitizeUrl(track.image)) detailUrl.searchParams.set('image', sanitizeUrl(track.image)!);
   if (track.duration && Number.isFinite(track.duration) && track.duration > 0) detailUrl.searchParams.set('duration', String(track.duration));
   if (track.source) detailUrl.searchParams.set('source', track.source);
+  if (track.source === 'radio-browser' && track.mimeType === 'application/vnd.apple.mpegurl') detailUrl.searchParams.set('mimeType', track.mimeType);
   if (track.album) detailUrl.searchParams.set('album', track.album.slice(0, 300));
   if (track.artistId) detailUrl.searchParams.set('artistId', track.artistId.slice(0, 100));
   if (track.artistPubkey && /^[0-9a-f]{64}$/i.test(track.artistPubkey)) detailUrl.searchParams.set('artistPubkey', track.artistPubkey);
@@ -142,6 +143,7 @@ export function ShareTrackButton({ track, className, iconClassName }: { track: T
   const [message, setMessage] = useState('');
   const [sharedTrack, setSharedTrack] = useState<Track>();
   const [isPreparingLink, setIsPreparingLink] = useState(false);
+  const [linkError, setLinkError] = useState(false);
   const compressedFallbackRef = useRef<string | undefined>(undefined);
   const shortLinkRef = useRef<string | undefined>(undefined);
   const linkRequestIdRef = useRef(0);
@@ -153,13 +155,16 @@ export function ShareTrackButton({ track, className, iconClassName }: { track: T
     compressedFallbackRef.current = fallbackUrl;
     shortLinkRef.current = undefined;
     setSharedTrack(track);
+    setLinkError(false);
+    setIsPreparingLink(false);
     setMessage(defaultMessage(track));
     setOpen(true);
     if (!fallbackUrl || !user) return;
 
     setIsPreparingLink(true);
     void createShortAudioLink(fallbackUrl).then(shortUrl => {
-      if (requestId !== linkRequestIdRef.current || !shortUrl) return;
+      if (requestId !== linkRequestIdRef.current) return;
+      if (!shortUrl) { setLinkError(true); return; }
       shortLinkRef.current = shortUrl;
       setMessage(current => current.includes(fallbackUrl) ? current.replace(fallbackUrl, shortUrl) : current);
     }).finally(() => {
@@ -228,6 +233,7 @@ export function ShareTrackButton({ track, className, iconClassName }: { track: T
             disabled={isPending || isPreparingLink}
           />
           {!user && <p role="status" className="text-sm text-muted-foreground">Sign in with Nostr to publish this post.</p>}
+          {user && (linkError || !compressedFallbackRef.current) && <p role="status" className="text-sm text-destructive">Could not prepare a short link. Close and reopen this dialog to try again.</p>}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={isPending || isPreparingLink}>Cancel</Button>
             <Button type="submit" disabled={!user || !message.trim() || isPending || isPreparingLink}>

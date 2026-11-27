@@ -32,6 +32,7 @@ import { QueuePanelButton } from "./QueuePanel";
 import { ShareTrackButton } from "./ShareTrackButton";
 import { audioDetailPath } from "@/lib/audioDetail";
 import { PlayerZapButton } from "./PlayerZapButton";
+import { RadioFavoriteButton } from "./NowPlaying";
 
 // This one-time Thanksgiving surprise ends at midnight on November 28, 2026,
 // according to the listener's local clock (including when the app stays open).
@@ -107,6 +108,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false, nowPlayingOpen, on
                   {player.playbackError ? <span role="status" className="text-destructive" title={player.playbackError}>{player.playbackError}</span> : isRadio ? <span>{current.artist || 'Live radio'}</span> : current.kind === "podcast" ? <PodcastShowLink track={current} /> : <ArtistLink pubkey={current.pubkey} artistId={current.artistId} artistPubkey={current.artistPubkey} fallbackName={current.artist} isUnverifiedArtist={!!current.event && !!current.artist} />}
                 </div>
               </div>
+              {isRadio && <RadioFavoriteButton track={current} className="shrink-0" />}
               {current.kind === 'music' && current.source !== 'tunestr' && !isRadio && <div className="hidden sm:flex items-center">
                 <LikeButton trackId={current.id} size={16} />
               </div>}
@@ -146,7 +148,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false, nowPlayingOpen, on
           >
             {player.repeat === "one" ? <Repeat1 className="size-4" /> : <Repeat className="size-4" />}
           </Button>
-          {!isRadio && <ShareTrackButton track={current} />}
+          <ShareTrackButton track={current} />
           <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         </div>
       </div>
@@ -240,7 +242,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false, nowPlayingOpen, on
       {/* Queue and volume */}
       <div className="hidden shrink-0 items-center gap-1 sm:flex sm:gap-2 md:w-[20%] md:max-w-[12rem] md:justify-end">
         <Button variant="ghost" size="icon" onClick={onNowPlayingToggle} disabled={!current || videoExpanded} aria-label={nowPlayingOpen ? "Close listening room" : "Open listening room"} aria-pressed={nowPlayingOpen} title="Listening room" className={cn("size-8 rounded-full", nowPlayingOpen ? "text-primary" : "text-muted-foreground")}><AudioLines className="size-4" /></Button>
-        {!isRadio && <ShareTrackButton track={current} />}
+        <ShareTrackButton track={current} />
         <QueuePanelButton queueLength={player.index >= 0 ? player.queue.length - player.index - 1 : player.queue.length} open={queueOpen} onClick={onQueueToggle} />
         <div className="hidden md:flex items-center gap-2">
           <Button

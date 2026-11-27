@@ -345,10 +345,12 @@ function isSafeAudioSharePath(value: unknown, env: Env): value is string {
   const title = target.searchParams.get("title");
   const kind = target.searchParams.get("kind");
   if (!track || track.length > 2048 || !title || title.length > 500 || !["music", "podcast", "audiobook"].includes(kind ?? "")) return false;
-  const expectedSource = track.startsWith("wavlake:") ? "wavlake" : track.startsWith("fountain:") ? "fountain" : track.startsWith("podcast-index:") ? "podcast-index" : track.startsWith("librivox:") ? "librivox" : track.startsWith("gutenberg:") ? "gutenberg" : undefined;
+  const expectedSource = track.startsWith("wavlake:") ? "wavlake" : track.startsWith("fountain:") ? "fountain" : track.startsWith("podcast-index:") ? "podcast-index" : track.startsWith("librivox:") ? "librivox" : track.startsWith("gutenberg:") ? "gutenberg" : track.startsWith("radio-browser:") ? "radio-browser" : undefined;
   const source = target.searchParams.get("source");
   if (expectedSource && source !== expectedSource) return false;
-  if (source && !["wavlake", "fountain", "podcast-index", "librivox", "gutenberg", "tunestr"].includes(source)) return false;
+  if (source && !["wavlake", "fountain", "podcast-index", "librivox", "gutenberg", "tunestr", "radio-browser"].includes(source)) return false;
+  const isRadioId = /^radio-browser:[\da-f-]{36}$/i.test(track);
+  if ((source === "radio-browser" || track.startsWith("radio-browser:")) && (!isRadioId || source !== "radio-browser" || kind !== "music" || !target.searchParams.get("url"))) return false;
   const isWavlakeId = /^wavlake:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(track);
   const isPodcastIndexId = /^podcast-index:episode:id:\d{1,12}$/.test(track);
   const isFountainId = /^fountain:episode:id:\S{20}$/.test(track);
@@ -368,7 +370,7 @@ function isSafeAudioSharePath(value: unknown, env: Env): value is string {
   if (tuneStrN94Match && eventKind !== "1053") return false;
   if (isTuneStrCoordinate && eventKind !== "30311") return false;
   if (isNostrCoordinate && Number(eventKind) !== Number(nostrCoordinate?.[1])) return false;
-  const isKnownTrackId = isWavlakeId || isPodcastIndexId || podcastIndexFallbackId || isFountainId || fountainRssId || isAudiobookId || isEventId || tuneStrN94Match || isTuneStrCoordinate || isNostrCoordinate;
+  const isKnownTrackId = isRadioId || isWavlakeId || isPodcastIndexId || podcastIndexFallbackId || isFountainId || fountainRssId || isAudiobookId || isEventId || tuneStrN94Match || isTuneStrCoordinate || isNostrCoordinate;
   if (!isKnownTrackId) return false;
   if ((podcastIndexFallbackId || fountainRssId) && !target.searchParams.has("url")) return false;
   if (kind === "audiobook" && !/^(?:gutenberg|librivox):/i.test(track) && !target.searchParams.has("url")) return false;
