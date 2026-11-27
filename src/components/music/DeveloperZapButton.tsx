@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QRCodeCanvas } from "@/components/ui/qrcode";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const DEVELOPER_LIGHTNING_ADDRESS = "cactusboil63@shockwallet.app";
 const DEVELOPER_PUBKEY = "0155373ac79b7ffb0f586c3e68396f9e82d46f7afe7016d46ed9ca46ba3e1bed";
@@ -22,12 +21,11 @@ interface LnurlInvoiceResponse {
   reason?: unknown;
 }
 
-export function DeveloperZapButton() {
+export function DeveloperZapDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("100");
   const [invoice, setInvoice] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -110,17 +108,7 @@ export function DeveloperZapButton() {
   };
 
   return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button type="button" variant="ghost" size="icon" className="rounded-full" aria-label="Zap the developer" onClick={() => setOpen(true)}>
-            <Zap className="size-5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Zap the developer</TooltipContent>
-      </Tooltip>
-
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-primary" /> Zap the developer</DialogTitle>
@@ -167,6 +155,5 @@ export function DeveloperZapButton() {
           )}
         </DialogContent>
       </Dialog>
-    </>
   );
 }

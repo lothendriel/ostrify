@@ -11,7 +11,6 @@ import { PlayerBar } from "./PlayerBar";
 import { QueuePanel } from "./QueuePanel";
 import { FriendsActivityPanel, FriendsActivitySheet } from "./FriendsActivitySheet";
 import { NotificationsBell, NotificationsPanel } from "./NotificationsBell";
-import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
 import { useTunestrPlayer } from "./TunestrPlayer";
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -92,7 +91,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="hidden shrink-0 items-center gap-1 sm:flex">
-              <DeveloperZapButton />
               <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
               <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
             </div>
@@ -101,7 +99,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex w-full items-center justify-between border-t border-border/40 pt-1 sm:hidden">
               <div className="flex items-center gap-2">
-                <DeveloperZapButton />
                 <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
                 <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
                 <Button type="button" variant="ghost" size="icon" className="rounded-full" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>

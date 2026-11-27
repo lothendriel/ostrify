@@ -1,4 +1,6 @@
-import { ChevronDown, LogOut, UserIcon, UserPlus, Settings } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, LogOut, UserIcon, UserPlus, Settings, Zap } from 'lucide-react';
+import { DeveloperZapDialog } from '@/components/music/DeveloperZapButton';
 import { Link } from 'react-router-dom';
 import { sanitizeUrl } from '@/lib/sanitize';
 import {
@@ -18,6 +20,7 @@ interface AccountSwitcherProps {
 
 export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const { currentUser, otherUsers, isLoading, isFetching, setLogin, removeLogin } = useLoggedInAccounts();
+  const [zapOpen, setZapOpen] = useState(false);
 
   if (!currentUser) return null;
 
@@ -30,6 +33,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   const isCurrentUserPending = (isLoading || isFetching) && !currentUser.metadata.name;
 
   return (
+    <>
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button className='flex items-center gap-2 h-10 p-1 pr-2.5 rounded-full hover:bg-accent transition-all text-foreground'>
@@ -106,6 +110,10 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
           );
         })}
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setZapOpen(true)} className='flex items-center gap-2 cursor-pointer p-2 rounded-md'>
+          <Zap className='w-4 h-4' />
+          <span>Zap the Developer</span>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-md'>
           <Link to="/settings">
             <Settings className='w-4 h-4' />
@@ -128,5 +136,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <DeveloperZapDialog open={zapOpen} onOpenChange={setZapOpen} />
+    </>
   );
 }
