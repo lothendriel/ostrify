@@ -12,6 +12,7 @@ import { Link } from "react-router-dom";
 import { sanitizeUrl } from "@/lib/sanitize";
 import { AUDIO_EXT_RE, type Track } from "@/lib/music";
 import { groupIntoAlbums, useArtistTracks } from "@/hooks/useArtistTracks";
+import { CATEGORIES } from "@/lib/categories";
 
 type ReleaseTrack = { id: string; file?: File; title: string; url: string; trackNumber?: number; existing?: Track; visibility?: MusicVisibility };
 type AlbumTarget = { id: string; title: string; image?: string };
@@ -26,6 +27,62 @@ function newId(): string {
 
 function uploadUrl(tags: string[][]): string | undefined {
   return tags.find(([name]) => name === "url")?.[1];
+}
+
+// Use recognized individual tags rather than the combined display labels (e.g. Jazz & Blues).
+const GENRE_OPTIONS = CATEGORIES.filter(category => category.id !== "bitcoin" && category.id !== "general").map(category => ({
+  id: category.id,
+  label: category.label,
+  tag: category.match[0],
+}));
+const GENRE_INPUT_LIMIT = 80;
+
+function genreKey(value: string): string {
+  return value.trim().replace(/^#+/, "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function parseGenres(value: string): string[] {
+  const seen = new Set<string>();
+  return value.split(",").map(genre => genre.trim().replace(/^#+/, "").trim().toLowerCase()).filter(genre => {
+    const key = genreKey(genre);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function addGenreTags(tags: string[][], value: string): void {
+  const existing = new Set(tags.filter(([name]) => name === "t").map(([, tag]) => genreKey(tag ?? "")));
+  for (const genre of parseGenres(value)) {
+    const key = genreKey(genre);
+    if (!existing.has(key)) {
+      tags.push(["t", genre]);
+      existing.add(key);
+    }
+  }
+}
+
+function GenreField({ id, value, onChange, album = false }: { id: string; value: string; onChange: (value: string) => void; album?: boolean }) {
+  const selected = new Set(parseGenres(value).map(genreKey));
+  return <div className="min-w-0 space-y-2">
+    <label htmlFor={id} className="text-sm font-medium">Genre (optional)</label>
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      <Input id={id} value={value} onChange={event => onChange(event.target.value)} maxLength={GENRE_INPUT_LIMIT} placeholder="Ambient, folk, rock…" aria-describedby={`${id}-help`} className="min-w-0 lg:flex-1" />
+      <div className="flex min-w-0 flex-wrap gap-2 lg:flex-1" role="group" aria-label="Quick add main genres">
+        {GENRE_OPTIONS.map(option => {
+          const isSelected = selected.has(genreKey(option.tag));
+          const current = value.replace(/[\s,]+$/, "");
+          const next = current ? `${current}, ${option.tag}` : option.tag;
+          const tooLong = next.length > GENRE_INPUT_LIMIT;
+          return <Button key={option.id} type="button" size="sm" variant={isSelected ? "secondary" : "outline"} aria-pressed={isSelected} disabled={!isSelected && tooLong} onClick={() => {
+            if (isSelected) onChange(value.split(",").filter(genre => genreKey(genre) !== genreKey(option.tag)).map(genre => genre.trim()).filter(Boolean).join(", "));
+            else onChange(next);
+          }}>{option.label}</Button>;
+        })}
+      </div>
+    </div>
+    <p id={`${id}-help`} className="text-xs text-muted-foreground">Separate genres with commas. {album ? "Genres are added to every included track; existing tags are kept." : "Choose a main genre or enter your own, including sub-genres."}</p>
+  </div>;
 }
 
 function VisibilityOptions({ name, value, onChange }: { name: string; value: MusicVisibility; onChange: (value: MusicVisibility) => void }) {
@@ -114,7 +171,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
       }
       const tags: string[][] = [["d", newId()], ["title", trackTitle.trim()], ["url", url], ["artist", artist], ["artist_pubkey", artistPubkey], ["alt", "Music track"], ...mediaTags.filter(([name]) => name !== "url")];
       if (trackImage && imageUrl) tags.push(["image", imageUrl]);
-      if (trackGenre.trim()) tags.push(["t", trackGenre.trim().toLowerCase()]);
+      addGenreTags(tags, trackGenre);
       const mime = trackFile?.type;
       if (mime?.startsWith("audio/") && !tags.some(([name]) => name === "m")) tags.push(["m", mime]);
       const result = await publish.mutateAsync({ kind: 36787, content: "", tags, visibility: trackVisibility });
@@ -164,7 +221,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
           if (!url) throw new Error("Upload did not return a usable audio URL.");
           if (!track.existing && !track.file && !AUDIO_EXT_RE.test(url)) throw new Error("Track URL must end with a recognized audio file extension.");
           const visibility = albumTrackVisibility[track.id] ?? track.existing?.visibility ?? targetVisibility;
-          if (track.existing && track.existing.visibility !== visibility && !track.existing.event) throw new Error("The existing track event is unavailable for a visibility update.");
+          if (track.existing && !track.existing.event) throw new Error("The existing track event is unavailable for an update. Reload your tracks and try again.");
           const tags: string[][] = track.existing?.event
             ? track.existing.event.tags.filter(([name]) => !["title", "album", "album_id", "track_number", "image", "client", "ostrify_visibility"].includes(name)).map(tag => [...tag])
             : [["d", track.id], ["url", url], ["artist", artist], ["artist_pubkey", artistPubkey], ["alt", "Music track"], ...mediaTags.filter(([name]) => name !== "url")];
@@ -172,7 +229,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
           if (coverUrl) tags.push(["image", coverUrl]);
           else if (track.existing?.image) tags.push(["image", track.existing.image]);
           tags.push(["title", track.title.trim()], ["album", targetAlbumTitle], ["album_id", targetAlbumId], ["track_number", String(track.trackNumber ?? 1)]);
-          if (albumGenre.trim() && !track.existing) tags.push(["t", albumGenre.trim().toLowerCase()]);
+          addGenreTags(tags, albumGenre);
           if (track.file?.type.startsWith("audio/") && !tags.some(([name]) => name === "m")) tags.push(["m", track.file.type]);
           const result = await publish.mutateAsync({ kind: 36787, content: track.existing?.event?.content ?? "", tags, visibility, removeFromDrops: !!track.existing && visibility === "hidden" && track.existing.visibility !== "hidden" });
           if (result.dropsError) throw new Error(`Published to your write relays, but DROPS may still show this track: ${result.dropsError}`);
@@ -222,8 +279,8 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
         <TabsList className="grid w-full max-w-sm grid-cols-2"><TabsTrigger value="track">Track</TabsTrigger><TabsTrigger value="album">Album</TabsTrigger></TabsList>
         <TabsContent value="track" className="pt-4">
           <form onSubmit={event => void submitTrack(event)} className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2 text-sm font-medium">Track title<Input required value={trackTitle} onChange={event => setTrackTitle(event.target.value)} maxLength={200} placeholder="Song title" /></label>
-            <label className="space-y-2 text-sm font-medium">Genre (optional)<Input value={trackGenre} onChange={event => setTrackGenre(event.target.value)} maxLength={80} placeholder="Ambient, folk, rock…" /></label>
+            <label className="space-y-2 text-sm font-medium sm:col-span-2">Track title<Input required value={trackTitle} onChange={event => setTrackTitle(event.target.value)} maxLength={200} placeholder="Song title" /></label>
+            <div className="sm:col-span-2"><GenreField id="track-genres" value={trackGenre} onChange={setTrackGenre} /></div>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Audio file (Blossom upload)<Input type="file" accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => chooseTrack(event.target.files?.[0])} /></label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Or existing HTTPS audio URL<Input type="url" value={trackUrl} onChange={event => { setTrackUrl(event.target.value); if (event.target.value) setTrackFile(undefined); }} placeholder="https://…/track.mp3" /></label>
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Track image (optional)<Input type="file" accept="image/*" onChange={event => { const file = event.target.files?.[0]; if (file && !file.type.startsWith("image/")) { setMessage({ text: "Please choose an image file.", error: true }); return; } setMessage(undefined); setTrackImage(file); }} /></label>
@@ -236,7 +293,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-2 text-sm font-medium">Add to album<select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" value={selectedAlbumId} onChange={event => { const value = event.target.value; setSelectedAlbumId(value); setAlbumTrackVisibility({}); setMessage(undefined); const target = albums.find(album => albumTargetId(album.id, album.title) === value); const previousNewTracks = albumTracks.filter(track => !track.existing); const alreadyInTarget = target?.tracks.filter(track => track.addressableId).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: track.trackNumber, visibility: track.visibility })) ?? []; const previouslyChosen = existingTracks.filter(track => selectedExistingIds.includes(track.id) && !target?.tracks.some(member => member.id === track.id)).map(track => ({ id: track.addressableId as string, title: track.title, url: track.url, existing: track, trackNumber: undefined as number | undefined, visibility: track.visibility })); setAlbumTracks([...alreadyInTarget, ...previouslyChosen, ...previousNewTracks].map((track, index) => ({ ...track, trackNumber: track.trackNumber ?? index + 1 }))); setAlbumId(newId()); setAlbumTitle(""); }}><option value="">Create a new album</option>{targets.map(target => <option key={target.id} value={target.id}>{target.title}</option>)}</select></label>
               <label className="space-y-2 text-sm font-medium">Album title<Input required={!selectedAlbum} disabled={!!selectedAlbum} value={selectedAlbum?.title ?? albumTitle} onChange={event => { setAlbumTitle(event.target.value); if (selectedAlbumId.startsWith("legacy-")) setAlbumId(newId()); }} maxLength={200} placeholder="Album title" /></label>
-              <label className="space-y-2 text-sm font-medium">Genre (optional)<Input value={albumGenre} onChange={event => setAlbumGenre(event.target.value)} maxLength={80} placeholder="Ambient, folk, rock…" /></label>
+              <div className="sm:col-span-2"><GenreField id="album-genres" value={albumGenre} onChange={setAlbumGenre} album /></div>
               <label className="space-y-2 text-sm font-medium">Cover image (optional){selectedAlbum?.image && !albumCover && <span className="ml-2 text-xs font-normal text-muted-foreground">Existing cover will be kept</span>}<Input type="file" accept="image/*" onChange={event => { const file = event.target.files?.[0]; if (file && !file.type.startsWith("image/")) { setMessage({ text: "Please choose an image file.", error: true }); return; } setAlbumCover(file); setMessage(undefined); }} /></label>
               <label className="space-y-2 text-sm font-medium">Add audio tracks<Input type="file" multiple accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => { onAlbumFiles(event.target.files); event.target.value = ""; }} /></label>
             </div>
