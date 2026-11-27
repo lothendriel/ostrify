@@ -1,4 +1,5 @@
 import type { Track } from "@/lib/music";
+import { accountStorageKey } from "@/lib/utils";
 
 const STORAGE_KEY = "ostrify-listening-analytics-v1";
 const RETENTION_DAYS = 180;
@@ -31,9 +32,9 @@ function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function readRecords(): ListeningRecord[] {
+function readRecords(owner: string): ListeningRecord[] {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    const parsed: unknown = JSON.parse(localStorage.getItem(accountStorageKey(localStorage, STORAGE_KEY, owner)) ?? "[]");
     if (!Array.isArray(parsed)) return [];
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
@@ -44,9 +45,9 @@ function readRecords(): ListeningRecord[] {
   }
 }
 
-function updateRecord(track: Track, update: (record: ListeningRecord) => void): void {
+function updateRecord(track: Track, update: (record: ListeningRecord) => void, owner: string): void {
   try {
-    const records = readRecords();
+    const records = readRecords(owner);
     const date = todayKey();
     let record = records.find(item => item.date === date && item.trackId === track.id);
     if (!record) {
@@ -64,7 +65,7 @@ function updateRecord(track: Track, update: (record: ListeningRecord) => void): 
     record.title = track.title;
     record.artist = track.artist || record.artist;
     update(record);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records.slice(-MAX_RECORDS)));
+    localStorage.setItem(accountStorageKey(localStorage, STORAGE_KEY, owner), JSON.stringify(records.slice(-MAX_RECORDS)));
     window.dispatchEvent(new Event("ostrify-analytics-update"));
   } catch {
     // Listening continues normally when browser storage is unavailable.
@@ -72,22 +73,22 @@ function updateRecord(track: Track, update: (record: ListeningRecord) => void): 
 }
 
 /** Store only local, coarse daily listening aggregates; never publish or transmit them. */
-export function recordListeningStart(track: Track): void {
-  updateRecord(track, record => { record.plays += 1; });
+export function recordListeningStart(track: Track, owner = 'anonymous'): void {
+  updateRecord(track, record => { record.plays += 1; }, owner);
 }
 
-export function recordListeningSeconds(track: Track, seconds: number): void {
+export function recordListeningSeconds(track: Track, seconds: number, owner = 'anonymous'): void {
   if (!Number.isFinite(seconds) || seconds <= 0) return;
-  updateRecord(track, record => { record.seconds += Math.min(seconds, 10); });
+  updateRecord(track, record => { record.seconds += Math.min(seconds, 10); }, owner);
 }
 
-export function readListeningRecords(): ListeningRecord[] {
-  return readRecords();
+export function readListeningRecords(owner = 'anonymous'): ListeningRecord[] {
+  return readRecords(owner);
 }
 
-export function clearListeningRecords(): void {
+export function clearListeningRecords(owner = 'anonymous'): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(accountStorageKey(localStorage, STORAGE_KEY, owner));
     window.dispatchEvent(new Event("ostrify-analytics-update"));
   } catch {
     // The dashboard remains usable when browser storage is unavailable.

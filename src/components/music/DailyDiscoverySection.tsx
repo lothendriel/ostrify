@@ -44,6 +44,7 @@ function artistLabel(key: string): string {
 export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds = [], excludeTrackUrls = [], active = true, sessionScope }: { candidates: Track[]; isLoading: boolean; excludeTrackIds?: string[]; excludeTrackUrls?: string[]; active?: boolean; sessionScope?: string }) {
   const player = usePlayer();
   const { user } = useCurrentUser();
+  const owner = user?.pubkey ?? 'anonymous';
   const snapshotKey = `discovery:${user?.pubkey ?? 'public'}`;
   const storedSnapshot = useMemo(() => readHomeSessionSnapshot(snapshotKey, isDiscoverySnapshot), [snapshotKey]);
   const [snapshotState, setSnapshotState] = useState<{ key: string; value: DiscoverySnapshot } | null>(() => storedSnapshot ? { key: snapshotKey, value: storedSnapshot } : null);
@@ -56,18 +57,18 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
   const liked = likedQuery.data?.tracks ?? [];
   const wavlakeTracks = useMemo(() => wavlake.data?.pages.flatMap(page => page.tracks) ?? [], [wavlake.data]);
   const allCandidates = useMemo(() => [...candidates, ...wavlakeTracks], [candidates, wavlakeTracks]);
-  const [feedback, setFeedback] = useState<DiscoveryFeedback>(readDiscoveryFeedback);
+  const [feedback, setFeedback] = useState<DiscoveryFeedback>(() => readDiscoveryFeedback(owner));
   const pending = active && (playlists.isLoading || likedQuery.isLoading || followedArtists.isLoading || wavlake.isLoading);
 
   useEffect(() => {
-    const refresh = () => setFeedback(readDiscoveryFeedback());
+    const refresh = () => setFeedback(readDiscoveryFeedback(owner));
     window.addEventListener(DISCOVERY_FEEDBACK_EVENT, refresh);
     window.addEventListener("storage", refresh);
     return () => {
       window.removeEventListener(DISCOVERY_FEEDBACK_EVENT, refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, []);
+  }, [owner]);
 
   const buildSnapshot = (date: Date, variation: number, currentFeedback: DiscoveryFeedback, dismissed: string[]): DiscoverySnapshot => ({
     date: date.toISOString(), variation, dismissed,
@@ -102,7 +103,7 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
   };
   const applyFeedback = (track: Track, action: 'more' | 'less' | 'block') => {
     if (!snapshot) return;
-    const nextFeedback = action === 'more' ? markMoreLikeThis(track, new Date()) : action === 'less' ? markNotForMe(track, new Date()) : blockDiscoveryArtist(track);
+    const nextFeedback = action === 'more' ? markMoreLikeThis(track, new Date(), owner) : action === 'less' ? markNotForMe(track, new Date(), owner) : blockDiscoveryArtist(track, owner);
     setFeedback(nextFeedback);
     const artistKeys = new Set(discoveryArtistKeys(track));
     const dismissed = [...new Set([...snapshot.dismissed, ...snapshot.items.filter(item => item.track.id === track.id || (action === 'block' && discoveryArtistKeys(item.track).some(key => artistKeys.has(key)))).map(item => item.track.id)])];
@@ -172,7 +173,7 @@ export function DailyDiscoverySection({ candidates, isLoading, excludeTrackIds =
         <h3 id="blocked-artists-heading" className="font-semibold">Blocked artists</h3>
         <p className="mt-1 text-xs text-muted-foreground">Only affects this browser’s Daily Discovery feed.</p>
         <ul className="mt-3 flex flex-wrap gap-2">
-          {blockedTracks.map(([key, { track, keys }]) => <li key={key} className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-sm"><span className="max-w-48 truncate">{track.artist || artistLabel(key)}</span><button type="button" className="text-xs font-semibold text-primary hover:underline" onClick={() => setFeedback(unblockDiscoveryArtist(keys))} aria-label={`Unblock ${track.artist || artistLabel(key)}`}>Unblock</button></li>)}
+          {blockedTracks.map(([key, { track, keys }]) => <li key={key} className="flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-sm"><span className="max-w-48 truncate">{track.artist || artistLabel(key)}</span><button type="button" className="text-xs font-semibold text-primary hover:underline" onClick={() => setFeedback(unblockDiscoveryArtist(keys, owner))} aria-label={`Unblock ${track.artist || artistLabel(key)}`}>Unblock</button></li>)}
         </ul>
       </section>}
     </section>

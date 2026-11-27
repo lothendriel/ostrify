@@ -9,7 +9,8 @@ import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { NostrLoginProvider } from '@nostrify/react/login';
+import { NostrLoginProvider, useNostrLogin } from '@nostrify/react/login';
+import { accountStorageKey } from '@/lib/utils';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { APP_RELAYS } from '@/lib/appRelays';
@@ -70,31 +71,40 @@ function PublicPageCacheSync({ children }: { children: ReactNode }) {
   return children;
 }
 
+function AccountApp() {
+  const { logins } = useNostrLogin();
+  const owner = logins[0]?.pubkey ?? 'anonymous';
+  const storageKey = accountStorageKey(localStorage, 'nostr:app-config', owner);
+  return (
+    <AppProvider key={owner} storageKey={storageKey} defaultConfig={defaultConfig}>
+      <QueryClientProvider client={queryClient}>
+        <NostrProvider>
+          <NostrSync />
+          <TooltipProvider>
+            <Toaster />
+            <ServiceWorkerUpdateNotice />
+            <AudiobookSyncProvider>
+              <RadioFavoritesSyncProvider>
+                <Suspense>
+                  <PublicPageCacheSync>
+                    <AppRouter />
+                  </PublicPageCacheSync>
+                </Suspense>
+              </RadioFavoritesSyncProvider>
+            </AudiobookSyncProvider>
+          </TooltipProvider>
+        </NostrProvider>
+      </QueryClientProvider>
+    </AppProvider>
+  );
+}
+
 export function App() {
   return (
     <UnheadProvider head={head}>
-      <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
-        <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='nostr:login'>
-            <NostrProvider>
-              <NostrSync />
-              <TooltipProvider>
-                <Toaster />
-                <ServiceWorkerUpdateNotice />
-                <AudiobookSyncProvider>
-                  <RadioFavoritesSyncProvider>
-                    <Suspense>
-                      <PublicPageCacheSync>
-                        <AppRouter />
-                      </PublicPageCacheSync>
-                    </Suspense>
-                  </RadioFavoritesSyncProvider>
-                </AudiobookSyncProvider>
-              </TooltipProvider>
-            </NostrProvider>
-          </NostrLoginProvider>
-        </QueryClientProvider>
-      </AppProvider>
+      <NostrLoginProvider storageKey='nostr:login'>
+        <AccountApp />
+      </NostrLoginProvider>
     </UnheadProvider>
   );
 }

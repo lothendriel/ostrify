@@ -1,5 +1,6 @@
 import { inferCategory } from "@/lib/categories";
 import type { Track } from "@/lib/music";
+import { accountStorageKey } from "@/lib/utils";
 
 const STORAGE_KEY = "ostrify-daily-discovery-feedback-v1";
 const UPDATE_EVENT = "ostrify-discovery-feedback-update";
@@ -48,19 +49,19 @@ function parseFeedback(value: unknown): DiscoveryFeedback {
   };
 }
 
-export function readDiscoveryFeedback(): DiscoveryFeedback {
+export function readDiscoveryFeedback(owner = 'anonymous'): DiscoveryFeedback {
   try {
     if (typeof localStorage === "undefined") return emptyFeedback();
-    return parseFeedback(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"));
+    return parseFeedback(JSON.parse(localStorage.getItem(accountStorageKey(localStorage, STORAGE_KEY, owner)) ?? "null"));
   } catch {
     return emptyFeedback();
   }
 }
 
-function saveFeedback(update: (feedback: DiscoveryFeedback) => DiscoveryFeedback): DiscoveryFeedback {
-  const next = update(readDiscoveryFeedback());
+function saveFeedback(update: (feedback: DiscoveryFeedback) => DiscoveryFeedback, owner: string): DiscoveryFeedback {
+  const next = update(readDiscoveryFeedback(owner));
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(accountStorageKey(localStorage, STORAGE_KEY, owner), JSON.stringify(next));
     window.dispatchEvent(new Event(UPDATE_EVENT));
   } catch {
     // The discovery feed still works when browser storage is unavailable.
@@ -94,7 +95,7 @@ function discoveryTopics(track: Track): string[] {
   return [...new Set(topics)];
 }
 
-export function markMoreLikeThis(track: Track, date = new Date()): DiscoveryFeedback {
+export function markMoreLikeThis(track: Track, date = new Date(), owner = 'anonymous'): DiscoveryFeedback {
   const artists = discoveryArtistKeys(track);
   const topics = discoveryTopics(track);
   const dailyKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}:${track.id}`;
@@ -105,10 +106,10 @@ export function markMoreLikeThis(track: Track, date = new Date()): DiscoveryFeed
     boostedTopics: topics.reduce(add, feedback.boostedTopics),
     discouragedArtists: artists.reduce((list, key) => remove(list, key), feedback.discouragedArtists),
     discouragedTopics: topics.reduce((list, key) => remove(list, key), feedback.discouragedTopics),
-  }));
+  }), owner);
 }
 
-export function markNotForMe(track: Track, date = new Date()): DiscoveryFeedback {
+export function markNotForMe(track: Track, date = new Date(), owner = 'anonymous'): DiscoveryFeedback {
   const artists = discoveryArtistKeys(track);
   const topics = discoveryTopics(track);
   const dailyKey = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}:${track.id}`;
@@ -120,23 +121,23 @@ export function markNotForMe(track: Track, date = new Date()): DiscoveryFeedback
     discouragedTopics: topics.reduce(add, feedback.discouragedTopics),
     boostedArtists: artists.reduce((list, key) => remove(list, key), feedback.boostedArtists),
     boostedTopics: topics.reduce((list, key) => remove(list, key), feedback.boostedTopics),
-  }));
+  }), owner);
 }
 
-export function blockDiscoveryArtist(track: Track): DiscoveryFeedback {
+export function blockDiscoveryArtist(track: Track, owner = 'anonymous'): DiscoveryFeedback {
   const artists = discoveryArtistKeys(track);
-  if (artists.length === 0) return readDiscoveryFeedback();
+  if (artists.length === 0) return readDiscoveryFeedback(owner);
   return saveFeedback(feedback => ({
     ...feedback,
     blockedArtists: artists.reduce(add, feedback.blockedArtists),
     discouragedArtists: artists.reduce(add, feedback.discouragedArtists),
     boostedArtists: artists.reduce((list, key) => remove(list, key), feedback.boostedArtists),
-  }));
+  }), owner);
 }
 
-export function unblockDiscoveryArtist(keys: string | string[]): DiscoveryFeedback {
+export function unblockDiscoveryArtist(keys: string | string[], owner = 'anonymous'): DiscoveryFeedback {
   const unblock = new Set(Array.isArray(keys) ? keys : [keys]);
-  return saveFeedback(feedback => ({ ...feedback, blockedArtists: feedback.blockedArtists.filter(key => !unblock.has(key)) }));
+  return saveFeedback(feedback => ({ ...feedback, blockedArtists: feedback.blockedArtists.filter(key => !unblock.has(key)) }), owner);
 }
 
 function dailySeed(date: Date): number {

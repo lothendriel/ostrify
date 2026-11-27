@@ -8,6 +8,7 @@ import { useTracks } from "@/hooks/useTracks";
 import { useWavlakeCatalog } from "@/hooks/useWavlake";
 import { buildRadioStation } from "@/lib/radio";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { accountStorageKey } from "@/lib/utils";
 
 const PLAYER_VOLUME_STORAGE_KEY = "ostrify-player-volume";
 const PLAYER_STATE_STORAGE_PREFIX = "ostrify-player-state:";
@@ -239,18 +240,18 @@ function writeSavedPlayerState(owner: string, state: SavedPlayerState | undefine
   }
 }
 
-function readSavedAutoplay(): boolean {
+function readSavedAutoplay(owner: string): boolean {
   try {
-    return typeof window !== "undefined" && window.localStorage.getItem(PLAYER_AUTOPLAY_STORAGE_KEY) === "true";
+    return typeof window !== "undefined" && window.localStorage.getItem(accountStorageKey(window.localStorage, PLAYER_AUTOPLAY_STORAGE_KEY, owner)) === "true";
   } catch {
     return false;
   }
 }
 
-function readSavedVolume(): number {
+function readSavedVolume(owner: string): number {
   try {
     if (typeof window === "undefined") return DEFAULT_PLAYER_VOLUME;
-    const stored = window.localStorage.getItem(PLAYER_VOLUME_STORAGE_KEY);
+    const stored = window.localStorage.getItem(accountStorageKey(window.localStorage, PLAYER_VOLUME_STORAGE_KEY, owner));
     if (stored === null) return DEFAULT_PLAYER_VOLUME;
 
     const parsed: unknown = JSON.parse(stored);
@@ -313,11 +314,11 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   const [playbackError, setPlaybackError] = useState<string>();
   const [progress, setProgress] = useState(() => initialPlayerState?.progress ?? 0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolumeState] = useState(readSavedVolume);
+  const [volume, setVolumeState] = useState(() => readSavedVolume(owner));
   const [muted, setMuted] = useState(() => initialPlayerState?.muted ?? false);
-  const [shuffle, setShuffle] = useState(() => readSavedAutoplay() ? false : initialPlayerState?.shuffle ?? false);
+  const [shuffle, setShuffle] = useState(() => readSavedAutoplay(owner) ? false : initialPlayerState?.shuffle ?? false);
   const [repeat, setRepeat] = useState<RepeatMode>(() => initialPlayerState?.repeat ?? "off");
-  const [autoplay, setAutoplayState] = useState(readSavedAutoplay);
+  const [autoplay, setAutoplayState] = useState(() => readSavedAutoplay(owner));
   const playerPreferencesRef = useRef({ muted, shuffle, repeat });
   playerPreferencesRef.current = { muted, shuffle, repeat };
   const autoplayRef = useRef(autoplay);
@@ -331,11 +332,11 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     }
     setAutoplayState(enabled);
     try {
-      window.localStorage.setItem(PLAYER_AUTOPLAY_STORAGE_KEY, String(enabled));
+      window.localStorage.setItem(accountStorageKey(window.localStorage, PLAYER_AUTOPLAY_STORAGE_KEY, owner), String(enabled));
     } catch {
       // The preference remains active for this session if browser storage is unavailable.
     }
-  }, []);
+  }, [owner]);
   const autoplayBusyRef = useRef<number | null>(null);
   const autoplayQueueKeyRef = useRef("");
   const queueRef = useRef(queue);
@@ -739,7 +740,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     let lastAnalyticsTime = audio.currentTime;
     let pendingAnalyticsSeconds = 0;
     const flushAnalytics = () => {
-      if (current && pendingAnalyticsSeconds > 0) recordListeningSeconds(current, pendingAnalyticsSeconds);
+      if (current && pendingAnalyticsSeconds > 0) recordListeningSeconds(current, pendingAnalyticsSeconds, owner);
       pendingAnalyticsSeconds = 0;
     };
     const onTime = () => {
@@ -766,7 +767,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       setPlaybackError(undefined);
       setIsPlaying(true);
       lastAnalyticsTime = audio.currentTime;
-      if (current) recordListeningStart(current);
+      if (current) recordListeningStart(current, owner);
       recordPlayedTrack(current);
     };
     const onPause = () => {
@@ -817,7 +818,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [current, recordPlayedTrack, continueWithAutoplay, pickNextIndex, selectQueueIndex, playAudio, handlePlaybackFailure]);
+  }, [current, recordPlayedTrack, continueWithAutoplay, pickNextIndex, selectQueueIndex, playAudio, handlePlaybackFailure, owner]);
 
   const playQueue = useCallback((tracks: Track[], startIndex = 0) => {
     if (tracks.length === 0) return;
@@ -1015,12 +1016,12 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     const nextVolume = Math.min(1, Math.max(0, Number.isFinite(v) ? v : DEFAULT_PLAYER_VOLUME));
     setVolumeState(nextVolume);
     try {
-      window.localStorage.setItem(PLAYER_VOLUME_STORAGE_KEY, JSON.stringify(nextVolume));
+      window.localStorage.setItem(accountStorageKey(window.localStorage, PLAYER_VOLUME_STORAGE_KEY, owner), JSON.stringify(nextVolume));
     } catch {
       // Volume remains functional for this session if browser storage is unavailable.
     }
     if (nextVolume > 0) setMuted(false);
-  }, []);
+  }, [owner]);
 
   const toggleMute = useCallback(() => setMuted((m) => !m), []);
   const toggleShuffle = useCallback(() => {

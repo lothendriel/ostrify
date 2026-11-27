@@ -1,3 +1,5 @@
+import { accountStorageKey } from '@/lib/utils';
+
 const STORAGE_KEY = "ostrify:home-shelf-history:v1";
 const MAX_TRACKS_PER_CATEGORY = 90;
 const MAX_AGE_DAYS = 21;
@@ -14,10 +16,10 @@ function parseHistory(value: unknown): HomeShelfHistory {
   return result;
 }
 
-export function readHomeShelfHistory(): HomeShelfHistory {
+export function readHomeShelfHistory(owner = 'anonymous'): HomeShelfHistory {
   try {
     if (typeof localStorage === "undefined") return {};
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(accountStorageKey(localStorage, STORAGE_KEY, owner));
     if (!stored) return {};
     const parsed: unknown = JSON.parse(stored);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -30,10 +32,10 @@ export function readHomeShelfHistory(): HomeShelfHistory {
   }
 }
 
-export function writeHomeShelfHistory(categories: HomeShelfHistory): void {
+export function writeHomeShelfHistory(categories: HomeShelfHistory, owner = 'anonymous'): void {
   try {
     if (typeof localStorage === "undefined") return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), categories: parseHistory(categories) }));
+    localStorage.setItem(accountStorageKey(localStorage, STORAGE_KEY, owner), JSON.stringify({ savedAt: Date.now(), categories: parseHistory(categories) }));
   } catch {
     // Storage may be unavailable or full; shelf selection still works without memory.
   }

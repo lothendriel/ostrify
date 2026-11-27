@@ -58,16 +58,17 @@ export default function AnalyticsPage() {
   const podcastFavorites = usePodcastFavorites();
   const audiobookLibrary = useAudiobookLibrary();
   const network = useNetworkPulse();
-  const [records, setRecords] = useState(readListeningRecords);
+  const owner = user?.pubkey ?? 'anonymous';
+  const [records, setRecords] = useState(() => readListeningRecords(owner));
   useEffect(() => {
-    const refresh = () => setRecords(readListeningRecords());
+    const refresh = () => setRecords(readListeningRecords(owner));
     window.addEventListener("ostrify-analytics-update", refresh);
     window.addEventListener("storage", refresh);
     return () => {
       window.removeEventListener("ostrify-analytics-update", refresh);
       window.removeEventListener("storage", refresh);
     };
-  }, []);
+  }, [owner]);
 
   const totals = useMemo(() => recordTotals(records), [records]);
   const recentRecords = useMemo(() => records.filter(record => {
@@ -120,7 +121,7 @@ export default function AnalyticsPage() {
 
     <section aria-labelledby="personal-analytics-heading" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="personal-analytics-heading" className="text-xl font-bold">Your listening</h2><p className="mt-1 text-sm text-muted-foreground">Stored only in this browser. Listening insights are never published to Nostr.</p></div>
-        <Button type="button" variant="ghost" size="sm" onClick={() => { clearListeningRecords(); setRecords([]); }} disabled={records.length === 0} className="text-muted-foreground"><RotateCcw className="mr-2 size-4" /> Clear listening data</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => { clearListeningRecords(owner); setRecords([]); }} disabled={records.length === 0} className="text-muted-foreground"><RotateCcw className="mr-2 size-4" /> Clear listening data</Button>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={Clock3} label="Listening time" value={formatListeningTime(totals.seconds)} detail="Across this browser · last 180 days" />

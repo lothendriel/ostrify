@@ -6,7 +6,8 @@ import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
 import { parseN94Stream, type TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import { accountStorageKey, cn } from '@/lib/utils';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
@@ -27,9 +28,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function restoreVideoPlayer(): SavedVideoPlayer | null {
+function restoreVideoPlayer(owner: string): SavedVideoPlayer | null {
   try {
-    const raw = sessionStorage.getItem(VIDEO_SESSION_KEY);
+    const raw = sessionStorage.getItem(accountStorageKey(sessionStorage, VIDEO_SESSION_KEY, owner));
     if (!raw || raw.length > 256_000) return null;
     const saved: unknown = JSON.parse(raw);
     if (!isRecord(saved) || !isRecord(saved.stream)) return null;
@@ -65,12 +66,13 @@ function restoreVideoPlayer(): SavedVideoPlayer | null {
   }
 }
 
-function saveVideoPlayer(value: SavedVideoPlayer | null) {
+function saveVideoPlayer(owner: string, value: SavedVideoPlayer | null) {
   try {
-    if (!value) sessionStorage.removeItem(VIDEO_SESSION_KEY);
+    const key = accountStorageKey(sessionStorage, VIDEO_SESSION_KEY, owner);
+    if (!value) sessionStorage.removeItem(key);
     else {
       const { stream } = value;
-      sessionStorage.setItem(VIDEO_SESSION_KEY, JSON.stringify({
+      sessionStorage.setItem(key, JSON.stringify({
         ...value,
         stream: {
           id: stream.id, title: stream.title, summary: stream.summary, url: stream.url, externalUrl: stream.externalUrl,
@@ -93,10 +95,16 @@ interface TunestrPlayerContextValue {
 const TunestrPlayerContext = createContext<TunestrPlayerContextValue | null>(null);
 
 export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
+  const { user } = useCurrentUser();
+  const owner = user?.pubkey ?? 'anonymous';
+  return <TunestrPlayerSession key={owner} owner={owner}>{children}</TunestrPlayerSession>;
+}
+
+function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner: string }) {
   const { pathname, search } = useLocation();
   const location = `${pathname}${search}`;
   const previousLocation = useRef(location);
-  const [saved] = useState(restoreVideoPlayer);
+  const [saved] = useState(() => restoreVideoPlayer(owner));
   const [stream, setStream] = useState<TunestrStream | null>(saved?.stream ?? null);
   const [docked, setDocked] = useState(saved?.docked ?? true);
   const [size, setSize] = useState<PlayerSize>(saved?.size ?? 'small');
@@ -115,8 +123,8 @@ export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
   }, [location, stream, docked]);
 
   useEffect(() => {
-    saveVideoPlayer(stream ? { stream, docked, size, ...playbackRef.current } : null);
-  }, [stream, docked, size]);
+    saveVideoPlayer(owner, stream ? { stream, docked, size, ...playbackRef.current } : null);
+  }, [stream, docked, size, owner]);
 
   const savePlayback = (position: number, playing: boolean) => {
     const changedPlaying = playbackRef.current.playing !== playing;
@@ -124,17 +132,17 @@ export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     if (stream && (changedPlaying || now - lastPlaybackWrite.current >= 5_000)) {
       lastPlaybackWrite.current = now;
-      saveVideoPlayer({ stream, docked, size, position, playing });
+      saveVideoPlayer(owner, { stream, docked, size, position, playing });
     }
   };
 
   useEffect(() => {
     const saveOnPageHide = () => {
-      if (stream) saveVideoPlayer({ stream, docked, size, ...playbackRef.current });
+      if (stream) saveVideoPlayer(owner, { stream, docked, size, ...playbackRef.current });
     };
     window.addEventListener('pagehide', saveOnPageHide);
     return () => window.removeEventListener('pagehide', saveOnPageHide);
-  }, [stream, docked, size]);
+  }, [stream, docked, size, owner]);
 
   const player = stream && <TunestrVideoPlayer
     key={stream.id}
@@ -147,7 +155,7 @@ export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
     onSizeChange={setSize}
     onDock={() => setDocked(true)}
     onRestore={() => setDocked(false)}
-    onClose={() => { saveVideoPlayer(null); setDocked(true); setStream(null); }}
+    onClose={() => { saveVideoPlayer(owner, null); setDocked(true); setStream(null); }}
   />;
 
   return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { restoredRef.current = false; playbackRef.current = { position: 0, playing: true }; setStream(nextStream); setSize('small'); setDocked(true); }, setContentPane, expanded: !!stream && !docked }}>

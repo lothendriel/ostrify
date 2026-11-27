@@ -9,6 +9,8 @@ import { audiobookPath } from "@/hooks/useAudiobookLibrary";
 import { useLibriVoxBook, useLibriVoxCatalog, type LibriVoxBook } from "@/hooks/useLibriVox";
 import { usePlayer } from "@/hooks/usePlayer";
 import type { Track } from "@/lib/music";
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { accountStorageKey } from '@/lib/utils';
 
 type FeaturedBook = LibriVoxBook | GutenbergAudiobook;
 type FeaturedSource = "librivox" | "gutenberg";
@@ -21,12 +23,13 @@ interface FeaturedPicks {
 }
 
 const FEATURED_SESSION_KEY = "ostrify:featured-audiobooks:v1";
-let sessionPicks: FeaturedPicks | null = null;
+const sessionPicks = new Map<string, FeaturedPicks>();
 
-function readSessionPicks(): FeaturedPicks | null {
-  if (sessionPicks) return sessionPicks;
+function readSessionPicks(owner: string): FeaturedPicks | null {
+  const cached = sessionPicks.get(owner);
+  if (cached) return cached;
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem(FEATURED_SESSION_KEY) ?? "null");
+    const value: unknown = JSON.parse(sessionStorage.getItem(accountStorageKey(sessionStorage, FEATURED_SESSION_KEY, owner)) ?? "null");
     if (!value || typeof value !== "object") return null;
     const picks = value as Partial<FeaturedPicks>;
     const isBook = (book: FeaturedBook) => book && (book.source === "librivox" || book.source === "gutenberg")
@@ -36,17 +39,18 @@ function readSessionPicks(): FeaturedPicks | null {
     if (!Array.isArray(picks.weekly) || !Array.isArray(picks.daily)
       || ![...picks.weekly, ...picks.daily].every(isBook)
       || picks.weekly.length + picks.daily.length === 0) return null;
-    sessionPicks = { weekly: picks.weekly, daily: picks.daily };
-    return sessionPicks;
+    const result = { weekly: picks.weekly, daily: picks.daily };
+    sessionPicks.set(owner, result);
+    return result;
   } catch {
     return null;
   }
 }
 
-function saveSessionPicks(picks: FeaturedPicks) {
-  sessionPicks = picks;
+function saveSessionPicks(owner: string, picks: FeaturedPicks) {
+  sessionPicks.set(owner, picks);
   try {
-    sessionStorage.setItem(FEATURED_SESSION_KEY, JSON.stringify(picks));
+    sessionStorage.setItem(accountStorageKey(sessionStorage, FEATURED_SESSION_KEY, owner), JSON.stringify(picks));
   } catch {
     // Preserve the selection in memory if session storage is unavailable.
   }
@@ -144,7 +148,9 @@ function PickSkeleton() {
 }
 
 export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
-  const [picks, setPicks] = useState(readSessionPicks);
+  const { user } = useCurrentUser();
+  const owner = user?.pubkey ?? 'anonymous';
+  const [picks, setPicks] = useState(() => readSessionPicks(owner));
   const [refreshPending, setRefreshPending] = useState(false);
   const catalogEnabled = enabled && !picks;
   const librivoxCatalog = useLibriVoxCatalog("", "title", catalogEnabled);
@@ -164,9 +170,9 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
     if (!catalogEnabled || isLoading || picks || !books.length) return;
     const { day, week } = getPeriodKeys(new Date());
     const next = chooseFeaturedBooks(books, day, week);
-    saveSessionPicks(next);
+    saveSessionPicks(owner, next);
     setPicks(next);
-  }, [books, catalogEnabled, isLoading, picks]);
+  }, [books, catalogEnabled, isLoading, picks, owner]);
 
   const refreshPicks = async () => {
     setRefreshPending(true);
@@ -179,7 +185,7 @@ export function FeaturedAudiobooks({ enabled }: { enabled: boolean }) {
       if (!refreshedBooks.length) return;
       const { day, week } = getPeriodKeys(new Date());
       const next = chooseFeaturedBooks([...new Map(refreshedBooks.map(book => [book.id, book])).values()], day, week, crypto.randomUUID());
-      saveSessionPicks(next);
+      saveSessionPicks(owner, next);
       setPicks(next);
     } finally {
       setRefreshPending(false);

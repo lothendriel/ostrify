@@ -130,7 +130,7 @@ const Index = () => {
   const [pageSeed] = useState(() => crypto.randomUUID());
   const [genreShelfVariations, setGenreShelfVariations] = useState<Record<string, number>>({});
   const pendingGenreRefresh = useRef(new Set<string>());
-  const recentShelfHistory = useRef(readHomeShelfHistory());
+  const recentShelfHistory = useRef(readHomeShelfHistory(user?.pubkey ?? 'anonymous'));
   const currentShelves = useRef<{ categoryId: string; tracks: Track[] }[]>([]);
   const allMusic = useMemo(() => [...tracks, ...wavlakeTracks, ...genreCatalogTracks], [tracks, wavlakeTracks, genreCatalogTracks]);
   const playlists = usePlaylists(discoveryEnabled, homeAccountScope);
@@ -206,8 +206,8 @@ const Index = () => {
       nextHistory[categoryId] = [...new Set([...shelfTracks.flatMap(track => [track.id, track.url]), ...(nextHistory[categoryId] ?? [])])].slice(0, 90);
     }
     recentShelfHistory.current = nextHistory;
-    writeHomeShelfHistory(nextHistory);
-  }, [visibleCategoryShelves, sessionCategoryShelves]);
+    writeHomeShelfHistory(nextHistory, user?.pubkey ?? 'anonymous');
+  }, [visibleCategoryShelves, sessionCategoryShelves, user?.pubkey]);
 
   const refreshGenreShelf = (categoryId: string) => {
     const currentShelf = currentShelves.current.find(shelf => shelf.categoryId === categoryId);
@@ -218,7 +218,7 @@ const Index = () => {
         ...(recentShelfHistory.current[categoryId] ?? []),
       ])].slice(0, 90);
       recentShelfHistory.current = nextHistory;
-      writeHomeShelfHistory(nextHistory);
+      writeHomeShelfHistory(nextHistory, user?.pubkey ?? 'anonymous');
     }
     pendingGenreRefresh.current.add(categoryId);
     setGenreShelfVariations(current => ({ ...current, [categoryId]: (current[categoryId] ?? 0) + 1 }));
