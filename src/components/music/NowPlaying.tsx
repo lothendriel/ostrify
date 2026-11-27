@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import { AudioLines, ChevronDown, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { usePlayer } from '@/hooks/usePlayer';
 import { formatDuration, fountainShowGuid } from '@/lib/music';
@@ -218,16 +217,13 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
     }
   }
 
-  return <Dialog open={open} onOpenChange={changeOpen}>
-    <DialogContent showCloseButton={false} className="fixed inset-0 top-0 left-0 flex h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-y-auto rounded-none border-0 bg-[#100e1d] p-0 text-white sm:max-w-none">
-      <DialogTitle className="sr-only">Now playing</DialogTitle>
-      <DialogDescription className="sr-only">A listening view with playback controls and an optional audio visualiser.</DialogDescription>
+  return <section aria-label="Listening room" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto bg-[#100e1d] text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_15%,rgba(120,83,183,0.35),transparent_48%),radial-gradient(ellipse_at_90%_85%,rgba(39,129,81,0.20),transparent_45%)]" />
       <header className="relative flex shrink-0 items-center justify-between px-5 py-4 sm:px-10 sm:py-6">
         <div><p className="text-[10px] font-bold uppercase tracking-[0.24em] text-green-300">Ostrify / listening room</p><p className="mt-1 text-sm text-white/65">Now playing</p></div>
-        <DialogClose asChild><button className={control} aria-label="Close now playing"><ChevronDown className="size-6" /></button></DialogClose>
+        <button type="button" className={control} aria-label="Close listening room" onClick={() => changeOpen(false)}><ChevronDown className="size-6" /></button>
       </header>
-      {current ? <main className="relative mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center gap-7 px-6 pb-8 sm:px-10 lg:flex-row lg:items-center lg:gap-20">
+      {current ? <main className="relative mx-auto flex w-full max-w-6xl flex-1 shrink-0 flex-col justify-center gap-7 px-6 pb-8 sm:px-10 lg:flex-row lg:items-center lg:gap-20">
         <div className="flex shrink-0 justify-center lg:w-[40%]">
           <TrackArtwork track={current} priority rounded="rounded-2xl" className="aspect-square w-[min(56vw,250px)] shadow-[0_25px_80px_rgba(0,0,0,0.4)] sm:w-[min(42vw,340px)] lg:w-full lg:max-w-[420px]" />
         </div>
@@ -265,6 +261,5 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
           <div className="mx-auto mt-3 flex w-40 items-center gap-2"><button className={control} onClick={player.toggleMute} aria-label={player.muted ? 'Unmute' : 'Mute'}>{player.muted || player.volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}</button><Slider value={[player.muted ? 0 : player.volume * 100]} max={100} onValueChange={([v]) => player.setVolume(v / 100)} aria-label="Volume" className="flex-1" /></div>
         </div>
       </main> : <div className="relative flex flex-1 items-center justify-center text-white/65">Choose something to listen to.</div>}
-    </DialogContent>
-  </Dialog>;
+  </section>;
 }

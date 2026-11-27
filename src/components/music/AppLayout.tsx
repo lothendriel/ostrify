@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoginArea } from "@/components/auth/LoginArea";
 import { Sidebar } from "./Sidebar";
 import { PlayerBar } from "./PlayerBar";
+import { NowPlaying } from "./NowPlaying";
 import { QueuePanel } from "./QueuePanel";
 import { FriendsActivityPanel, FriendsActivitySheet } from "./FriendsActivitySheet";
 import { NotificationsBell, NotificationsPanel } from "./NotificationsBell";
@@ -181,7 +182,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [homeSessionScope] = useState(() => crypto.randomUUID());
   const previousHomeAccount = useRef<string | undefined>(undefined);
   const [activePanel, setActivePanel] = useState<'friends' | 'queue' | 'notifications' | 'chat' | null>(null);
-  const { pathname } = useLocation();
+  const [listeningLocation, setListeningLocation] = useState<string | null>(null);
+  const { pathname, key: locationKey } = useLocation();
+  const [previousLocationKey, setPreviousLocationKey] = useState(locationKey);
+  if (previousLocationKey !== locationKey) {
+    setPreviousLocationKey(locationKey);
+    setListeningLocation(null);
+  }
+  const nowPlayingOpen = listeningLocation === locationKey && !expanded;
   const friendsPageOpen = pathname === '/friends';
   const { user } = useCurrentUser();
   const accountScope = `${homeSessionScope}:${user?.pubkey ?? 'public'}`;
@@ -272,13 +280,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* The player stays mounted here while switching between the pane and the floating dock. */}
           <div ref={setContentPane} className="relative z-10 flex min-h-0 min-w-0 flex-1">
-            <div className="flex min-h-0 min-w-0 flex-1" inert={expanded} aria-hidden={expanded}>
+            <div className={nowPlayingOpen ? 'hidden' : 'flex min-h-0 min-w-0 flex-1'} inert={expanded || nowPlayingOpen} aria-hidden={expanded || nowPlayingOpen}>
               <ScrollArea type="always" className="app-content-scroll relative min-w-0 max-w-full flex-1 min-h-0 bg-transparent">
                 <div className="min-w-0 max-w-full overflow-x-hidden pb-6">
                   <HomeSessionProvider value={accountScope}>{children}</HomeSessionProvider>
                 </div>
               </ScrollArea>
             </div>
+            {nowPlayingOpen && <NowPlaying open onOpenChange={open => setListeningLocation(open ? locationKey : null)} />}
           </div>
         </div>
         {!isMobile && <aside aria-hidden={!visiblePanel || visiblePanel === 'chat'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${visiblePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : visiblePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : visiblePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
@@ -308,7 +317,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
  
-      <PlayerBar onQueueToggle={() => togglePanel('queue')} queueOpen={activePanel === 'queue'} />
+      <PlayerBar onQueueToggle={() => togglePanel('queue')} queueOpen={activePanel === 'queue'} nowPlayingOpen={nowPlayingOpen} videoExpanded={expanded} onNowPlayingToggle={() => setListeningLocation(nowPlayingOpen ? null : locationKey)} />
     </div>
   );
 }
