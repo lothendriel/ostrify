@@ -3,9 +3,9 @@
 Ostrify is a Spotify-style player for audio media published on Nostr. It does
 not define any new event kinds — it aggregates and reuses existing NIPs.
 
-## Ostrify Armada chat
+## Ostrify Chat
 
-The signed-in chat panel joins the public Ostrify Armada invite using the existing [Concord protocol](https://concordprotocol.org/spec/) and displays the community's `ostrify-site-chat` channel. Concord uses kind `33301` for the encrypted invite bundle, kind `1059` for encrypted community streams, and encrypted community-list events (including kinds `13302` and `33302`). Ostrify does not define a separate chat schema. The invite is public: anyone holding it can join and read the channels it grants. The panel keeps decrypted Concord membership material in memory and publishes the user's encrypted community list to relays. This browser caches only signed, encrypted community-list fragments for faster restoration; decrypted messages and membership keys are not stored by the chat panel. After joining, this browser remembers the community identifier per account and attempts to restore the chat automatically in future tabs or sessions; restoration requires the encrypted list to be available on relays and the signer to decrypt it. Closing the panel keeps the connection active until the page closes or the account changes. Relay availability and signer NIP-44 support affect joining and syncing. Messages shown optimistically may not have been accepted by a relay.
+The signed-in chat panel uses the public NIP-72 community `34550:0155373ac79b7ffb0f586c3e68396f9e82d46f7afe7016d46ed9ca46ba3e1bed:0a9c42eb-50c8-4953-8de0-40c50019b574`. Messages are NIP-22 kind `1111` top-level comments with `A`, `a`, `K`, `k`, `P`, and `p` tags scoped to that community. The panel reads and publishes to `wss://nos.lol/` and `wss://relay.studio314.us/nostrrelay/ostrify`. Messages are public, not encrypted. The panel displays unapproved submissions; it does not enforce community moderation, and other clients may show only moderator-approved posts. Relays can retain or reject messages, and results may be incomplete when relays do not respond. Chat starts when opened and stays active during navigation until the page closes or the account changes.
 
 ## Event kinds consumed
 

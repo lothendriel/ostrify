@@ -1,12 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide-react";
-import { ConcordClient, KeyValue, Helpers, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity, type ConcordStorage } from '@jsr/applesauce__concord';
 import { useNostr } from '@nostrify/react';
 import { verifyEvent } from 'nostr-tools';
 import { useQuery } from '@tanstack/react-query';
-import { NSchema } from '@nostrify/nostrify';
-import { isNewerReplaceableEvent, queryLibraryEvents } from '@/lib/libraryQuery';
+import { NSchema, type NostrEvent } from '@nostrify/nostrify';
+import { isNewerReplaceableEvent } from '@/lib/libraryQuery';
 import { genUserName } from '@/lib/sanitize';
 import { Textarea } from '@/components/ui/textarea';
 import { usePreviousLocation } from "@/components/NavigationHistory";
@@ -27,102 +26,41 @@ import { useFollowedPeople } from '@/hooks/useFollowedPeople';
 import { useFriendStatuses } from '@/hooks/useFriendLibrary';
 import { useQueryClient } from '@tanstack/react-query';
 import { HomeSessionProvider } from '@/contexts/HomeSessionContext';
-import { useAppContext } from '@/hooks/useAppContext';
-import { getUserRelayUrls } from '@/lib/appRelays';
 
-const ARMADA_INVITE = 'https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw';
-const CONCORD_RELAYS = ['wss://jskitty.com/nostr', 'wss://asia.vectorapp.io/nostr', 'wss://relay.ditto.pub', 'wss://relay.dreamith.to'];
-const CHAT_MEMBERSHIP_PREFIX = 'ostrify-armada-chat-joined-v1:';
-const CHAT_CACHE_PREFIX = 'ostrify-armada-cache-v1:';
-const CHAT_DEBUG_KEY = 'ostrify-armada-timing';
-
-// Only the SDK's signed, NIP-44 encrypted list fragments are durable. Its
-// membership mirror and recovery records may contain keys and stay in memory.
-function createChatStorage(pubkey: string): ConcordStorage {
-  const memory = KeyValue.memoryStorage();
-  const fragmentKey = `concord:list-fragments:${pubkey}`;
-  const cacheKey = `${CHAT_CACHE_PREFIX}fragments:${pubkey}`;
-  return {
-    async getItem(key) {
-      if (key !== fragmentKey) return memory.getItem(key);
-      try { return localStorage.getItem(cacheKey); } catch { return null; }
-    },
-    async setItem(key, value) {
-      if (key !== fragmentKey) return memory.setItem(key, value);
-      try { localStorage.setItem(cacheKey, value); } catch { /* Relays remain the source of truth. */ }
-    },
-    async removeItem(key) {
-      if (key !== fragmentKey) return memory.removeItem(key);
-      try { localStorage.removeItem(cacheKey); } catch { /* Storage may be unavailable. */ }
-    },
-  };
-}
-
-function chatTiming(label: string, startedAt: number, details?: object): void {
-  try {
-    if (localStorage.getItem(CHAT_DEBUG_KEY) === '1') {
-      console.info('[Armada timing]', label, `${Math.round(performance.now() - startedAt)}ms`, details ?? '');
-    }
-  } catch { /* Timing diagnostics are optional. */ }
-}
-
-function readJoinedCommunity(pubkey: string): string | null {
-  try {
-    const id = localStorage.getItem(`${CHAT_MEMBERSHIP_PREFIX}${pubkey}`);
-    return id && /^[0-9a-f]{64}$/.test(id) ? id : null;
-  } catch { return null; }
-}
-
-function rememberJoinedCommunity(pubkey: string, communityId: string): void {
-  try { localStorage.setItem(`${CHAT_MEMBERSHIP_PREFIX}${pubkey}`, communityId); } catch { /* Chat remains available until the tab closes. */ }
-}
-
+const CHAT_OWNER = '0155373ac79b7ffb0f586c3e68396f9e82d46f7afe7016d46ed9ca46ba3e1bed';
+const CHAT_COORDINATE = `34550:${CHAT_OWNER}:0a9c42eb-50c8-4953-8de0-40c50019b574`;
+const CHAT_RELAYS = ['wss://nos.lol/', 'wss://relay.studio314.us/nostrrelay/ostrify'];
+const CHAT_LIMIT = 100;
 type ChatUser = NonNullable<ReturnType<typeof useCurrentUser>['user']>;
 
-function ChatMessage({ message, name }: { message: ConcordChannelMessage; name?: string }) {
-  const displayName = name || genUserName(message.rumor.pubkey);
-  const date = new Date(message.rumor.created_at * 1000);
+function ChatMessage({ message, name }: { message: NostrEvent; name?: string }) {
+  const date = new Date(message.created_at * 1000);
   const validDate = Number.isFinite(date.getTime());
   return <article className="min-w-0 rounded-lg bg-secondary/40 p-3">
-    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-semibold">{displayName}</span>{validDate && <time className="shrink-0 text-xs text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}</div>
+    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-semibold">{name || genUserName(message.pubkey)}</span>{validDate && <time className="shrink-0 text-xs text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}</div>
     <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.content}</p>
-    {message.edit && <span className="text-xs text-muted-foreground">Edited</span>}
   </article>;
 }
 
-function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => void }) {
-  const { config } = useAppContext();
+function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => void }) {
   const { nostr } = useNostr();
-  const clientRef = useRef<ConcordClient | null>(null);
-  const syncStartedAt = useRef<number | null>(null);
-  const subscriptionsRef = useRef<Array<{ unsubscribe: () => void }>>([]);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<ConcordChannel | null>(null);
-  const alive = useRef(true);
-  const startedRef = useRef(false);
-  const [savedCommunityId] = useState(() => readJoinedCommunity(user.pubkey));
-  const [phase, setPhase] = useState<'intro' | 'joining' | 'connected' | 'error'>(() => savedCommunityId ? 'joining' : 'intro');
-  const [status, setStatus] = useState('');
-  const [channel, setChannel] = useState<ConcordChannel | null>(null);
-  const [messages, setMessages] = useState<ConcordChannelMessage[]>([]);
+  const [messages, setMessages] = useState<NostrEvent[]>([]);
+  const [relayStatus, setRelayStatus] = useState<Record<string, 'connecting' | 'ready' | 'retrying'>>({});
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [canSend, setCanSend] = useState(false);
-  const [live, setLive] = useState(false);
-  const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const visibleMessages = messages.slice(0, 100);
-  const authors = [...new Set(visibleMessages.map(message => message.rumor.pubkey))].sort();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const authors = [...new Set(messages.map(message => message.pubkey))].sort();
   const authorKey = authors.join('|');
   const authorProfiles = useQuery({
-    queryKey: ['armada-chat-authors', authorKey],
+    queryKey: ['community-chat-authors', authorKey],
     enabled: authors.length > 0,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: async ({ signal }) => {
       const requested = new Set(authorKey.split('|').filter(Boolean));
       const events = await nostr.query([{ kinds: [0], authors: [...requested], limit: Math.max(100, requested.size * 3) }], { signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]) });
-      const latest = new Map<string, typeof events[number]>();
+      const latest = new Map<string, NostrEvent>();
       for (const event of events) {
         if (event.kind !== 0 || !requested.has(event.pubkey)) continue;
         const prior = latest.get(event.pubkey);
@@ -134,153 +72,88 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
           const metadata = NSchema.json().pipe(NSchema.metadata()).parse(event.content);
           const name = metadata.display_name || metadata.name;
           if (name) names[pubkey] = name;
-        } catch { /* A missing or malformed profile uses the fallback name. */ }
+        } catch { /* A malformed profile uses the fallback name. */ }
       }
       return names;
     },
   });
 
   useEffect(() => {
-    alive.current = true;
-    return () => { alive.current = false; channelRef.current = null; subscriptionsRef.current.forEach(subscription => subscription.unsubscribe()); subscriptionsRef.current = []; clientRef.current?.dispose(); clientRef.current = null; };
-  }, []);
-
-  useEffect(() => {
-    if (!channel) return;
-    let measured = false;
-    const subscription = channel.messages$.subscribe(next => {
-      if (!measured && next.length && syncStartedAt.current !== null) {
-        measured = true;
-        chatTiming('First messages', syncStartedAt.current, { count: next.length });
+    const controller = new AbortController();
+    const updateStatus = (relay: string, status: 'connecting' | 'ready' | 'retrying') => {
+      if (!controller.signal.aborted) setRelayStatus(current => ({ ...current, [relay]: status }));
+    };
+    const watch = async (relay: string) => {
+      while (!controller.signal.aborted) {
+        updateStatus(relay, 'connecting');
+        const attempt = new AbortController();
+        const timer = setTimeout(() => attempt.abort(), 8000);
+        try {
+          for await (const message of nostr.relay(relay).req([{ kinds: [1111], '#A': [CHAT_COORDINATE], limit: CHAT_LIMIT }], { signal: AbortSignal.any([controller.signal, attempt.signal]) })) {
+            if (message[0] === 'EOSE') { clearTimeout(timer); updateStatus(relay, 'ready'); }
+            if (message[0] !== 'EVENT') continue;
+            const event = message[2];
+            if (event.kind !== 1111 || !event.tags.some(tag => tag[0] === 'A' && tag[1] === CHAT_COORDINATE) || !verifyEvent(event)) continue;
+            setMessages(current => [...new Map([...current, event].map(item => [item.id, item])).values()].sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id)).slice(0, CHAT_LIMIT));
+          }
+        } catch { /* A relay can fail independently; retry without losing messages. */ }
+        finally { clearTimeout(timer); }
+        if (controller.signal.aborted) break;
+        updateStatus(relay, 'retrying');
+        await new Promise<void>(resolve => {
+          const timeout = setTimeout(done, 5000);
+          function done() { clearTimeout(timeout); controller.signal.removeEventListener('abort', done); resolve(); }
+          controller.signal.addEventListener('abort', done, { once: true });
+        });
       }
-      setMessages(next);
-    });
-    return () => subscription.unsubscribe();
-  }, [channel]);
+    };
+    for (const relay of CHAT_RELAYS) void watch(relay);
+    return () => controller.abort();
+  }, [nostr]);
 
   useEffect(() => {
     const viewport = messagesEndRef.current?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [channel, messages.length]);
-
-  const join = useCallback(async (restore = false) => {
-    if (!user.signer.nip44) { setError('Your signer must support NIP-44 encryption to join this chat.'); setPhase('error'); return; }
-    setPhase('joining'); setError(''); setNotice(''); setStatus('Connecting to community relays…');
-    const userRelays = [
-      ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
-      ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'write', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
-    ];
-    // Avoid querying music-only read relays for the encrypted account list.
-    // Preserve configured write relays (including existing memberships stored
-    // there), NIP-65 read/write relays, and Concord's own defaults.
-    const relays = [...new Set([...CONCORD_RELAYS, ...config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url), ...userRelays])];
-    const startedAt = performance.now();
-    chatTiming('Account relay targets', startedAt, { count: relays.length });
-    syncStartedAt.current = startedAt;
-    const client = new ConcordClient({ signer: user.signer, relays, storage: createChatStorage(user.pubkey), autoUnlock: true, autoSaveCommunityList: false, watchDirectInvites: false });
-    clientRef.current = client;
-    try {
-      // First-time invite discovery runs alongside the account-list sync rather
-      // than waiting for it and then waiting for a second relay pool timeout.
-      const parsed = Helpers.parseInviteLink(ARMADA_INVITE);
-      const inviteRead = restore ? null : queryLibraryEvents(nostr, parsed.bootstrapRelays, [{ kinds: [33301], authors: [parsed.linkSigner] }], AbortSignal.timeout(8000)).then(result => {
-        chatTiming('Invite lookup', startedAt, { completed: result.completedRelays.length, incomplete: result.incompleteRelays.length });
-        return result;
-      });
-      const startup = client.start().then(() => chatTiming('Account startup', startedAt));
-      const [result] = await Promise.all([inviteRead, startup]);
-      if (!alive.current) return;
-      let community: ConcordCommunity;
-      if (restore && savedCommunityId) {
-        const restored = client.getCommunity(savedCommunityId);
-        if (!restored) throw new Error('Your saved community could not be restored from your relays. Check your connection and try again.');
-        community = restored;
-        chatTiming('Community restored', startedAt);
-      } else {
-        if (!result) throw new Error('The invite could not be checked.');
-        setStatus('Checking the invite and joining…');
-        if (!result.complete) setNotice('Some invite relays did not respond; a newer revocation may not have been seen.');
-        const events = result.events.filter(event => event.kind === 33301 && event.pubkey === parsed.linkSigner && event.tags.some(tag => tag[0] === 'd' && tag[1] === '') && verifyEvent(event))
-          .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id));
-        const winner = events[0];
-        if (!winner) throw new Error('The invite was not found on the responding relays. Please try again.');
-        if (Helpers.isInviteBundleRevoked(winner)) throw new Error('This invite has been revoked. A new invite is needed.');
-        const bundle = Helpers.validateInviteBundle(Helpers.getInviteBundle(winner, parsed.token));
-        if (!bundle) throw new Error('The invite could not be verified.');
-        community = await client.joinByBundle(bundle);
-        chatTiming('Community joined', startedAt);
-        rememberJoinedCommunity(user.pubkey, community.communityId);
-      }
-      if (!alive.current) return;
-      const updateChannel = () => {
-        const state = community.state$.value;
-        const matches = state.channels.filter(item => item.name.toLowerCase() === 'ostrify-site-chat');
-        setCanSend(!state.banlist.has(user.pubkey) && !state.dissolved);
-        if (matches.length !== 1) { channelRef.current = null; setChannel(null); return; }
-        const next = community.getChannel(matches[0].channel_id) ?? null;
-        if (channelRef.current !== next) { channelRef.current = next; setChannel(next); setMessages([]); }
-      };
-      const channelsSub = community.state$.subscribe(updateChannel);
-      let recordedLive = false;
-      const statusSub = community.status$.subscribe(value => {
-        if (!alive.current) return;
-        if (!recordedLive && value.phase === 'live' && value.connected) {
-          recordedLive = true;
-          chatTiming('Chat ready', startedAt);
-        }
-        setLive(value.phase === 'live' && value.connected);
-        setStatus(value.error ? `Chat sync error: ${value.error}` : value.phase === 'live' ? (value.connected ? 'Connected' : 'Relay connection unavailable') : `Syncing community (${value.phase})…`);
-      });
-      const diagnosticsSub = community.diagnostics$.subscribe(diagnostic => {
-        if (alive.current && diagnostic.stage === 'plane-publish' && diagnostic.plane === 'channel') setError('The message may not have reached a relay. Check your connection before retrying.');
-      });
-      subscriptionsRef.current.push(channelsSub, statusSub, diagnosticsSub);
-      setPhase('connected');
-    } catch (cause) {
-      chatTiming('Startup failed', startedAt);
-      client.dispose(); if (clientRef.current === client) clientRef.current = null;
-      if (alive.current) { setError(cause instanceof Error ? cause.message : 'Unable to connect to Armada.'); setPhase('error'); }
-    }
-  }, [config, nostr, savedCommunityId, user]);
-
-  useEffect(() => {
-    if (savedCommunityId && !startedRef.current) {
-      startedRef.current = true;
-      void join(true);
-    }
-  }, [join, savedCommunityId]);
+  }, [messages.length]);
 
   const send = async () => {
     const body = text.trim();
-    if (!body || !channel || sending || !canSend || !live || channel.community.phase$.value !== 'live' || channel.community.state$.value.banlist.has(user.pubkey)) return;
-    setSending(true); setError('');
-    try { await channel.sendMessage({ text: body }); if (alive.current) setText(''); }
-    catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : 'Could not send message.'); }
-    finally { if (alive.current) setSending(false); }
+    if (!body || sending) return;
+    setSending(true); setNotice('');
+    try {
+      const event = await user.signer.signEvent({
+        kind: 1111, content: body, created_at: Math.floor(Date.now() / 1000),
+        tags: [['A', CHAT_COORDINATE, CHAT_RELAYS[0]], ['a', CHAT_COORDINATE, CHAT_RELAYS[0]], ['P', CHAT_OWNER], ['p', CHAT_OWNER], ['K', '34550'], ['k', '34550']],
+      });
+      if (event.pubkey !== user.pubkey || !verifyEvent(event)) throw new Error('The signer returned an invalid event or a different account.');
+      const outcomes = await Promise.allSettled(CHAT_RELAYS.map(relay => nostr.relay(relay).event(event, { signal: AbortSignal.timeout(5000) })));
+      const accepted = outcomes.filter(outcome => outcome.status === 'fulfilled').length;
+      if (!accepted) throw new Error('No relay confirmed the message. It may still have arrived; check before retrying.');
+      setMessages(current => [...new Map([...current, event].map(item => [item.id, item])).values()].sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id)).slice(0, CHAT_LIMIT));
+      setText('');
+      if (accepted < CHAT_RELAYS.length) setNotice(`Message accepted by ${accepted} of ${CHAT_RELAYS.length} relays. It may not appear everywhere.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not send the message.');
+    } finally { setSending(false); }
   };
-
-  return <section aria-label="Ostrify Armada chat" className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70">
+  const connected = CHAT_RELAYS.filter(relay => relayStatus[relay] === 'ready').length;
+  const waiting = CHAT_RELAYS.some(relay => !relayStatus[relay] || relayStatus[relay] === 'connecting');
+  return <section aria-label="Ostrify Chat" className="flex h-full min-w-0 flex-col overflow-hidden bg-card md:rounded-lg md:border md:border-border/70">
     <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-4">
-      <div><h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Armada</h2><p className="mt-1 text-sm text-muted-foreground">#ostrify-site-chat · Community chat</p></div>
+      <div><h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Chat</h2><p className="mt-1 text-sm text-muted-foreground">Public Nostr community</p></div>
       <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close chat" onClick={onClose}><X className="size-4" /></Button>
     </div>
-    {phase === 'intro' || phase === 'error' ? <div className="space-y-4 overflow-y-auto p-4">
-      <p className="text-sm text-muted-foreground">Join the Ostrify Armada community to chat in #ostrify-site-chat with your Nostr identity.</p>
-      <p className="text-sm text-muted-foreground">This invite is public. Anyone with it can join and read messages in the channels it grants. Joining publishes your membership and an encrypted community list using your signer.</p>
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button className="w-full" onClick={() => void join(Boolean(savedCommunityId))}>{phase === 'error' ? 'Try again' : 'Join chat'}</Button>
-    </div> : phase === 'joining' ? <div className="p-4 text-sm text-muted-foreground" role="status">{status}</div> : <>
-      <div role="status" className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">{status}{notice && <p className="mt-1">{notice}</p>}</div>
-      <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
-        {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #ostrify-site-chat channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...visibleMessages].reverse().map(message => <ChatMessage key={message.rumor.id} message={message} name={authorProfiles.data?.[message.rumor.pubkey]} />)}
-      <div ref={messagesEndRef} /></div></ScrollArea>
-      <div className="space-y-2 border-t border-border/70 p-4">
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {!canSend && <p className="text-xs text-muted-foreground">Messaging is unavailable for this account or community.</p>}
-        <Textarea aria-label="Message #ostrify-site-chat" placeholder="Message #ostrify-site-chat" value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={!channel || !canSend || !live || sending} />
-        <Button className="w-full" disabled={!channel || !canSend || !live || !text.trim() || sending} onClick={() => void send()}><Send className="size-4" /> {sending ? 'Sending…' : 'Send message'}</Button>
-      </div>
-    </>}
+    <div className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground" role="status">{waiting && !connected ? 'Connecting to chat relays…' : `${connected} of ${CHAT_RELAYS.length} chat relays connected${connected < CHAT_RELAYS.length ? ' · Messages may be incomplete' : ''}`}</div>
+    <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
+      {messages.length === 0 ? <p className="text-sm text-muted-foreground">{waiting ? 'Loading recent messages…' : 'No messages found on responding relays yet.'}</p> : [...messages].reverse().map(message => <ChatMessage key={message.id} message={message} name={authorProfiles.data?.[message.pubkey]} />)}
+      <div ref={messagesEndRef} />
+    </div></ScrollArea>
+    <div className="space-y-2 border-t border-border/70 p-4">
+      <p className="text-xs text-muted-foreground">Messages are public, not encrypted. Submissions appear here without moderator approval; other clients may show only approved posts.</p>
+      {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
+      <Textarea aria-label="Message Ostrify Chat" placeholder="Message Ostrify Chat" value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={sending} />
+      <Button className="w-full" disabled={!text.trim() || sending} onClick={() => void send()}><Send className="size-4" /> {sending ? 'Sending…' : 'Send message'}</Button>
+    </div>
   </section>;
 }
 
@@ -318,7 +191,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     setActivePanel(current => current === panel ? null : panel);
   };
   const visiblePanel = activePanel === 'chat' && !user ? null : activePanel;
-  const shouldMountChat = !!user && (chatOpenedFor === user.pubkey || !!readJoinedCommunity(user.pubkey));
+  const shouldMountChat = !!user && chatOpenedFor === user.pubkey;
 
   return (
     <div className="ostrify-shell fixed inset-x-0 top-0 flex h-svh flex-col overflow-hidden text-foreground">
@@ -361,7 +234,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="hidden shrink-0 items-center gap-1 sm:flex">
-              {user && <Button type="button" variant="ghost" size="icon" className={`rounded-full ${visiblePanel === 'chat' ? 'bg-accent' : ''}`} aria-label="Ostrify Armada chat" aria-pressed={visiblePanel === 'chat'} onClick={() => togglePanel('chat')}><MessageCircle className="size-5" /></Button>}
+              {user && <Button type="button" variant="ghost" size="icon" className={`rounded-full ${visiblePanel === 'chat' ? 'bg-accent' : ''}`} aria-label="Ostrify Chat" aria-pressed={visiblePanel === 'chat'} onClick={() => togglePanel('chat')}><MessageCircle className="size-5" /></Button>}
               <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
               <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
             </div>
@@ -370,7 +243,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex w-full items-center justify-between border-t border-border/40 pt-1 sm:hidden">
               <div className="flex items-center gap-2">
-                {user && <Button type="button" variant="ghost" size="icon" className={`rounded-full ${visiblePanel === 'chat' ? 'bg-accent' : ''}`} aria-label="Ostrify Armada chat" aria-pressed={visiblePanel === 'chat'} onClick={() => togglePanel('chat')}><MessageCircle className="size-5" /></Button>}
+                {user && <Button type="button" variant="ghost" size="icon" className={`rounded-full ${visiblePanel === 'chat' ? 'bg-accent' : ''}`} aria-label="Ostrify Chat" aria-pressed={visiblePanel === 'chat'} onClick={() => togglePanel('chat')}><MessageCircle className="size-5" /></Button>}
                 <NotificationsBell open={activePanel === 'notifications'} onToggle={() => togglePanel('notifications')} />
                 <FriendsActivitySheet open={activePanel === 'friends'} liveFriendCount={statuses.data?.length ?? 0} onToggle={() => togglePanel('friends')} />
                 <Button type="button" variant="ghost" size="icon" className="rounded-full" aria-label="Refresh page" title="Refresh page" onClick={() => window.location.reload()}>
@@ -414,7 +287,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             ? `fixed inset-x-0 bottom-28 z-40 mx-auto h-[min(72dvh,38rem)] w-full max-w-xl overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl transition-[transform,opacity] duration-300 ${visiblePanel === 'chat' ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0'}`
             : `h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ${visiblePanel === 'chat' ? 'w-80 opacity-100 xl:w-96' : 'w-0 opacity-0'}`}
         >
-          <ArmadaChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />
+          <CommunityChatPanel key={user.pubkey} user={user} onClose={() => setActivePanel(null)} />
         </div>}
         </div>
       </div>
