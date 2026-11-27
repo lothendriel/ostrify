@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide-react";
+import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, SmilePlus, X } from "lucide-react";
 import { useNostr } from '@nostrify/react';
 import { verifyEvent } from 'nostr-tools';
 import { useQuery } from '@tanstack/react-query';
@@ -9,6 +9,8 @@ import { isNewerReplaceableEvent } from '@/lib/libraryQuery';
 import { genUserName, sanitizeUrl } from '@/lib/sanitize';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { PlayerZapButton } from './PlayerZapButton';
 import { usePreviousLocation } from "@/components/NavigationHistory";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -34,8 +36,15 @@ const CHAT_COORDINATE = `34550:${CHAT_OWNER}:0a9c42eb-50c8-4953-8de0-40c50019b57
 const CHAT_RELAYS = ['wss://nos.lol/', 'wss://relay.studio314.us/nostrrelay/ostrify'];
 const CHAT_LIMIT = 100;
 type ChatUser = NonNullable<ReturnType<typeof useCurrentUser>['user']>;
+const CHAT_REACTIONS = [
+  { emoji: '❤️', name: 'Heart' },
+  { emoji: '😂', name: 'Laugh' },
+  { emoji: '😢', name: 'Cry' },
+  { emoji: '🚀', name: 'Rocket' },
+] as const;
 
-function ChatMessage({ message, name, picture, own }: { message: NostrEvent; name?: string; picture?: string; own: boolean }) {
+function ChatMessage({ message, name, picture, own, reactions, userPubkey, onReact, pending }: { message: NostrEvent; name?: string; picture?: string; own: boolean; reactions: NostrEvent[]; userPubkey: string; onReact: (message: NostrEvent, emoji: string) => void; pending: boolean }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const date = new Date(message.created_at * 1000);
   const validDate = Number.isFinite(date.getTime());
   const displayName = name || genUserName(message.pubkey);
@@ -52,6 +61,22 @@ function ChatMessage({ message, name, picture, own }: { message: NostrEvent; nam
       <div className={`max-w-full rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${own ? 'rounded-br-sm bg-primary text-primary-foreground' : 'rounded-bl-sm border border-border/70 bg-secondary text-secondary-foreground'}`}>
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
       </div>
+      <div className={`flex max-w-full flex-wrap items-center gap-1 ${own ? 'justify-end' : ''}`}>
+        {CHAT_REACTIONS.map(({ emoji, name: reactionName }) => {
+          const matching = reactions.filter(reaction => reaction.content === emoji);
+          const count = new Set(matching.map(reaction => reaction.pubkey)).size;
+          const reacted = matching.some(reaction => reaction.pubkey === userPubkey);
+          return count > 0 ? <button key={emoji} type="button" disabled={pending || reacted} aria-label={`${reactionName}: ${count} ${count === 1 ? 'reaction' : 'reactions'}${reacted ? ', you reacted' : ', react'}`} className={`rounded-full border px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${reacted ? 'border-primary bg-primary/10' : 'border-border bg-secondary hover:bg-accent'}`} onClick={() => onReact(message, emoji)}>{emoji} {count}</button> : null;
+        })}
+        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+          <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-muted-foreground" aria-label={`React to ${own ? 'your' : displayName + "'s"} message`}><SmilePlus className="size-4" /></Button></PopoverTrigger>
+          <PopoverContent align={own ? 'end' : 'start'} className="w-auto p-1" aria-label="Choose a reaction"><div className="flex gap-1">{CHAT_REACTIONS.map(({ emoji, name: reactionName }) => {
+            const reacted = reactions.some(reaction => reaction.content === emoji && reaction.pubkey === userPubkey);
+            return <Button key={emoji} type="button" variant="ghost" size="icon" className="size-9 text-lg" aria-label={reacted ? `${reactionName}, already reacted` : `React with ${reactionName}`} disabled={pending || reacted} onClick={() => { setPickerOpen(false); onReact(message, emoji); }}>{emoji}</Button>;
+          })}</div></PopoverContent>
+        </Popover>
+        {!own && <PlayerZapButton chatEvent={message} chatRelays={CHAT_RELAYS} />}
+      </div>
     </div>
   </article>;
 }
@@ -59,6 +84,9 @@ function ChatMessage({ message, name, picture, own }: { message: NostrEvent; nam
 function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => void }) {
   const { nostr } = useNostr();
   const [messages, setMessages] = useState<NostrEvent[]>([]);
+  const [reactions, setReactions] = useState<NostrEvent[]>([]);
+  const [pendingReaction, setPendingReaction] = useState<string | null>(null);
+  const reactionPendingRef = useRef(false);
   const [relayStatus, setRelayStatus] = useState<Record<string, 'connecting' | 'ready' | 'retrying'>>({});
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -124,6 +152,56 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
     return () => controller.abort();
   }, [nostr]);
 
+  const messageIds = messages.map(message => message.id).sort().join('|');
+  useEffect(() => {
+    if (!messageIds) return;
+    const ids = messageIds.split('|');
+    const targets = new Set(ids);
+    const controller = new AbortController();
+    const watch = async (relay: string) => {
+      while (!controller.signal.aborted) {
+        const attempt = new AbortController();
+        const timer = setTimeout(() => attempt.abort(), 8000);
+        try {
+          for await (const item of nostr.relay(relay).req([{ kinds: [7], '#e': ids, limit: 3000 }], { signal: AbortSignal.any([controller.signal, attempt.signal]) })) {
+            if (item[0] === 'EOSE') clearTimeout(timer);
+            if (item[0] !== 'EVENT') continue;
+            const event = item[2];
+            const target = event.tags.filter(tag => tag[0] === 'e').at(-1)?.[1];
+            if (event.kind !== 7 || !target || !targets.has(target) || !CHAT_REACTIONS.some(reaction => reaction.emoji === event.content) || !verifyEvent(event)) continue;
+            setReactions(current => [...new Map([...current.filter(reaction => targets.has(reaction.tags.filter(tag => tag[0] === 'e').at(-1)?.[1] ?? '')), event].map(reaction => [reaction.id, reaction])).values()].slice(-5000));
+          }
+        } catch { /* Retry independently if a chat relay disconnects. */ }
+        finally { clearTimeout(timer); }
+        if (controller.signal.aborted) break;
+        await new Promise<void>(resolve => {
+          const timeout = setTimeout(done, 5000);
+          function done() { clearTimeout(timeout); controller.signal.removeEventListener('abort', done); resolve(); }
+          controller.signal.addEventListener('abort', done, { once: true });
+        });
+      }
+    };
+    for (const relay of CHAT_RELAYS) void watch(relay);
+    return () => controller.abort();
+  }, [messageIds, nostr]);
+
+  const react = async (message: NostrEvent, emoji: string) => {
+    if (reactionPendingRef.current || reactions.some(reaction => reaction.pubkey === user.pubkey && reaction.content === emoji && reaction.tags.filter(tag => tag[0] === 'e').at(-1)?.[1] === message.id)) return;
+    reactionPendingRef.current = true;
+    setPendingReaction(message.id); setNotice('');
+    try {
+      const event = await user.signer.signEvent({ kind: 7, content: emoji, created_at: Math.floor(Date.now() / 1000), tags: [['e', message.id, CHAT_RELAYS[0], message.pubkey], ['p', message.pubkey, CHAT_RELAYS[0]], ['k', String(message.kind)]] });
+      if (event.pubkey !== user.pubkey || !verifyEvent(event)) throw new Error('The signer returned an invalid reaction or a different account.');
+      const outcomes = await Promise.allSettled(CHAT_RELAYS.map(relay => nostr.relay(relay).event(event, { signal: AbortSignal.timeout(5000) })));
+      const accepted = outcomes.filter(outcome => outcome.status === 'fulfilled').length;
+      if (!accepted) throw new Error('No relay confirmed the reaction. It may still have arrived; check before retrying.');
+      setReactions(current => [...new Map([...current, event].map(reaction => [reaction.id, reaction])).values()]);
+      if (accepted < CHAT_RELAYS.length) setNotice(`Reaction accepted by ${accepted} of ${CHAT_RELAYS.length} relays. It may not appear everywhere.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not send the reaction.');
+    } finally { reactionPendingRef.current = false; setPendingReaction(null); }
+  };
+
   useEffect(() => {
     const viewport = messagesEndRef.current?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
@@ -162,7 +240,7 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
     </div>
     <div className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground" role="status">{waiting && !connected ? 'Connecting to chat relays…' : `${connected} of ${CHAT_RELAYS.length} chat relays connected${connected < CHAT_RELAYS.length ? ' · Messages may be incomplete' : ''}`}</div>
     <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-4"><div className="space-y-4">
-      {messages.length === 0 ? <p className="text-sm text-muted-foreground">{waiting ? 'Loading recent messages…' : 'No messages found on responding relays yet.'}</p> : [...messages].reverse().map(message => <ChatMessage key={message.id} message={message} name={authorProfiles.data?.[message.pubkey]?.name} picture={authorProfiles.data?.[message.pubkey]?.picture} own={message.pubkey === user.pubkey} />)}
+      {messages.length === 0 ? <p className="text-sm text-muted-foreground">{waiting ? 'Loading recent messages…' : 'No messages found on responding relays yet.'}</p> : [...messages].reverse().map(message => <ChatMessage key={message.id} message={message} name={authorProfiles.data?.[message.pubkey]?.name} picture={authorProfiles.data?.[message.pubkey]?.picture} own={message.pubkey === user.pubkey} reactions={reactions.filter(reaction => reaction.tags.filter(tag => tag[0] === 'e').at(-1)?.[1] === message.id)} userPubkey={user.pubkey} onReact={(target, emoji) => void react(target, emoji)} pending={pendingReaction !== null} />)}
       <div ref={messagesEndRef} />
     </div></ScrollArea>
     <div className="space-y-2 border-t border-border/70 p-4">

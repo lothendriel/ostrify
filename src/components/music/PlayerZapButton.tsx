@@ -40,7 +40,7 @@ function getBrowserWallet(): { status: WalletStatus; wallet?: BrowserLightningWa
   return { status: provider.isSidecar === true ? "sidecar" : "available", wallet: provider as BrowserLightningWallet };
 }
 
-type Recipient = { pubkey: string; name: string; role: "Artist" | "Publisher"; source: LnurlSource; params: LnurlPayParams };
+type Recipient = { pubkey: string; name: string; role: "Artist" | "Publisher" | "Member"; source: LnurlSource; params: LnurlPayParams };
 type ReceiptWatch = { invoice: string; provider: string; recipient: string; requestId: string; relays: string[]; since: number };
 
 /** Only the recipient's advertised provider can report this exact invoice/request. */
@@ -83,8 +83,8 @@ function usePaymentMethod(pubkey: string | undefined) {
   return { author, query };
 }
 
-export function PlayerZapButton({ track, className, iconClassName, video = false }: { track: Track | null; className?: string; iconClassName?: string; video?: boolean }) {
-  const message = video ? "I was watching your video on Ostrify. Love it!" : ARTIST_ZAP_MESSAGE;
+export function PlayerZapButton({ track, className, iconClassName, video = false, chatEvent, chatRelays = [] }: { track?: Track | null; className?: string; iconClassName?: string; video?: boolean; chatEvent?: NostrEvent; chatRelays?: string[] }) {
+  const message = chatEvent ? "Thanks for your message on Ostrify!" : video ? "I was watching your video on Ostrify. Love it!" : ARTIST_ZAP_MESSAGE;
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("100");
   const [invoice, setInvoice] = useState<string | null>(null);
@@ -104,12 +104,13 @@ export function PlayerZapButton({ track, className, iconClassName, video = false
   const { toast } = useToast();
 
   const artistKey = track?.artistPubkey && HEX_KEY.test(track.artistPubkey) ? track.artistPubkey.toLowerCase() : undefined;
-  const publisherKey = track?.pubkey && HEX_KEY.test(track.pubkey) ? track.pubkey.toLowerCase() : undefined;
+  const publisherPubkey = chatEvent?.pubkey ?? track?.pubkey;
+  const publisherKey = publisherPubkey && HEX_KEY.test(publisherPubkey) ? publisherPubkey.toLowerCase() : undefined;
   const artist = usePaymentMethod(artistKey);
   const publisher = usePaymentMethod(publisherKey && publisherKey !== artistKey ? publisherKey : undefined);
   // Wait for an explicit artist's lookup to finish before choosing the publisher.
   const artistPending = !!artistKey && (artist.author.isLoading || (artist.query.isFetching && !artist.query.data));
-  const chosen = artist.query.data ? { key: artistKey!, role: "Artist" as const, ...artist } : !artistPending && publisher.query.data ? { key: publisherKey!, role: track?.source === "wavlake" ? "Artist" as const : "Publisher" as const, ...publisher } : undefined;
+  const chosen = artist.query.data ? { key: artistKey!, role: "Artist" as const, ...artist } : !artistPending && publisher.query.data ? { key: publisherKey!, role: chatEvent ? "Member" as const : track?.source === "wavlake" ? "Artist" as const : "Publisher" as const, ...publisher } : undefined;
   const method = chosen?.query.data;
   const metadata = chosen?.author.data?.metadata;
   const availableRecipient: Recipient | undefined = chosen && method ? {
@@ -198,15 +199,15 @@ export function PlayerZapButton({ track, className, iconClassName, video = false
         const lnurlUrl = lnurlToUrl(recipient.source);
         const { bech32 } = await import("@scure/base");
         const lnurl = lnurlUrl ? bech32.encode("lnurl", bech32.toWords(new TextEncoder().encode(lnurlUrl)), false) : undefined;
-        const relays = [...new Set(config.relayMetadata.relays.filter((relay) => relay.read || relay.write).map((relay) => relay.url))];
+        const relays = [...new Set([...chatRelays, ...config.relayMetadata.relays.filter((relay) => relay.read || relay.write).map((relay) => relay.url)])];
         const tags = [
           ["relays", ...relays],
           ["amount", String(amountMsat)],
           ["p", recipient.pubkey],
           ...(lnurl ? [["lnurl", lnurl]] : []),
         ];
-        // A video zap references the signed stream event as well as its publisher.
-        const event = video ? track?.event : undefined;
+        // Event zaps reference the signed message or stream as well as its author.
+        const event = chatEvent ?? (video ? track?.event : undefined);
         if (event && event.pubkey === recipient.pubkey && verifyEvent(event)) {
           tags.push(["e", event.id], ["k", String(event.kind)]);
           const identifier = event.tags.find(([name]) => name === "d")?.[1];
@@ -292,14 +293,14 @@ export function PlayerZapButton({ track, className, iconClassName, video = false
     }
   };
 
-  if (!recipient || !track) return null;
+  if (!recipient || (!track && !chatEvent) || (chatEvent && chatEvent.pubkey === user?.pubkey)) return null;
   return <>
     <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className={cn("size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground", className)} aria-label={`Zap ${recipient.name}`} onClick={() => { setLockedRecipient(recipient); setOpen(true); }}><Zap className={cn("size-4", iconClassName)} /></Button></TooltipTrigger><TooltipContent>Zap {recipient.role.toLowerCase()}</TooltipContent></Tooltip>
     <Dialog open={open} onOpenChange={close}>
       <DialogContent className={cn("max-h-[90dvh] overflow-y-auto sm:max-w-sm", video && "z-[80]")}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-primary" /> Support {recipient.role.toLowerCase()}</DialogTitle>
-          <DialogDescription>Paying {recipient.role.toLowerCase()}: <strong className="break-words text-foreground">{recipient.name}</strong><br />For “{track.title}”</DialogDescription>
+          <DialogDescription>Paying {recipient.role.toLowerCase()}: <strong className="break-words text-foreground">{recipient.name}</strong><br />{chatEvent ? "For their chat message" : `For “${track?.title}”`}</DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground" role="status" aria-live="polite">
           <p className="font-medium text-foreground">{walletStatus === "sidecar" ? "Sidecar wallet detected" : walletStatus === "available" ? "Browser Lightning wallet detected" : walletStatus === "unsupported" ? "Browser wallet detected, but it does not support payments" : "No browser Lightning wallet detected"}</p>
