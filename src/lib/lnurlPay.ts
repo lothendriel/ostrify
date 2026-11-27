@@ -25,6 +25,8 @@ export interface LnurlPayParams {
   maxSendable: number;
   /** LUD-06 metadata string. The invoice's description hash may commit to it. */
   metadata: string;
+  /** Maximum number of characters accepted as an LNURL-pay comment. */
+  commentAllowed: number;
   /** Whether the endpoint accepts a NIP-57 zap request. */
   allowsNostr: boolean;
   /** Pubkey the endpoint signs zap receipts with, when it supports zaps. */
@@ -38,6 +40,7 @@ interface LnurlPayResponse {
   minSendable?: unknown;
   maxSendable?: unknown;
   metadata?: unknown;
+  commentAllowed?: unknown;
   allowsNostr?: unknown;
   nostrPubkey?: unknown;
   reason?: unknown;
@@ -130,6 +133,7 @@ export async function resolveLnurlPay(source: LnurlSource, signal?: AbortSignal)
     minSendable,
     maxSendable,
     metadata: typeof body.metadata === 'string' ? body.metadata : '',
+    commentAllowed: toCount(body.commentAllowed) ?? 0,
     allowsNostr: body.allowsNostr === true,
     nostrPubkey: typeof body.nostrPubkey === 'string' ? body.nostrPubkey : undefined,
   };

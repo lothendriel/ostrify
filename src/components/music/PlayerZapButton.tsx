@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 const HEX_KEY = /^[0-9a-f]{64}$/i;
 const AMOUNTS = [21, 100, 500, 1000];
+const ARTIST_ZAP_MESSAGE = "I was listening to your audio on Ostrify. Love it!";
 
 type BrowserLightningWallet = {
   enable: () => Promise<void>;
@@ -86,6 +87,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("100");
   const [invoice, setInvoice] = useState<string | null>(null);
+  const [noteSent, setNoteSent] = useState(false);
   const [receiptWatch, setReceiptWatch] = useState<ReceiptWatch | null>(null);
   const [lockedRecipient, setLockedRecipient] = useState<Recipient | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -167,7 +169,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   const close = (nextOpen: boolean) => {
     if (!nextOpen && paymentPending.current) return;
     setOpen(nextOpen);
-    if (!nextOpen) { dialogSession.current++; setInvoice(null); setReceiptWatch(null); setCopied(false); setPaymentUncertain(false); setLockedRecipient(null); }
+    if (!nextOpen) { dialogSession.current++; setInvoice(null); setNoteSent(false); setReceiptWatch(null); setCopied(false); setPaymentUncertain(false); setLockedRecipient(null); }
   };
 
   const createInvoice = async () => {
@@ -190,6 +192,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
       callback.searchParams.set("amount", String(amountMsat));
       let commitment = params.metadata;
       let watch: Omit<ReceiptWatch, "invoice"> | undefined;
+      let attachedNote = false;
       if (params.allowsNostr && params.nostrPubkey && HEX_KEY.test(params.nostrPubkey) && user) {
         const lnurlUrl = lnurlToUrl(recipient.source);
         const { bech32 } = await import("@scure/base");
@@ -201,11 +204,16 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
           ["p", recipient.pubkey],
           ...(lnurl ? [["lnurl", lnurl]] : []),
         ];
-        const request = await user.signer.signEvent({ kind: 9734, content: "", created_at: Math.floor(Date.now() / 1000), tags });
+        const request = await user.signer.signEvent({ kind: 9734, content: ARTIST_ZAP_MESSAGE, created_at: Math.floor(Date.now() / 1000), tags });
+        attachedNote = true;
         commitment = JSON.stringify(request);
         watch = { provider: params.nostrPubkey.toLowerCase(), recipient: recipient.pubkey, requestId: request.id, relays, since: Math.max(0, request.created_at - 60) };
         callback.searchParams.set("nostr", commitment);
         if (lnurl) callback.searchParams.set("lnurl", lnurl);
+      } else if (params.commentAllowed >= ARTIST_ZAP_MESSAGE.length) {
+        // LUD-12 comments are supported only when advertised by the recipient.
+        callback.searchParams.set("comment", ARTIST_ZAP_MESSAGE);
+        attachedNote = true;
       }
       const response = await fetch(callback.toString(), { signal: AbortSignal.timeout(15000) });
       const body: { pr?: unknown; reason?: unknown } = await response.json();
@@ -214,6 +222,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
       if (!commitment || !invoiceCommitsTo(decoded, [commitment])) throw new Error("The Lightning service returned an invoice for a different payment. No payment was made.");
       if (session === dialogSession.current) {
         setInvoice(body.pr);
+        setNoteSent(attachedNote);
         setReceiptWatch(watch ? { ...watch, invoice: body.pr } : null);
       }
     } catch (error) {
@@ -291,6 +300,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
         </div>
         {invoice ? <div className="space-y-4">
           <p className="text-center text-lg font-semibold">{amount} sats</p>
+          <p className="text-center text-xs text-muted-foreground">{noteSent ? "The payment request included your message. The recipient’s service controls how it is displayed." : "This payment provider does not support attaching the full message."}</p>
           <div className="mx-auto w-fit rounded-lg bg-white p-3"><QRCodeCanvas value={`lightning:${invoice}`} size={220} className="block size-52 max-w-full" /></div>
           <div className="space-y-2"><Label htmlFor="player-zap-invoice">Lightning invoice</Label><div className="flex gap-2"><Input id="player-zap-invoice" value={invoice} readOnly className="min-w-0 font-mono text-xs" onClick={(event) => event.currentTarget.select()} /><Button type="button" variant="outline" size="icon" onClick={() => void copyInvoice()} aria-label="Copy Lightning invoice">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}</Button></div></div>
           {hasBrowserWallet && <Button type="button" className="w-full" onClick={() => void payWithBrowserWallet()} disabled={isPaying || paymentUncertain || isCreating}><Zap className="size-4" /> {isPaying ? "Waiting for wallet…" : walletStatus === "sidecar" ? "Pay with Sidecar" : "Pay with browser wallet"}</Button>}
@@ -300,6 +310,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
         </div> : <div className="space-y-4">
           <div className="grid grid-cols-4 gap-2">{AMOUNTS.map((sats) => <Button key={sats} type="button" variant={amount === String(sats) ? "default" : "outline"} onClick={() => setAmount(String(sats))}>{sats}</Button>)}</div>
           <div className="space-y-2"><Label htmlFor="player-zap-amount">Amount in sats</Label><Input id="player-zap-amount" type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="numeric" /></div>
+          <div className="space-y-1"><p className="text-sm font-medium">Message to {recipient.role.toLowerCase()}</p><p className="rounded-lg border bg-muted/30 p-3 text-sm">{ARTIST_ZAP_MESSAGE}</p><p className="text-xs text-muted-foreground">{user && recipient.params.allowsNostr && recipient.params.nostrPubkey && HEX_KEY.test(recipient.params.nostrPubkey) ? "Included in your public Nostr zap request." : recipient.params.commentAllowed >= ARTIST_ZAP_MESSAGE.length ? "Sent to the recipient’s Lightning provider as a payment comment." : "This provider does not advertise support for the full message; the payment can still be made without it."}</p></div>
           <Button type="button" className="w-full" onClick={() => void createInvoice()} disabled={isCreating}><Zap className="size-4" /> {isCreating ? "Creating invoice…" : `Continue with ${amount || "0"} sats`}</Button>
           <p className="text-center text-xs text-muted-foreground">{user && recipient.params.allowsNostr && recipient.params.nostrPubkey && HEX_KEY.test(recipient.params.nostrPubkey) ? "A signed Nostr zap request will be sent to the recipient’s provider." : "This will be a Lightning payment, completed in your wallet."}</p>
         </div>}
