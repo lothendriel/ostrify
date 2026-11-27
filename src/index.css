@@ -435,18 +435,6 @@
   border-top: 3px solid #e8f4f6;
   box-shadow: inset 0 3px 7px rgb(255 255 255 / 10%);
 }
-.december .ostrify-logo-link::before {
-  content: '';
-  position: absolute;
-  z-index: 1;
-  width: 35px;
-  height: 35px;
-  left: 7px;
-  top: 0;
-  transform: rotate(-18deg);
-  background: var(--december-hat) center / contain no-repeat;
-  pointer-events: none;
-}
 .december .ostrify-player {
   background: radial-gradient(ellipse at 50% 0%, #51141b 0%, transparent 48%), linear-gradient(90deg, #071a15, #251014 50%, #071a15);
   border-color: #f2fcff;

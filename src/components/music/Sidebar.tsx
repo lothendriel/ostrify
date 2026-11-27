@@ -7,6 +7,7 @@ import { useGutenbergAudiobook } from "@/hooks/useGutenbergAudiobooks";
 import { useFountainRssEpisodes, useFountainShow, useNostrPodcastEpisodesForShow, usePodcastFavorites, usePodcastIndexEpisodes, usePodcastIndexFeed, type PodcastFavorite } from "@/hooks/usePodcasts";
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { usePlayer } from "@/hooks/usePlayer";
+import { useDecember } from "@/hooks/useDecember";
 import { useRadioFavorites } from '@/hooks/useRadioFavorites';
 import { useToast } from "@/hooks/useToast";
 import type { Track } from "@/lib/music";
@@ -41,6 +42,7 @@ const libraryRowClass = (active: boolean) => cn(
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
+  const isDecember = useDecember();
   const { data: playlists, isLoading } = usePlaylists();
   const audiobookLibrary = useAudiobookLibrary();
   const podcastFavorites = usePodcastFavorites();
@@ -66,6 +68,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         aria-label="Ostrify home"
         className="ostrify-logo-link relative mx-2 flex items-center gap-3 rounded-xl px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
+        {isDecember && <img src="/images/december-hat.webp" alt="" aria-hidden="true" className="pointer-events-none absolute left-[11px] top-0 z-10 size-6 -rotate-[18deg] object-contain" />}
         <img src="/ostrify-logo-512.webp?v=opt-1" alt="" className="size-11 rounded-full object-contain" />
         <span className="min-w-0"><span className="block text-xl font-black tracking-tight">Ostrify<span aria-hidden="true" className="text-brand-violet">.</span></span><span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Open protocol audio</span></span>
       </NavLink>

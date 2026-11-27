@@ -191,13 +191,12 @@ export function AppProvider(props: AppProviderProps) {
       root.style.setProperty('--december-art', 'url("/images/december-night.webp")');
       root.style.setProperty('--december-garland', 'url("/images/december-garland.webp")');
       root.style.setProperty('--december-bow', 'url("/images/december-bow.webp")');
-      root.style.setProperty('--december-hat', 'url("/images/december-hat.webp")');
     } else {
-      for (const name of ['--december-art', '--december-garland', '--december-bow', '--december-hat']) root.style.removeProperty(name);
+      for (const name of ['--december-art', '--december-garland', '--december-bow']) root.style.removeProperty(name);
     }
     return () => {
       root.classList.remove('december');
-      for (const name of ['--december-art', '--december-garland', '--december-bow', '--december-hat']) root.style.removeProperty(name);
+      for (const name of ['--december-art', '--december-garland', '--december-bow']) root.style.removeProperty(name);
     };
   }, [isDecember]);
 
