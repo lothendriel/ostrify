@@ -8,6 +8,7 @@ import { useFountainRssEpisodes, useFountainShow, useNostrPodcastEpisodesForShow
 import { useTracksByIds } from "@/hooks/useTracksByIds";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useDecember } from "@/hooks/useDecember";
+import { useValentines } from "@/hooks/useValentines";
 import { useRadioFavorites } from '@/hooks/useRadioFavorites';
 import { useToast } from "@/hooks/useToast";
 import type { Track } from "@/lib/music";
@@ -43,6 +44,7 @@ const libraryRowClass = (active: boolean) => cn(
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useCurrentUser();
   const isDecember = useDecember();
+  const isValentines = useValentines();
   const { data: playlists, isLoading } = usePlaylists();
   const audiobookLibrary = useAudiobookLibrary();
   const podcastFavorites = usePodcastFavorites();
@@ -69,7 +71,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         className="ostrify-logo-link relative mx-2 flex items-center gap-3 rounded-xl px-3 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className="relative size-11 shrink-0">
-          <img src="/ostrify-logo-512.webp?v=opt-1" alt="" className="size-full rounded-full object-contain" />
+          <img src={isValentines ? "/images/valentines-logo.png" : "/ostrify-logo-512.webp?v=opt-1"} alt="" className={cn("size-full object-contain", !isValentines && "rounded-full")} />
           {isDecember && <img src="/images/december-hat.webp" alt="" aria-hidden="true" className="pointer-events-none absolute -top-3 left-1/2 z-10 size-6 -translate-x-1/2 object-contain" />}
         </span>
         <span className="min-w-0"><span className="block text-xl font-black tracking-tight">Ostrify<span aria-hidden="true" className="text-brand-violet">.</span></span><span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Open protocol audio</span></span>
