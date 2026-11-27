@@ -43,7 +43,7 @@ function parseStations(value: unknown): Station[] {
 }
 
 function stationTrack(station: Station): Track {
-  return { id: `radio-browser:${station.id}`, source: 'radio-browser', url: station.url!, title: station.name, artist: station.location || 'Live radio', image: station.image, pubkey: '', kind: 'music', topics: [], createdAt: 0 };
+  return { id: `radio-browser:${station.id}`, source: 'radio-browser', url: station.url ?? '', mimeType: station.hls ? 'application/vnd.apple.mpegurl' : undefined, title: station.name, artist: station.location || 'Live radio', image: station.image, pubkey: '', kind: 'music', topics: [], createdAt: 0 };
 }
 
 export default function LocalRadioPage() {
@@ -143,9 +143,9 @@ export function FavoriteRadioPage() {
 function StationCard({ station, favorite, toggleFavorite }: { station: Station; favorite: boolean; toggleFavorite: (station: Station) => void }) {
   const player = usePlayer();
   const active = player.current?.id === `radio-browser:${station.id}`;
-  const unavailable = !station.url || station.hls;
+  const unavailable = !station.url;
   const tune = () => {
-    if (!station.url || station.hls) return;
+    if (!station.url) return;
     if (active) { player.togglePlay(); return; }
     player.playStation(stationTrack(station));
     // Radio Browser asks clients to count a click when a listener tunes in.
@@ -153,7 +153,7 @@ function StationCard({ station, favorite, toggleFavorite }: { station: Station; 
   };
   return <article className="flex min-w-0 items-center gap-2 rounded-xl border bg-card/60 p-3 transition-colors hover:bg-card sm:gap-4 sm:p-4">
     <TrackArtwork track={stationTrack(station)} className="size-12 sm:size-16" />
-    <div className="min-w-0 flex-1"><h3 className="truncate font-semibold" title={station.name}>{station.name}</h3><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" /><span className="truncate">{station.location || 'Location not listed'}</span></p><p className="mt-1 truncate text-xs text-muted-foreground">{unavailable ? station.hls ? 'HLS stream not supported yet' : 'Secure stream unavailable' : station.tags || 'Live radio'}</p>{active && player.playbackError && <p role="status" className="mt-1 text-xs text-destructive">{player.playbackError}</p>}</div>
+    <div className="min-w-0 flex-1"><h3 className="truncate font-semibold" title={station.name}>{station.name}</h3><p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="size-3 shrink-0" /><span className="truncate">{station.location || 'Location not listed'}</span></p><p className="mt-1 truncate text-xs text-muted-foreground">{unavailable ? 'Secure stream unavailable' : station.tags || 'Live radio'}</p>{active && player.playbackError && <p role="status" className="mt-1 text-xs text-destructive">{player.playbackError}</p>}</div>
     <Button size="icon" variant="ghost" className={`size-10 shrink-0 rounded-full ${favorite ? 'text-primary' : 'text-muted-foreground'}`} onClick={() => toggleFavorite(station)} aria-label={`${favorite ? 'Remove' : 'Add'} ${station.name} ${favorite ? 'from' : 'to'} favorites`} aria-pressed={favorite} title={favorite ? 'Remove from favorites' : 'Add to favorites'}><Heart className={`size-5 ${favorite ? 'fill-current' : ''}`} /></Button>
     <Button size="icon" variant={active && player.isPlaying ? 'default' : 'secondary'} className="size-10 shrink-0 rounded-full" disabled={unavailable} onClick={tune} aria-label={`${active && player.isPlaying ? 'Pause' : 'Play'} ${station.name}`} title={unavailable ? 'This stream is not supported' : `Tune in to ${station.name}`}>{active && player.isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</Button>
   </article>;

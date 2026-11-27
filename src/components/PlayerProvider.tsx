@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Hls from "hls.js";
 import { sanitizeAudioFallbacks, type Track } from "@/lib/music";
 import { PlayerContext, type RepeatMode } from "@/contexts/PlayerContext";
 import { recordListeningSeconds, recordListeningStart } from "@/lib/listeningAnalytics";
@@ -14,6 +15,12 @@ const PLAYER_HISTORY_STORAGE_PREFIX = "ostrify-player-history:";
 const PLAYER_AUTOPLAY_STORAGE_KEY = "ostrify-player-autoplay";
 const DEFAULT_PLAYER_VOLUME = 0.8;
 const PLAYER_HISTORY_LIMIT = 50;
+
+function isHlsRadio(track: Track): boolean {
+  if (track.source !== "radio-browser") return false;
+  if (track.mimeType === "application/vnd.apple.mpegurl") return true;
+  try { return /\.m3u8$/i.test(new URL(track.url).pathname); } catch { return false; }
+}
 
 interface SavedPlayerState {
   queue: Track[];
@@ -266,6 +273,8 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   const autoplayEpochRef = useRef(0);
   const wantsPlaybackRef = useRef(false);
   const sourceRef = useRef<{ urls: string[]; index: number }>({ urls: [], index: 0 });
+  const hlsRef = useRef<{ url: string; player?: Hls; ready: boolean; failed: boolean } | null>(null);
+  const [hlsRetry, setHlsRetry] = useState(0);
   const fallbackSeekRef = useRef(0);
   const playAudioRef = useRef<(audio: HTMLAudioElement) => void>(() => {});
   if (audioRef.current === null && typeof Audio !== "undefined") {
@@ -335,13 +344,14 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   queueRef.current = queue;
   indexRef.current = index;
   autoplayRef.current = autoplay;
-  const handlePlaybackFailure = useCallback((audio: HTMLAudioElement, blocked = false) => {
+  const handlePlaybackFailure = useCallback((audio: HTMLAudioElement, blocked = false, message?: string) => {
     const sources = sourceRef.current;
     const activeSource = sources.urls[sources.index];
     const track = queueRef.current[indexRef.current];
-    if (audioRef.current !== audio || !track || sanitizeUrl(track.url) !== sources.urls[0] || !activeSource || sanitizeUrl(audio.src) !== activeSource) return;
+    const hls = hlsRef.current;
+    if (audioRef.current !== audio || !track || sanitizeUrl(track.url) !== sources.urls[0] || !activeSource || (hls?.url !== activeSource && sanitizeUrl(audio.src) !== activeSource)) return;
     playAttemptRef.current++;
-    if (!blocked && sources.index + 1 < sources.urls.length) {
+    if (!blocked && !hls && sources.index + 1 < sources.urls.length) {
       const position = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
       const shouldPlay = wantsPlaybackRef.current;
       sources.index++;
@@ -354,7 +364,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     wantsPlaybackRef.current = false;
     pendingAutoplayRef.current = false;
     setIsPlaying(false);
-    setPlaybackError(blocked ? "Playback was blocked. Press Play to try again." : track.source === "radio-browser" ? "Station unavailable or unsupported. Press Play to retry." : sources.urls.length > 1 ? "Audio unavailable from its source and backups." : "Audio source unavailable. Press Play to retry.");
+    setPlaybackError(blocked ? "Playback was blocked. Press Play to try again." : message ?? (track.source === "radio-browser" ? "Station unavailable or unsupported. Press Play to retry." : sources.urls.length > 1 ? "Audio unavailable from its source and backups." : "Audio source unavailable. Press Play to retry."));
     const currentQueue = queueRef.current;
     const currentIndex = indexRef.current;
     if (currentQueue[currentIndex]) {
@@ -367,7 +377,8 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
   const playAudio = useCallback((audio: HTMLAudioElement) => {
     const attempt = ++playAttemptRef.current;
     const intendedUrl = sourceRef.current.urls[sourceRef.current.index];
-    if (!intendedUrl || sanitizeUrl(audio.src) !== intendedUrl) {
+    const hls = hlsRef.current;
+    if (!intendedUrl || (hls?.url !== intendedUrl && sanitizeUrl(audio.src) !== intendedUrl)) {
       wantsPlaybackRef.current = false;
       setIsPlaying(false);
       setPlaybackError("This audio source is not a safe HTTPS URL.");
@@ -390,6 +401,71 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     }
   }, [handlePlaybackFailure]);
   playAudioRef.current = playAudio;
+
+  const stopHls = useCallback((audio: HTMLAudioElement) => {
+    const session = hlsRef.current;
+    if (!session) return;
+    hlsRef.current = null;
+    session.player?.destroy();
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  }, []);
+
+  const startHls = useCallback((audio: HTMLAudioElement, url: string, shouldPlay: boolean) => {
+    stopHls(audio);
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+    const session: NonNullable<typeof hlsRef.current> = { url, ready: false, failed: false };
+    hlsRef.current = session;
+    const failHls = (message: string) => {
+      if (hlsRef.current !== session) return;
+      session.failed = true;
+      handlePlaybackFailure(audio, false, message);
+      audio.pause();
+      session.player?.destroy();
+      session.player = undefined;
+    };
+    if (audio.canPlayType("application/vnd.apple.mpegurl")) {
+      session.ready = true;
+      audio.src = url;
+      audio.load();
+      if (shouldPlay) playAudio(audio);
+    } else if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: false,
+        xhrSetup: (xhr, resource) => {
+          const safe = sanitizeUrl(resource);
+          if (!safe) { xhr.abort(); return; }
+          xhr.open("GET", safe, true);
+          xhr.withCredentials = false;
+        },
+        fetchSetup: (context, init) => {
+          const safe = sanitizeUrl(context.url);
+          if (!safe) throw new Error("Unsafe HLS URL");
+          return new Request(safe, { ...init, credentials: "omit", referrerPolicy: "no-referrer" });
+        },
+      });
+      session.player = hls;
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        if (hlsRef.current !== session) return;
+        session.ready = true;
+        if (!wantsPlaybackRef.current) hls.stopLoad();
+      });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) failHls("Could not play this HLS station. It may be offline, restricted, or incompatible. Press Play to retry.");
+      });
+      hls.loadSource(url);
+      hls.attachMedia(audio);
+      // Call play in the station click handler, while user activation is still valid.
+      if (shouldPlay) playAudio(audio);
+    } else {
+      failHls("Your browser does not support this HLS station.");
+    }
+    return session;
+  }, [handlePlaybackFailure, playAudio, stopHls]);
+
   const commitQueue = useCallback((nextQueue: Track[], nextIndex: number) => {
     queueRef.current = nextQueue;
     indexRef.current = nextIndex;
@@ -422,14 +498,19 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       setDuration(0);
       return;
     }
-    playAttemptRef.current++;
-    setIsPlaying(false);
-    setPlaybackError(undefined);
+    const alreadyStartedHls = isHlsRadio(current) && hlsRef.current?.url === sanitizeUrl(current.url);
+    if (!alreadyStartedHls) {
+      playAttemptRef.current++;
+      setIsPlaying(false);
+      setPlaybackError(undefined);
+    } else {
+      setIsPlaying(!audio.paused);
+    }
     setDuration(0);
     const safeUrl = sanitizeUrl(current.url);
     fallbackSeekRef.current = 0;
     sourceRef.current = { urls: safeUrl ? [safeUrl, ...sanitizeAudioFallbacks(current.fallbackUrls, safeUrl)] : [], index: 0 };
-    wantsPlaybackRef.current = restoredStateRef.current ? pendingAutoplayRef.current : true;
+    if (!alreadyStartedHls) wantsPlaybackRef.current = restoredStateRef.current ? pendingAutoplayRef.current : true;
     if (!safeUrl) {
       audio.pause();
       audio.removeAttribute("src");
@@ -439,6 +520,20 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       setProgress(0);
       setPlaybackError("This audio source is not a safe HTTPS URL.");
       return;
+    }
+    if (isHlsRadio(current)) {
+      const shouldPlay = wantsPlaybackRef.current;
+      // Radio resumes at the live edge, not at a saved position.
+      restoredStateRef.current = false;
+      pendingAutoplayRef.current = false;
+      pendingSeekRef.current = 0;
+      setProgress(0);
+      // A station selected in the click handler is already attached.
+      const existing = hlsRef.current;
+      const session = existing?.url === safeUrl ? existing : startHls(audio, safeUrl, shouldPlay);
+      return () => {
+        if (hlsRef.current === session) stopHls(audio);
+      };
     }
     if (audio.src !== safeUrl) {
       audio.src = safeUrl;
@@ -479,10 +574,13 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     setProgress(0);
     if (audio.readyState >= 1 && Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration);
     playAudio(audio);
-    return () => { playAttemptRef.current++; };
+    return () => {
+      // A new HLS session may already have started synchronously from a click.
+      if (!hlsRef.current) playAttemptRef.current++;
+    };
     // Track identity and URL determine when the audio source changes; queue edits alone must not reload it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, current?.url, owner, playAudio]);
+  }, [current?.id, current?.url, current?.mimeType, owner, playAudio, startHls, stopHls, hlsRetry]);
 
   // Keep listening history and playback state private to the active account.
   useEffect(() => {
@@ -567,7 +665,7 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     commitQueue(nextQueue, nextIndex);
     // Adjacent queue entries can refer to the same track, so a change of index
     // alone may not trigger the source effect.
-    if (sameSource && audioRef.current) {
+    if (sameSource && audioRef.current && !isHlsRadio(target)) {
       try { audioRef.current.currentTime = 0; } catch { /* The media is not seekable yet. */ }
       playAudio(audioRef.current);
     }
@@ -767,10 +865,16 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     const url = sanitizeUrl(station.url);
     if (audio && url) {
       sourceRef.current = { urls: [url], index: 0 };
-      if (audio.src !== url) { audio.src = url; audio.load(); }
-      playAudio(audio);
+      if (isHlsRadio(station)) {
+        wantsPlaybackRef.current = true;
+        startHls(audio, url, true);
+      } else {
+        stopHls(audio);
+        if (audio.src !== url) { audio.src = url; audio.load(); }
+        playAudio(audio);
+      }
     }
-  }, [selectQueueIndex, playAudio]);
+  }, [selectQueueIndex, playAudio, startHls, stopHls]);
 
   const addToQueue = useCallback((tracks: Track[]) => {
     if (tracks.length === 0) return;
@@ -861,7 +965,20 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
     autoplayEpochRef.current++;
     autoplayQueueKeyRef.current = "";
     if (audio.paused) {
-      if (queueRef.current[indexRef.current]?.source === "radio-browser") {
+      const track = queueRef.current[indexRef.current];
+      if (isHlsRadio(track)) {
+        const session = hlsRef.current;
+        wantsPlaybackRef.current = true;
+        setPlaybackError(undefined);
+        if (!session || session.failed) {
+          const url = sanitizeUrl(track.url);
+          if (url) { startHls(audio, url, true); setHlsRetry(value => value + 1); }
+          return;
+        }
+        if (session.player) {
+          if (session.ready) session.player.startLoad(-1);
+        } else audio.load();
+      } else if (track.source === "radio-browser") {
         pendingSeekRef.current = 0;
         audio.load();
       }
@@ -872,9 +989,10 @@ function PlayerSession({ children, owner }: { children: React.ReactNode; owner: 
       wantsPlaybackRef.current = false;
       playAttemptRef.current++;
       audio.pause();
+      hlsRef.current?.player?.stopLoad();
       setIsPlaying(false);
     }
-  }, [playAudio]);
+  }, [playAudio, startHls]);
 
   const seek = useCallback((seconds: number) => {
     const audio = audioRef.current;
