@@ -67,9 +67,8 @@ function GenreField({ id, value, onChange, album = false }: { id: string; value:
   return <div className="min-w-0 space-y-2">
     <label htmlFor={id} className="text-sm font-medium">Genre (optional)</label>
     <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-      <div className="min-w-0 space-y-2 lg:flex-1">
-        <Input id={id} value={value} onChange={event => onChange(event.target.value)} maxLength={GENRE_INPUT_LIMIT} placeholder="Ambient, folk, rock…" aria-describedby={`${id}-note ${id}-help`} />
-        <p id={`${id}-note`} className="text-xs text-muted-foreground">You can also use sub-genres to class your track or album</p>
+      <div className="min-w-0 lg:flex-1">
+        <Input id={id} value={value} onChange={event => onChange(event.target.value)} maxLength={GENRE_INPUT_LIMIT} placeholder="Ambient, folk, rock…" aria-describedby={`${id}-help`} />
       </div>
       <div className="flex min-w-0 flex-wrap gap-2 lg:flex-1" role="group" aria-label="Quick add main genres">
         {GENRE_OPTIONS.map(option => {
@@ -84,7 +83,7 @@ function GenreField({ id, value, onChange, album = false }: { id: string; value:
         })}
       </div>
     </div>
-    <p id={`${id}-help`} className="text-xs text-muted-foreground">Separate genres with commas. {album ? "Genres are added to every included track; existing tags are kept." : "Choose a main genre or enter your own."}</p>
+    <p id={`${id}-help`} className="text-xs text-muted-foreground">You can also use sub-genres to class your track or album. Separate genres with commas. {album ? "Genres are added to every included track; existing tags are kept." : "Choose a main genre or enter your own."}</p>
   </div>;
 }
 
