@@ -6,7 +6,8 @@ import { verifyEvent } from 'nostr-tools';
 import { useQuery } from '@tanstack/react-query';
 import { NSchema, type NostrEvent } from '@nostrify/nostrify';
 import { isNewerReplaceableEvent } from '@/lib/libraryQuery';
-import { genUserName } from '@/lib/sanitize';
+import { genUserName, sanitizeUrl } from '@/lib/sanitize';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Textarea } from '@/components/ui/textarea';
 import { usePreviousLocation } from "@/components/NavigationHistory";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -33,12 +34,24 @@ const CHAT_RELAYS = ['wss://nos.lol/', 'wss://relay.studio314.us/nostrrelay/ostr
 const CHAT_LIMIT = 100;
 type ChatUser = NonNullable<ReturnType<typeof useCurrentUser>['user']>;
 
-function ChatMessage({ message, name }: { message: NostrEvent; name?: string }) {
+function ChatMessage({ message, name, picture, own }: { message: NostrEvent; name?: string; picture?: string; own: boolean }) {
   const date = new Date(message.created_at * 1000);
   const validDate = Number.isFinite(date.getTime());
-  return <article className="min-w-0 rounded-lg bg-secondary/40 p-3">
-    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-semibold">{name || genUserName(message.pubkey)}</span>{validDate && <time className="shrink-0 text-xs text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}</div>
-    <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.content}</p>
+  const displayName = name || genUserName(message.pubkey);
+  return <article className={`flex min-w-0 items-end gap-2 ${own ? 'flex-row-reverse' : ''}`}>
+    <Avatar className="size-8 shrink-0 border border-border/70">
+      <AvatarImage src={picture} alt="" />
+      <AvatarFallback className="bg-brand-surface text-xs font-semibold text-foreground">{displayName.slice(0, 1).toUpperCase()}</AvatarFallback>
+    </Avatar>
+    <div className={`min-w-0 max-w-[82%] ${own ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+      <div className={`flex max-w-full items-baseline gap-2 px-1 ${own ? 'flex-row-reverse' : ''}`}>
+        <span className="truncate text-xs font-semibold text-foreground">{own ? 'You' : displayName}</span>
+        {validDate && <time className="shrink-0 text-[11px] text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}
+      </div>
+      <div className={`max-w-full rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${own ? 'rounded-br-sm bg-primary text-primary-foreground' : 'rounded-bl-sm border border-border/70 bg-secondary text-secondary-foreground'}`}>
+        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+      </div>
+    </div>
   </article>;
 }
 
@@ -66,15 +79,14 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
         const prior = latest.get(event.pubkey);
         if (!prior || isNewerReplaceableEvent(event, prior)) latest.set(event.pubkey, event);
       }
-      const names: Record<string, string> = {};
+      const profiles: Record<string, { name?: string; picture?: string }> = {};
       for (const [pubkey, event] of latest) {
         try {
           const metadata = NSchema.json().pipe(NSchema.metadata()).parse(event.content);
-          const name = metadata.display_name || metadata.name;
-          if (name) names[pubkey] = name;
+          profiles[pubkey] = { name: metadata.display_name || metadata.name, picture: sanitizeUrl(metadata.picture) };
         } catch { /* A malformed profile uses the fallback name. */ }
       }
-      return names;
+      return profiles;
     },
   });
 
@@ -144,8 +156,8 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
       <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close chat" onClick={onClose}><X className="size-4" /></Button>
     </div>
     <div className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground" role="status">{waiting && !connected ? 'Connecting to chat relays…' : `${connected} of ${CHAT_RELAYS.length} chat relays connected${connected < CHAT_RELAYS.length ? ' · Messages may be incomplete' : ''}`}</div>
-    <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
-      {messages.length === 0 ? <p className="text-sm text-muted-foreground">{waiting ? 'Loading recent messages…' : 'No messages found on responding relays yet.'}</p> : [...messages].reverse().map(message => <ChatMessage key={message.id} message={message} name={authorProfiles.data?.[message.pubkey]} />)}
+    <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-4"><div className="space-y-4">
+      {messages.length === 0 ? <p className="text-sm text-muted-foreground">{waiting ? 'Loading recent messages…' : 'No messages found on responding relays yet.'}</p> : [...messages].reverse().map(message => <ChatMessage key={message.id} message={message} name={authorProfiles.data?.[message.pubkey]?.name} picture={authorProfiles.data?.[message.pubkey]?.picture} own={message.pubkey === user.pubkey} />)}
       <div ref={messagesEndRef} />
     </div></ScrollArea>
     <div className="space-y-2 border-t border-border/70 p-4">
