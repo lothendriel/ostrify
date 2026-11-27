@@ -91,6 +91,7 @@ function sourceLabel(track: Track): string {
   if (track.source === "tunestr") return "TuneStr";
   if (track.source === "fountain") return "Fountain";
   if (track.source === "podcast-index") return "Podcast Index";
+  if (track.source === "radio-browser") return "Live radio";
   if (track.kind === "podcast") return "Nostr podcast";
   if (track.kind === "audiobook") return "Audiobook";
   return "Nostr music";
@@ -133,7 +134,9 @@ export default function AudioDetailPage() {
     const durationValue = Number(searchParams.get("duration"));
     const duration = Number.isFinite(durationValue) && durationValue > 0 ? durationValue : undefined;
     const sourceValue = searchParams.get("source");
-    const source = ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(sourceValue ?? "") ? sourceValue as Track["source"] : undefined;
+    const source = sourceValue === "radio-browser" && /^radio-browser:[\da-f-]{36}$/i.test(trackId)
+      ? "radio-browser"
+      : ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(sourceValue ?? "") ? sourceValue as Track["source"] : undefined;
     const rawEventKind = searchParams.get("eventKind");
     const eventKindValue = rawEventKind ? Number(rawEventKind) : NaN;
     const eventKind = Number.isInteger(eventKindValue) && [1, 54, 1063, 1053, 31337, 36787, 32123, 30440, 30311].includes(eventKindValue) ? eventKindValue : undefined;
@@ -257,11 +260,13 @@ export default function AudioDetailPage() {
     : podcastIndexShowId
       ? <Link to={`/podcasts?source=directory&show=${encodeURIComponent(podcastIndexShowId)}`} className="hover:underline">{track.artist || "Podcast show"}</Link>
       : <ArtistLink pubkey={track.pubkey} artistId={track.artistId} artistPubkey={track.artistPubkey} fallbackName={track.artist} isUnverifiedArtist={!!track.event && !!track.artist} />;
-  const sourceIcon = track.kind === "podcast" ? Radio : track.kind === "audiobook" ? BookOpen : Music2;
+  const sourceIcon = track.source === "radio-browser" || track.kind === "podcast" ? Radio : track.kind === "audiobook" ? BookOpen : Music2;
   const SourceIcon = sourceIcon;
   const trackArtwork = <TrackArtwork track={track} className="aspect-square w-full max-w-48 shadow-lg sm:max-w-56" rounded="rounded-xl" priority />;
   const hasBookDetail = !!(librivoxChapter?.fileName || gutenbergChapter?.fileName);
-  const pageDescription = track.kind === "audiobook"
+  const pageDescription = track.source === "radio-browser"
+    ? "A live radio station available in Ostrify."
+    : track.kind === "audiobook"
     ? track.album ? `From ${track.album}.` : "An audiobook recording in your Ostrify library."
     : track.kind === "podcast"
       ? track.album ? `Part of ${track.album}.` : "A podcast episode available in Ostrify."
@@ -285,11 +290,11 @@ export default function AudioDetailPage() {
     </header>
 
     <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" className="rounded-full" onClick={() => isCurrent ? player.togglePlay() : player.playTrack(track)}><span className="mr-2">{isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</span>{isPlaying ? "Pause" : "Play"}</Button>
-      {track.kind === "music" && track.source !== "tunestr" && <LikeButton trackId={track.id} />}
+      <Button type="button" className="rounded-full" onClick={() => isCurrent ? player.togglePlay() : track.source === 'radio-browser' ? player.playStation(track) : player.playTrack(track)}><span className="mr-2">{isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}</span>{isPlaying ? "Pause" : "Play"}</Button>
+      {track.kind === "music" && track.source !== "tunestr" && track.source !== "radio-browser" && <LikeButton trackId={track.id} />}
       <ShareTrackButton track={shareTrack} />
-      {track.kind !== "audiobook" && track.source !== "tunestr" && <QueueActionsMenu track={track} />}
-      {track.source !== "librivox" && track.source !== "gutenberg" && track.source !== "tunestr" && <AddToPlaylistMenu trackId={track.id} />}
+      {track.kind !== "audiobook" && track.source !== "tunestr" && track.source !== "radio-browser" && <QueueActionsMenu track={track} />}
+      {track.source !== "librivox" && track.source !== "gutenberg" && track.source !== "tunestr" && track.source !== "radio-browser" && <AddToPlaylistMenu trackId={track.id} />}
       {externalSource && <a href={externalSource} target="_blank" rel="noreferrer" className="rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-accent">View original source</a>}
     </div>
 

@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { AudioLines, ChevronDown, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
-import { Slider } from '@/components/ui/slider';
+import { AudioLines, ChevronDown, Heart } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { usePlayer } from '@/hooks/usePlayer';
-import { formatDuration, fountainShowGuid } from '@/lib/music';
+import { useRadioFavorites } from '@/hooks/useRadioFavorites';
+import { useAudiobookLibrary, type AudiobookSource, type SavedAudiobook } from '@/hooks/useAudiobookLibrary';
+import { useAudiobookLibrarySync } from '@/hooks/useAudiobookLibrarySync';
+import { useLibriVoxBook } from '@/hooks/useLibriVox';
+import { useGutenbergAudiobook } from '@/hooks/useGutenbergAudiobooks';
+import { fountainShowGuid, type Track } from '@/lib/music';
 import { audioDetailPath } from '@/lib/audioDetail';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
@@ -183,6 +188,38 @@ function Spectrum({ enabled, onStatus }: { enabled: boolean; onStatus: (status: 
   return <canvas ref={canvasRef} aria-hidden="true" className="h-full w-full" />;
 }
 
+const actionClass = 'size-11 rounded-full text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300';
+
+function RadioFavoriteButton({ track }: { track: Track }) {
+  const { favorites, toggleFavorite } = useRadioFavorites();
+  const id = /^radio-browser:([\da-f-]{36})$/i.exec(track.id)?.[1];
+  const saved = favorites.find(station => station.id === id);
+  return <Button type="button" variant="ghost" size="icon" className={cn(actionClass, saved && 'text-green-300')} aria-label={`${saved ? 'Remove' : 'Add'} ${track.title} ${saved ? 'from' : 'to'} favorite radio stations`} aria-pressed={!!saved} disabled={!id} onClick={() => {
+    if (!id) return;
+    toggleFavorite(saved ?? { id, name: track.title, url: sanitizeUrl(track.url), image: sanitizeUrl(track.image), location: track.artist === 'Live radio' ? '' : track.artist ?? '', tags: track.topics.join(' · '), hls: track.mimeType === 'application/vnd.apple.mpegurl' || /\.m3u8(?:[?#]|$)/i.test(track.url) });
+  }}><Heart className={cn('size-5', saved && 'fill-current')} /></Button>;
+}
+
+function AudiobookFavoriteButton({ track, source, catalogId }: { track: Track; source: AudiobookSource; catalogId: string }) {
+  const library = useAudiobookLibrary();
+  const sync = useAudiobookLibrarySync();
+  const favorite = library.isFavorite(catalogId, source);
+  const existing = library.getBook(`${source}:${catalogId}`);
+  const librivox = useLibriVoxBook(source === 'librivox' ? catalogId : undefined);
+  const gutenberg = useGutenbergAudiobook(source === 'gutenberg' ? catalogId : undefined);
+  const details = source === 'librivox' ? librivox.data : gutenberg.data;
+  const cover = sanitizeUrl(track.image);
+  const book: SavedAudiobook = existing ?? { id: `${source}:${catalogId}`, source, catalogId, title: details?.title ?? track.album ?? track.title, author: details?.author ?? track.artist ?? 'Unknown author', covers: details?.covers ?? (cover ? [cover] : []), language: details?.language, duration: details?.duration, sectionCount: details?.sectionCount ?? 0 };
+  return <Button type="button" variant="ghost" size="icon" className={cn(actionClass, favorite && 'text-green-300')} aria-label={`${favorite ? 'Remove' : 'Add'} ${book.title} ${favorite ? 'from' : 'to'} favorite audiobooks`} aria-pressed={favorite} onClick={() => { sync.requestSync(); library.toggleFavorite(book); }}><Heart className={cn('size-5', favorite && 'fill-current')} /></Button>;
+}
+
+function ListeningRoomLike({ track }: { track: Track }) {
+  if (track.source === 'radio-browser') return <RadioFavoriteButton track={track} />;
+  const chapter = /^(librivox|gutenberg):([a-z0-9][a-z0-9_-]{0,159})(?::|$)/i.exec(track.id);
+  if (track.kind === 'audiobook' && chapter && (chapter[1] === 'librivox' || chapter[1] === 'gutenberg')) return <AudiobookFavoriteButton track={track} source={chapter[1]} catalogId={chapter[2]} />;
+  return <LikeButton trackId={track.id} collection={track.source === 'tunestr' ? 'tunestr' : undefined} size={20} className={`${actionClass} aria-pressed:text-green-300`} />;
+}
+
 export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const player = usePlayer();
   const { current } = player;
@@ -196,7 +233,6 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
     return () => preference.removeEventListener('change', update);
   }, []);
   const isRadio = current?.source === 'radio-browser';
-  const canNext = !isRadio && !!current && (player.index < player.queue.length - 1 || player.repeat === 'all' || (player.shuffle && player.queue.length > 1));
   const control = 'inline-flex size-11 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-300 disabled:opacity-30';
 
   const changeOpen = (value: boolean) => {
@@ -242,23 +278,12 @@ export function NowPlaying({ open, onOpenChange }: { open: boolean; onOpenChange
             </div>}
             {status === 'loading' && player.isPlaying && !reducedMotion && <div className="absolute inset-0 flex items-center justify-center text-xs text-white/70" role="status">Connecting visualiser…</div>}
           </div>
-          {!isRadio && <div className="mt-3 flex items-center justify-center gap-2 lg:justify-start" aria-label="Track actions">
-            <LikeButton trackId={current.id} size={20} className="size-11 text-white/70 hover:bg-white/10 hover:text-white aria-pressed:text-green-300 focus-visible:ring-green-300" />
-            <ShareTrackButton track={current} className="size-11 text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300" iconClassName="size-5" />
-            <PlayerZapButton key={current.id} track={current} className="size-11 text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-green-300" iconClassName="size-5" />
-          </div>}
+          <div className="mt-3 flex items-center justify-center gap-2 lg:justify-start" aria-label="Listening actions">
+            <ListeningRoomLike key={current.id} track={current} />
+            <ShareTrackButton track={current} className={actionClass} iconClassName="size-5" />
+            <PlayerZapButton key={current.id} track={current} className={actionClass} iconClassName="size-5" />
+          </div>
           {player.playbackError && <p role="status" className="mt-3 text-sm text-red-300">{player.playbackError}</p>}
-          <div className="mt-6">
-            {isRadio ? <div className="text-center text-xs font-bold uppercase tracking-widest text-green-300">Live radio</div> : <><Slider value={[player.duration ? Math.min(100, (player.progress / player.duration) * 100) : 0]} max={100} step={0.1} disabled={!player.duration || player.videoActive} onValueChange={([v]) => player.seek((v / 100) * player.duration)} aria-label="Seek" /><div className="mt-2 flex justify-between text-xs tabular-nums text-white/60"><span>{formatDuration(player.progress)}</span><span>{formatDuration(player.duration)}</span></div></>}
-          </div>
-          <div className="mt-3 flex items-center justify-center gap-2 sm:gap-4">
-            <button className={cn(control, player.shuffle && 'text-green-300')} onClick={player.toggleShuffle} disabled={isRadio || player.videoActive} aria-label="Shuffle" aria-pressed={player.shuffle}><Shuffle className="size-5" /></button>
-            <button className={control} onClick={player.previous} disabled={isRadio || player.videoActive} aria-label="Previous"><SkipBack className="size-5 fill-current" /></button>
-            <button className="flex size-14 items-center justify-center rounded-full bg-white text-[#100e1d] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-green-300 motion-reduce:transition-none motion-reduce:hover:scale-100" onClick={player.togglePlay} disabled={player.videoActive} aria-label={player.isPlaying ? 'Pause' : 'Play'}>{player.isPlaying ? <Pause className="size-6 fill-current" /> : <Play className="ml-1 size-6 fill-current" />}</button>
-            <button className={control} onClick={player.next} disabled={!canNext || player.videoActive} aria-label="Next"><SkipForward className="size-5 fill-current" /></button>
-            <button className={cn(control, player.repeat !== 'off' && 'text-green-300')} onClick={player.cycleRepeat} disabled={isRadio || player.videoActive} aria-label={`Repeat: ${player.repeat}`}><span>{player.repeat === 'one' ? <Repeat1 className="size-5" /> : <Repeat className="size-5" />}</span></button>
-          </div>
-          <div className="mx-auto mt-3 flex w-40 items-center gap-2"><button className={control} onClick={player.toggleMute} aria-label={player.muted ? 'Unmute' : 'Mute'}>{player.muted || player.volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}</button><Slider value={[player.muted ? 0 : player.volume * 100]} max={100} onValueChange={([v]) => player.setVolume(v / 100)} aria-label="Volume" className="flex-1" /></div>
         </div>
       </main> : <div className="relative flex flex-1 items-center justify-center text-white/65">Choose something to listen to.</div>}
   </section>;

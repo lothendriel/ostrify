@@ -44,7 +44,9 @@ export function decodeAudioDetailFallback(value: string | null): Track | undefin
     const eventKind = candidate.eventKind;
     return {
       id: candidate.id,
-      source: ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(candidate.source ?? "") ? candidate.source : undefined,
+      source: candidate.source === "radio-browser" && /^radio-browser:[\da-f-]{36}$/i.test(candidate.id)
+        ? "radio-browser"
+        : ["wavlake", "librivox", "gutenberg", "tunestr", "fountain", "podcast-index"].includes(candidate.source ?? "") ? candidate.source : undefined,
       eventKind: Number.isInteger(eventKind) && [1, 54, 1063, 1053, 31337, 36787, 32123, 30440, 30311].includes(eventKind ?? 0) ? eventKind : undefined,
       artistId: typeof candidate.artistId === "string" ? candidate.artistId.slice(0, 100) : undefined,
       artistPubkey: typeof candidate.artistPubkey === "string" && /^[0-9a-f]{64}$/i.test(candidate.artistPubkey) ? candidate.artistPubkey.toLowerCase() : undefined,

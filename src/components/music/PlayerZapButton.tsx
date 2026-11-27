@@ -103,8 +103,8 @@ export function PlayerZapButton({ track, className, iconClassName, video = false
   const { config } = useAppContext();
   const { toast } = useToast();
 
-  const artistKey = track?.kind === "music" && track.artistPubkey && HEX_KEY.test(track.artistPubkey) ? track.artistPubkey.toLowerCase() : undefined;
-  const publisherKey = track?.kind === "music" && track.pubkey && HEX_KEY.test(track.pubkey) ? track.pubkey.toLowerCase() : undefined;
+  const artistKey = track?.artistPubkey && HEX_KEY.test(track.artistPubkey) ? track.artistPubkey.toLowerCase() : undefined;
+  const publisherKey = track?.pubkey && HEX_KEY.test(track.pubkey) ? track.pubkey.toLowerCase() : undefined;
   const artist = usePaymentMethod(artistKey);
   const publisher = usePaymentMethod(publisherKey && publisherKey !== artistKey ? publisherKey : undefined);
   // Wait for an explicit artist's lookup to finish before choosing the publisher.
