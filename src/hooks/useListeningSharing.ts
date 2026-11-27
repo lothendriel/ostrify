@@ -24,7 +24,7 @@ function subscribe(listener: () => void) {
 
 function readEnabled(key: string): boolean {
   try {
-    return !!key && localStorage.getItem(key) === 'true';
+    return !!key && localStorage.getItem(key) !== 'false';
   } catch {
     return false;
   }

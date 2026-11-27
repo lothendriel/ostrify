@@ -61,7 +61,7 @@ There is no Ostrify account server. Sign in with a Nostr-compatible signer to pu
 
 - **Friends on Ostrify:** follow accounts, browse the public profile sections they choose to display, and discover opt-in directory listings. Friend listening activity can be viewed from the Friends page or activity panel.
 - **Private invites:** send NIP-17 encrypted friend invites to a Nostr public key; the recipient chooses whether to follow you back.
-- **Listening status:** optionally share the current track as a public NIP-38 status. Sharing is off by default, and Ostrify reports whether it could publish a clearing update when you turn sharing off.
+- **Listening status:** share the current track as a public NIP-38 status. Sharing is on by default and can be turned off per account on this device; Ostrify reports whether it could publish a clearing update when you turn it off.
 - **Relay controls:** manage Ostrify’s recommended read/write relays and Blossom upload servers separately. Optionally include your NIP-65 read relays for broader discovery; Ostrify-specific exclusions do not change your published NIP-65 list.
 - **Privacy and appearance:** opt into or withdraw from the public Ostrify directory, choose which library sections appear on your profile, and select light or dark appearance.
 

@@ -6,7 +6,7 @@ import { useTunestrPlayer } from '@/components/music/TunestrPlayer';
 import { classifyStreamPlayback } from '@/lib/sanitize';
 import { CLEAR_LISTENING_STATUS_EVENT, LISTENING_STATUS_CLEAR_RESULT_EVENT, useListeningSharing, type ListeningStatusClearResult } from '@/hooks/useListeningSharing';
 
-/** Publish explicitly enabled public NIP-38 music statuses, clearing on pause/disable. */
+/** Publish public NIP-38 music statuses when sharing is enabled, clearing on pause/disable. */
 export function ListeningStatusSync() {
   const { nostr } = useNostr();
   const { user } = useCurrentUser();

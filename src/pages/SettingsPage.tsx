@@ -253,7 +253,7 @@ const SettingsPage = () => {
       <Card>
         <CardHeader>
           <CardTitle>Listening activity</CardTitle>
-          <CardDescription id="listening-sharing-description">When sharing is on, Ostrify publishes your current track or video as a public Nostr status that other people can see. For embedded videos, Ostrify reports that the video is open because it cannot reliably detect playback or pauses. When off, Ostrify stops publishing new statuses and attempts to publish a clearing update. This preference is saved on this device; a failed update can leave an earlier status visible until it expires, and relays or other clients may retain older copies.</CardDescription>
+          <CardDescription id="listening-sharing-description">Sharing is on by default. When sharing is on, Ostrify publishes your current track or video as a public Nostr status that other people can see. For embedded videos, Ostrify reports that the video is open because it cannot reliably detect playback or pauses. When off, Ostrify stops publishing new statuses and attempts to publish a clearing update. This preference is saved on this device; a failed update can leave an earlier status visible until it expires, and relays or other clients may retain older copies.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
