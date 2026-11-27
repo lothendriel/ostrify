@@ -204,7 +204,7 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
     <section aria-labelledby="made-for-you-heading" className="made-for-you-section overflow-hidden rounded-xl border border-border/60 bg-gradient-to-br from-violet-950/65 via-indigo-950/35 to-card">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-violet-100"><Sparkles className="size-4" aria-hidden="true" /></div>
+          <div className="mix-heading-icon flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-violet-100"><Sparkles className="size-4" aria-hidden="true" /></div>
           <div className="min-w-0">
             <h2 id="made-for-you-heading" className="text-lg font-bold tracking-tight">Made for you</h2>
             <p className="hidden text-xs text-muted-foreground sm:block">A private mix from your likes, listening, and followed artists.</p>

@@ -267,6 +267,42 @@
   --sidebar-ring: #ffcf6a;
 }
 
+/* Valentine’s Day is a temporary local-calendar palette. */
+:root.valentines {
+  color-scheme: dark;
+  --background: #210711;
+  --foreground: #fff7fa;
+  --card: #3b0c1a;
+  --card-foreground: #fff7fa;
+  --popover: #3b101c;
+  --popover-foreground: #fff7fa;
+  --primary: #ff8abb;
+  --primary-foreground: #350015;
+  --secondary: #591526;
+  --secondary-foreground: #fff7fa;
+  --muted: #591b2d;
+  --muted-foreground: #f0cbd8;
+  --accent: #82203c;
+  --accent-foreground: #fff7fa;
+  --border: #a84460;
+  --input: #b65c76;
+  --ring: #ff9dc4;
+  --brand-violet: #ff9bc4;
+  --brand-surface: #701d38;
+  --shell-glow: rgb(246 42 106 / 35%);
+  --shell-glow-green: rgb(241 59 75 / 15%);
+  --shell-panel: #501122;
+  --shell-edge: rgb(255 119 160 / 62%);
+  --sidebar: #310913;
+  --sidebar-foreground: #fff5f8;
+  --sidebar-primary: #ff8abb;
+  --sidebar-primary-foreground: #350015;
+  --sidebar-accent: #701d38;
+  --sidebar-accent-foreground: #fff7fa;
+  --sidebar-border: #a84460;
+  --sidebar-ring: #ff9dc4;
+}
+
 @layer components {
   .ostrify-shell {
     background: radial-gradient(ellipse at 5% 0%, var(--shell-glow), transparent 42%), var(--background);
@@ -490,6 +526,87 @@
   .december .ostrify-atmosphere { height: 400px; background-position: center, 65% top; }
   .december .ostrify-header { padding-top: 12px; }
   .december .ostrify-player::before { height: 12px; }
+}
+
+/* Romantic decorations are non-interactive and never overlap the genre links. */
+.valentines .ostrify-atmosphere {
+  height: 460px;
+  background: linear-gradient(180deg, rgb(36 3 14 / 16%), rgb(55 5 22 / 12%) 50%, var(--card) 100%),
+    var(--valentines-art) center 42% / cover no-repeat;
+}
+.valentines .ostrify-header {
+  background: rgb(48 5 20 / 88%);
+  border-color: rgb(255 116 163 / 50%);
+}
+.valentines .ostrify-sidebar-panel {
+  background: linear-gradient(155deg, #581021, #300710 75%);
+  border-color: #df547e;
+  box-shadow: 0 0 10px rgb(255 73 133 / 20%);
+}
+.valentines .ostrify-logo-link > span:first-child::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  background: var(--valentines-heart) center / contain no-repeat;
+  pointer-events: none;
+}
+.valentines .ostrify-player {
+  background: radial-gradient(ellipse at 50% 0%, #641127, transparent 54%), linear-gradient(90deg, #300712, #3e0714 50%, #300712);
+  border-color: #ff5d91;
+  box-shadow: 0 -2px 14px rgb(255 46 112 / 40%);
+}
+.valentines .ostrify-player::before,
+.valentines .ostrify-player::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  bottom: 0;
+  width: 150px;
+  height: 90px;
+  opacity: .65;
+  background: var(--valentines-roses) center bottom / contain no-repeat;
+}
+.valentines .ostrify-player::before { left: 24%; }
+.valentines .ostrify-player::after { right: 24%; transform: scaleX(-1); }
+.valentines .player-play-button {
+  color: white;
+  background: transparent;
+  overflow: visible;
+}
+.valentines .player-play-button:hover { background: transparent; }
+.valentines .valentines-player-heart { z-index: 0; }
+.valentines .player-play-button > svg { position: relative; z-index: 1; }
+.valentines .player-play-ring-active::before {
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 255deg, #ff548d 345deg, #ffe7f1 360deg);
+}
+.valentines .home-greeting,
+.valentines .home-page h2,
+.valentines .home-page h3 { font-family: Georgia, 'Times New Roman', serif; }
+.valentines .home-greeting,
+.valentines .home-genres { text-shadow: 0 2px 10px #310314; }
+.valentines .genre-pill {
+  border-color: #ffb3cd;
+  background: linear-gradient(#ff9bc7, #ed4c96);
+  color: #310313;
+  text-shadow: none;
+  box-shadow: 0 0 10px rgb(255 71 132 / 25%);
+}
+.valentines .genre-pill:hover { background: #ffb8d4; border-color: #ffd4e3; }
+.valentines .made-for-you-section {
+  position: relative;
+  background: linear-gradient(125deg, #541122, #3b0a18 70%, #5a0c22);
+  border-color: #f46d98;
+  box-shadow: inset 0 0 20px rgb(255 61 109 / 15%), 0 0 12px rgb(255 46 112 / 18%);
+}
+.valentines .mix-heading-icon {
+  background: var(--valentines-heart) center / contain no-repeat;
+}
+.valentines .mix-heading-icon svg { opacity: 0; }
+.valentines .ostrify-audio-card { border-color: #ef6a98; }
+.valentines .ostrify-audio-card:hover { border-color: #ffc4d7; }
+@media (max-width: 767px) {
+  .valentines .ostrify-atmosphere { height: 390px; background-position: center, 62% top; }
+  .valentines .ostrify-player::before, .valentines .ostrify-player::after { display: none; }
 }
 
 /* A small holiday garland, with a static treatment for reduced-motion users. */

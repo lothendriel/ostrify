@@ -21,6 +21,7 @@ import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
 import { FeaturedAudiobooks } from "@/components/music/FeaturedAudiobooks";
 import { useOctober } from "@/hooks/useOctober";
 import { useDecember } from "@/hooks/useDecember";
+import { useValentines } from "@/hooks/useValentines";
 import { CATEGORIES, categoriesForTrack, groupTracksByCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
@@ -112,6 +113,7 @@ const Index = () => {
   const { user } = useCurrentUser();
   const isOctober = useOctober();
   const isDecember = useDecember();
+  const isValentines = useValentines();
   const homeAccountScope = useHomeSessionScope();
   const shelfSessionScope = user?.pubkey ?? "public";
   const homeTracksQuery = useHomeTracks(discoveryEnabled, homeAccountScope);
@@ -239,7 +241,7 @@ const Index = () => {
     <div className="home-page w-full min-w-0 max-w-full space-y-8 overflow-x-clip p-4 sm:p-6">
       <h1 className="home-greeting flex items-center gap-3 text-3xl font-bold tracking-tight">
         <span>{greeting}</span>
-        <img src={isOctober ? "/images/october-pumpkin.webp" : isDecember ? "/images/december-hat.webp" : greetingImage} alt="" aria-hidden="true" fetchPriority="high" decoding="async" className="size-10 shrink-0 object-contain" />
+        <img src={isOctober ? "/images/october-pumpkin.webp" : isDecember ? "/images/december-hat.webp" : isValentines ? "/images/valentines-heart.webp" : greetingImage} alt="" aria-hidden="true" fetchPriority="high" decoding="async" className="size-10 shrink-0 object-contain" />
       </h1>
 
       <section aria-labelledby="browse-genres-heading" className="home-genres relative space-y-3 text-center">

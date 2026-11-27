@@ -5,6 +5,7 @@ import { AppContext, type AppConfig, type AppContextType, type Theme, type Relay
 import { APP_RELAYS, isRequiredAppRelay } from '@/lib/appRelays';
 import { useOctober } from '@/hooks/useOctober';
 import { useDecember } from '@/hooks/useDecember';
+import { useValentines } from '@/hooks/useValentines';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -173,6 +174,7 @@ export function AppProvider(props: AppProviderProps) {
   // The seasonal palette is temporary and never modifies the saved preference.
   const isOctober = useOctober();
   const isDecember = useDecember();
+  const isValentines = useValentines();
   useApplyTheme(config.theme);
   useEffect(() => {
     const root = document.documentElement;
@@ -199,6 +201,22 @@ export function AppProvider(props: AppProviderProps) {
       for (const name of ['--december-art', '--december-garland', '--december-bow']) root.style.removeProperty(name);
     };
   }, [isDecember]);
+  useEffect(() => {
+    const root = document.documentElement;
+    const art = ['--valentines-art', '--valentines-heart', '--valentines-roses'];
+    root.classList.toggle('valentines', isValentines);
+    if (isValentines) {
+      root.style.setProperty(art[0], 'url("/images/valentines-sunset.webp")');
+      root.style.setProperty(art[1], 'url("/images/valentines-heart.webp")');
+      root.style.setProperty(art[2], 'url("/images/valentines-roses.webp")');
+    } else {
+      for (const name of art) root.style.removeProperty(name);
+    }
+    return () => {
+      root.classList.remove('valentines');
+      for (const name of art) root.style.removeProperty(name);
+    };
+  }, [isValentines]);
 
   return (
     <AppContext.Provider value={appContextValue}>

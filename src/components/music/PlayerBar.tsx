@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { usePlayer } from "@/hooks/usePlayer";
 import { useDecember } from "@/hooks/useDecember";
 import { useOctober } from "@/hooks/useOctober";
+import { useValentines } from "@/hooks/useValentines";
 import { formatDuration, fountainShowGuid, type Track } from "@/lib/music";
 import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
@@ -41,6 +42,7 @@ function isThanksgivingPlayIcon() {
 function SeasonalPlayIcon() {
   const isDecember = useDecember();
   const isOctober = useOctober();
+  const isValentines = useValentines();
   const [showTurkey, setShowTurkey] = useState(isThanksgivingPlayIcon);
 
   useEffect(() => {
@@ -54,7 +56,7 @@ function SeasonalPlayIcon() {
   }, []);
 
   if (isOctober) return <img src="/images/october-player-pumpkin.webp" alt="" aria-hidden="true" className="october-player-pumpkin pointer-events-none size-16 shrink-0 object-contain" />;
-  if (isDecember) return <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
+  if (isDecember || isValentines) return <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
   return showTurkey
     ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[3.3] object-contain mix-blend-multiply" />
     : <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
@@ -82,6 +84,7 @@ function PodcastShowLink({ track }: { track: Track }) {
 
 export function PlayerBar({ onQueueToggle, queueOpen = false, nowPlayingOpen, onNowPlayingToggle, videoExpanded = false }: { onQueueToggle: () => void; queueOpen?: boolean; nowPlayingOpen: boolean; onNowPlayingToggle: () => void; videoExpanded?: boolean }) {
   const player = usePlayer();
+  const isValentines = useValentines();
   const { current } = player;
   const isRadio = current?.source === 'radio-browser';
   const canGoNext = !isRadio && !!current && (player.index < player.queue.length - 1 || player.repeat === "all" || (player.shuffle && player.queue.length > 1));
@@ -181,6 +184,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false, nowPlayingOpen, on
               aria-label={player.isPlaying ? "Pause" : "Play"}
               className="player-play-button relative z-10 size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
             >
+              {isValentines && <img src="/images/valentines-heart.webp" alt="" aria-hidden="true" className="valentines-player-heart pointer-events-none absolute inset-0 size-full object-contain" />}
               {player.isPlaying ? <Pause className="size-5 fill-current" /> : <SeasonalPlayIcon />}
             </Button>
           </span>
