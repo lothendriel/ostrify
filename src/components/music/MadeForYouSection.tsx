@@ -21,7 +21,7 @@ type DailyMix = { id: string; title: string; subtitle: string; tracks: Track[] }
 type MixSnapshot = { cards: DailyMix[]; variation: number; tasteCount: number };
 
 // Session storage survives reloads but remains private to this tab and account.
-const MIX_SNAPSHOT_PREFIX = "ostrify:made-for-you:v1:";
+const MIX_SNAPSHOT_PREFIX = "ostrify:made-for-you:v2:";
 const memorySnapshots = new Map<string, MixSnapshot>();
 
 function readMixSnapshot(scope: string): MixSnapshot | null {
@@ -34,7 +34,7 @@ function readMixSnapshot(scope: string): MixSnapshot | null {
     if (!value || typeof value !== "object") return null;
     const snapshot = value as Partial<MixSnapshot>;
     if (!Array.isArray(snapshot.cards) || typeof snapshot.variation !== "number" || typeof snapshot.tasteCount !== "number") return null;
-    if (!snapshot.cards.every(card => card && typeof card.id === "string" && typeof card.title === "string" && typeof card.subtitle === "string" && Array.isArray(card.tracks) && card.tracks.every(track => track && typeof track.id === "string" && typeof track.url === "string" && typeof track.title === "string" && typeof track.pubkey === "string" && track.kind === "music" && Array.isArray(track.topics) && track.topics.every(topic => typeof topic === "string")))) return null;
+    if (!snapshot.cards.every(card => card && typeof card.id === "string" && typeof card.title === "string" && typeof card.subtitle === "string" && Array.isArray(card.tracks) && card.tracks.every(track => track && typeof track.id === "string" && typeof track.url === "string" && typeof track.title === "string" && typeof track.pubkey === "string" && track.kind === "music" && track.source !== "radio-browser" && Array.isArray(track.topics) && track.topics.every(topic => typeof topic === "string")))) return null;
     const result = snapshot as MixSnapshot;
     memorySnapshots.set(scope, result);
     return result;
@@ -74,7 +74,7 @@ function uniqueQueue(tracks: Track[], limit = 24): Track[] {
   const ids = new Set<string>();
   const urls = new Set<string>();
   return tracks.filter(track => {
-    if (track.kind !== "music" || ids.has(track.id) || urls.has(track.url)) return false;
+    if (track.kind !== "music" || track.source === "radio-browser" || ids.has(track.id) || urls.has(track.url)) return false;
     ids.add(track.id);
     urls.add(track.url);
     return true;
@@ -115,12 +115,12 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
   const followedReferences = useMemo(() => followedArtists.data ?? [], [followedArtists.data]);
   const tasteCount = musicLiked.length + musicHistory.length + followedReferences.length;
   const personalizedMix = useMemo(() => buildPersonalizedMix({
-    candidates: mixCandidates,
+    candidates: musicCandidates,
     liked: musicLiked,
     history: musicHistory,
     followedArtists: followedReferences,
     variation: mixVariation,
-  }).map(item => item.track), [mixCandidates, musicLiked, musicHistory, followedReferences, mixVariation]);
+  }).map(item => item.track), [musicCandidates, musicLiked, musicHistory, followedReferences, mixVariation]);
   const recentArtists = useMemo(() => new Set(musicHistory.slice(0, 8).flatMap(artistKeys)), [musicHistory]);
   const likedArtists = useMemo(() => new Set(musicLiked.flatMap(artistKeys)), [musicLiked]);
   const mixCards = useMemo(() => {
@@ -167,7 +167,7 @@ export function MadeForYouSection({ candidates, isLoading, active = true, sessio
     const unique = new Map<string, Track>();
     const recentAfter = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
     for (const track of [...allTracks, ...(followedTracks.data ?? [])]) {
-      if (track.createdAt < recentAfter) continue;
+      if (track.source === "radio-browser" || track.createdAt < recentAfter) continue;
       if (!unique.has(track.id)) unique.set(track.id, track);
     }
     return [...unique.values()]
