@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
 import { APP_RELAYS, isRequiredAppRelay } from '@/lib/appRelays';
-import { useOctober } from '@/hooks/useDecember';
+import { useOctober } from '@/hooks/useOctober';
 
 interface AppProviderProps {
   children: ReactNode;

@@ -20,7 +20,7 @@ import { DeferredHomeSection } from "@/components/music/DeferredHomeSection";
 import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
 import { FeaturedAudiobooks } from "@/components/music/FeaturedAudiobooks";
 import { ChristmasLights } from "@/components/music/ChristmasLights";
-import { useOctober } from "@/hooks/useDecember";
+import { useOctober } from "@/hooks/useOctober";
 import { CATEGORIES, categoriesForTrack, groupTracksByCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
