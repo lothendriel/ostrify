@@ -22,7 +22,7 @@ export function TrackCard({ track, showPlaylistAction = false, showLikeAction = 
   const isCurrent = player.current?.id === track.id;
   const isPlaying = isCurrent && player.isPlaying;
   const fountainGuid = track.source === "fountain" ? fountainShowGuid(track.showId) : undefined;
-  const formatLabel = track.kind === "podcast" ? "Podcast" : track.kind === "audiobook" ? "Audiobook" : "Music";
+  const formatLabel = track.source === "radio-browser" ? "Radio" : track.kind === "podcast" ? "Podcast" : track.kind === "audiobook" ? "Audiobook" : "Music";
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
