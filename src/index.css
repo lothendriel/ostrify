@@ -480,8 +480,19 @@
 .december .player-play-button {
   color: #fff;
   background: radial-gradient(circle at 35% 25%, #ff6d54, #bc0918 65%, #700512);
-  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #b90e21, 0 0 18px rgb(255 65 38 / 80%);
+  box-shadow: 0 0 18px rgb(255 65 38 / 80%);
 }
+.december .player-play-button::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(#fff 0deg 18deg, #d20d25 18deg 36deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  pointer-events: none;
+}
+.december .player-play-ring-active::before { inset: -9px; }
 .december .player-play-button:hover { background: #f03932; }
 .december .home-greeting,
 .december .home-page h2,
