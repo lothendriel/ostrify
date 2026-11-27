@@ -1,4 +1,5 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ExternalLink, Maximize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
 import type { TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
@@ -8,26 +9,36 @@ import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
 
+type PlayerSize = 'small' | 'medium' | 'large';
+
 interface TunestrPlayerContextValue {
   openStream: (stream: TunestrStream) => void;
+  setContentPane: (element: HTMLDivElement | null) => void;
+  expanded: boolean;
 }
 
 const TunestrPlayerContext = createContext<TunestrPlayerContextValue | null>(null);
 
 export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
   const [stream, setStream] = useState<TunestrStream | null>(null);
-  const [docked, setDocked] = useState(false);
+  const [docked, setDocked] = useState(true);
+  const [size, setSize] = useState<PlayerSize>('small');
+  const [contentPane, setContentPane] = useState<HTMLDivElement | null>(null);
 
-  return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { setStream(nextStream); setDocked(false); } }}>
+  const player = stream && <TunestrVideoPlayer
+    key={stream.id}
+    stream={stream}
+    docked={docked}
+    size={size}
+    onSizeChange={setSize}
+    onDock={() => setDocked(true)}
+    onRestore={() => setDocked(false)}
+    onClose={() => { setDocked(true); setStream(null); }}
+  />;
+
+  return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { setStream(nextStream); setSize('small'); setDocked(true); }, setContentPane, expanded: !!stream && !docked }}>
     {children}
-    {stream && <TunestrVideoPlayer
-      key={stream.id}
-      stream={stream}
-      docked={docked}
-      onDock={() => setDocked(true)}
-      onRestore={() => setDocked(false)}
-      onClose={() => { setDocked(false); setStream(null); }}
-    />}
+    {contentPane ? createPortal(player, contentPane) : player}
   </TunestrPlayerContext.Provider>;
 }
 
@@ -118,15 +129,15 @@ function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
   </div>;
 }
 
-function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
+function TunestrVideoPlayer({ stream, docked, size, onSizeChange, onDock, onRestore, onClose }: {
   stream: TunestrStream;
   docked: boolean;
+  size: PlayerSize;
+  onSizeChange: (size: PlayerSize) => void;
   onDock: () => void;
   onRestore: () => void;
   onClose: () => void;
 }) {
-  const playerRef = useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = useState<'small' | 'medium' | 'large'>('medium');
   const sourceUrl = sanitizeUrl(stream.externalUrl);
   const hasEmbeddedPlayer = stream.format === 'n94' && !!stream.event && !!stream.variant || classifyStreamPlayback(stream.url).type !== 'unsupported';
   const widths = {
@@ -140,19 +151,20 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
   return <Dialog open modal={false} onOpenChange={open => { if (!open) onClose(); }}>
     <DialogContent
       className={cn(
-        '!z-[60] !max-w-none !gap-0 !overflow-hidden !rounded-2xl !border-border/80 !bg-card !p-0 !shadow-2xl',
+        '!z-[60] !max-w-none !gap-0 !overflow-hidden !border-border/80 !bg-card !p-0',
         docked
-          ? cn('!left-auto !top-auto !right-3 !bottom-[calc(7.5rem+env(safe-area-inset-bottom))] !translate-x-0 !translate-y-0 sm:!right-5 sm:!bottom-[calc(6.5rem+env(safe-area-inset-bottom))]', widths[size])
-          : '!w-[min(1200px,calc(100vw-2rem),calc(177.78dvh-16rem))]',
+          ? cn('!fixed !left-auto !top-auto !right-3 !bottom-[calc(7.5rem+env(safe-area-inset-bottom))] !translate-x-0 !translate-y-0 !rounded-2xl !shadow-2xl sm:!right-5 sm:!bottom-[calc(6.5rem+env(safe-area-inset-bottom))]', widths[size])
+          : '!absolute !inset-0 !h-full !w-full !translate-x-0 !translate-y-0 !rounded-none !border-0 !shadow-none',
       )}
+      showPortal={false}
       showOverlay={false}
       showCloseButton={false}
       onEscapeKeyDown={event => { event.preventDefault(); if (!docked) onDock(); }}
       onInteractOutside={event => event.preventDefault()}
       onOpenAutoFocus={event => event.preventDefault()}
     >
-      <div ref={playerRef} className="overflow-hidden bg-card">
-        <div className="flex min-h-14 items-center justify-between gap-1 border-b border-border/60 bg-card px-2 py-2 sm:px-3">
+      <div className={cn('overflow-hidden bg-card', !docked && 'flex h-full min-h-0 flex-col')}>
+        <div className="flex min-h-14 shrink-0 items-center justify-between gap-1 border-b border-border/60 bg-card px-2 py-2 sm:px-3">
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-sm font-semibold leading-5">{stream.title || 'TuneStr stream'}</DialogTitle>
             <DialogDescription className="sr-only">{stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription>
@@ -171,7 +183,7 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
                 aria-label={`${option[0].toUpperCase()}${option.slice(1)} player`}
                 aria-pressed={docked && size === option}
                 title={`${option[0].toUpperCase()}${option.slice(1)} player`}
-                onClick={() => { setSize(option); onDock(); }}
+                onClick={() => { onSizeChange(option); onDock(); }}
                 className={cn('flex size-7 items-center justify-center rounded-md text-xs font-semibold text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-primary', docked && size === option && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground')}
               >{option[0].toUpperCase()}</button>)}
             </div>
@@ -181,10 +193,12 @@ function TunestrVideoPlayer({ stream, docked, onDock, onRestore, onClose }: {
             <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="Close player" title="Close player" onClick={onClose}><X className="size-4" /></Button>
           </div>
         </div>
-        {stream.format === 'n94' && stream.event && stream.variant
-          ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} /></Suspense>
-          : <TunestrVideoSurface stream={stream} />}
-        {!docked && hasEmbeddedPlayer && sourceUrl && <div className="px-4 py-3"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a></div>}
+        <div className={cn(!docked && 'flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black [&>div]:!h-full [&>div]:!w-full [&>div]:!aspect-auto [&>iframe]:!h-full [&>iframe]:!w-full [&>iframe]:!aspect-auto')}>
+          {stream.format === 'n94' && stream.event && stream.variant
+            ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} /></Suspense>
+            : <TunestrVideoSurface stream={stream} />}
+        </div>
+        {!docked && hasEmbeddedPlayer && sourceUrl && <div className="shrink-0 px-4 py-3"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a></div>}
       </div>
     </DialogContent>
   </Dialog>;

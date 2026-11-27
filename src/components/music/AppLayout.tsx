@@ -13,6 +13,7 @@ import { FriendsActivityPanel, FriendsActivitySheet } from "./FriendsActivityShe
 import { NotificationsBell, NotificationsPanel } from "./NotificationsBell";
 import { DeveloperZapButton } from "./DeveloperZapButton";
 import { GlobalSearch } from "./GlobalSearch";
+import { useTunestrPlayer } from "./TunestrPlayer";
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useFollowedPeople } from '@/hooks/useFollowedPeople';
@@ -22,6 +23,7 @@ import { HomeSessionProvider } from '@/contexts/HomeSessionContext';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { setContentPane, expanded } = useTunestrPlayer();
   const queryClient = useQueryClient();
   const [homeSessionScope] = useState(() => crypto.randomUUID());
   const previousHomeAccount = useRef<string | undefined>(undefined);
@@ -110,12 +112,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          {/* Scrollable page content */}
-          <ScrollArea type="always" className="app-content-scroll relative z-10 min-w-0 max-w-full flex-1 min-h-0 bg-transparent">
-            <div className="min-w-0 max-w-full overflow-x-hidden pb-6">
-              <HomeSessionProvider value={accountScope}>{children}</HomeSessionProvider>
+          {/* The player stays mounted here while switching between the pane and the floating dock. */}
+          <div ref={setContentPane} className="relative z-10 flex min-h-0 min-w-0 flex-1">
+            <div className="flex min-h-0 min-w-0 flex-1" inert={expanded} aria-hidden={expanded}>
+              <ScrollArea type="always" className="app-content-scroll relative min-w-0 max-w-full flex-1 min-h-0 bg-transparent">
+                <div className="min-w-0 max-w-full overflow-x-hidden pb-6">
+                  <HomeSessionProvider value={accountScope}>{children}</HomeSessionProvider>
+                </div>
+              </ScrollArea>
             </div>
-          </ScrollArea>
+          </div>
         </div>
         {!isMobile && <aside aria-hidden={activePanel !== 'friends' && activePanel !== 'queue' && activePanel !== 'notifications'} className={`h-full shrink-0 overflow-hidden transition-[width,opacity] duration-300 ease-in-out ${activePanel === 'friends' ? 'w-72 opacity-100 lg:w-80' : activePanel === 'queue' ? 'w-80 opacity-100 xl:w-96' : activePanel === 'notifications' ? 'w-72 opacity-100 lg:w-80' : 'w-0 opacity-0'}`}>
           {activePanel === 'friends' && <FriendsActivityPanel open user={user} followedPeople={followedPeople} statuses={statuses} onClose={() => setActivePanel(null)} />}
