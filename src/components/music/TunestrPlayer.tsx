@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { ExternalLink, Maximize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
 import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
-import { parseN94Stream, type TunestrStream } from '@/hooks/useTunestrStreams';
+import { parseN94Stream, parseTunestrStreamEvent, type TunestrStream } from '@/hooks/useTunestrStreams';
+import { PlayerZapButton } from '@/components/music/PlayerZapButton';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { accountStorageKey, cn } from '@/lib/utils';
@@ -71,11 +72,15 @@ function restoreVideoPlayer(owner: string): SavedVideoPlayer | null {
       if (!verifyEvent(signed)) return null;
       stream = parseN94Stream(signed);
     } else if (value.format === 'nip53') {
+      if (isRecord(value.event) && value.event.kind === 30311 && typeof value.event.id === 'string' && typeof value.event.pubkey === 'string' && typeof value.event.sig === 'string' && typeof value.event.content === 'string' && typeof value.event.created_at === 'number' && Array.isArray(value.event.tags) && value.event.tags.every(tag => Array.isArray(tag) && tag.every(part => typeof part === 'string'))) {
+        const signed = value.event as unknown as NostrEvent;
+        if (verifyEvent(signed)) stream = parseTunestrStreamEvent(signed);
+      }
       const url = typeof value.url === 'string' ? sanitizeUrl(value.url) : undefined;
       if (typeof value.id !== 'string' || !value.id || typeof value.title !== 'string' || !value.title.trim() || !url || typeof value.isLive !== 'boolean') return null;
       const externalUrl = typeof value.externalUrl === 'string' ? sanitizeUrl(value.externalUrl) : undefined;
       const createdAt = typeof value.createdAt === 'number' && Number.isFinite(value.createdAt) ? value.createdAt : 0;
-      stream = {
+      stream ??= {
         id: value.id, title: value.title, summary: typeof value.summary === 'string' ? value.summary : undefined,
         url, externalUrl: externalUrl ?? url, createdAt, status: value.isLive ? 'live' : 'ended', isLive: value.isLive, format: 'nip53',
         track: { id: value.id, title: value.title, url, pubkey: '', kind: 'music', source: 'tunestr', topics: [], createdAt },
@@ -107,7 +112,7 @@ function saveVideoPlayer(owner: string, value: SavedVideoPlayer | null) {
         } : {
           id: stream.id, title: stream.title, summary: stream.summary, url: stream.url, externalUrl: stream.externalUrl,
           createdAt: stream.createdAt, isLive: stream.isLive, format: stream.format,
-          ...(stream.format === 'n94' ? { event: stream.event } : {}),
+          ...(stream.event ? { event: stream.event } : {}),
         },
       }));
     }
@@ -378,6 +383,7 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
+            {stream.format !== 'odysee' && stream.event && verifyEvent(stream.event) && <PlayerZapButton key={stream.event.id} track={{ ...stream.track, artistPubkey: undefined, pubkey: stream.event.pubkey }} video className="size-9 text-primary" />}
             <div role="group" aria-label="Player size" className="flex items-center rounded-lg border border-border/70 bg-background/60 p-0.5">
               {(['small', 'medium', 'large'] as const).map(option => <button
                 key={option}

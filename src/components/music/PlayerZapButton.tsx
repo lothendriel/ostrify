@@ -83,7 +83,8 @@ function usePaymentMethod(pubkey: string | undefined) {
   return { author, query };
 }
 
-export function PlayerZapButton({ track, className, iconClassName }: { track: Track | null; className?: string; iconClassName?: string }) {
+export function PlayerZapButton({ track, className, iconClassName, video = false }: { track: Track | null; className?: string; iconClassName?: string; video?: boolean }) {
+  const message = video ? "I was watching your video on Ostrify. Love it!" : ARTIST_ZAP_MESSAGE;
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("100");
   const [invoice, setInvoice] = useState<string | null>(null);
@@ -204,15 +205,22 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
           ["p", recipient.pubkey],
           ...(lnurl ? [["lnurl", lnurl]] : []),
         ];
-        const request = await user.signer.signEvent({ kind: 9734, content: ARTIST_ZAP_MESSAGE, created_at: Math.floor(Date.now() / 1000), tags });
+        // A video zap references the signed stream event as well as its publisher.
+        const event = video ? track?.event : undefined;
+        if (event && event.pubkey === recipient.pubkey && verifyEvent(event)) {
+          tags.push(["e", event.id], ["k", String(event.kind)]);
+          const identifier = event.tags.find(([name]) => name === "d")?.[1];
+          if (event.kind >= 30000 && event.kind < 40000 && identifier) tags.push(["a", `${event.kind}:${event.pubkey}:${identifier}`]);
+        }
+        const request = await user.signer.signEvent({ kind: 9734, content: message, created_at: Math.floor(Date.now() / 1000), tags });
         attachedNote = true;
         commitment = JSON.stringify(request);
         watch = { provider: params.nostrPubkey.toLowerCase(), recipient: recipient.pubkey, requestId: request.id, relays, since: Math.max(0, request.created_at - 60) };
         callback.searchParams.set("nostr", commitment);
         if (lnurl) callback.searchParams.set("lnurl", lnurl);
-      } else if (params.commentAllowed >= ARTIST_ZAP_MESSAGE.length) {
+      } else if (params.commentAllowed >= message.length) {
         // LUD-12 comments are supported only when advertised by the recipient.
-        callback.searchParams.set("comment", ARTIST_ZAP_MESSAGE);
+        callback.searchParams.set("comment", message);
         attachedNote = true;
       }
       const response = await fetch(callback.toString(), { signal: AbortSignal.timeout(15000) });
@@ -288,7 +296,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
   return <>
     <Tooltip><TooltipTrigger asChild><Button type="button" variant="ghost" size="icon" className={cn("size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground", className)} aria-label={`Zap ${recipient.name}`} onClick={() => { setLockedRecipient(recipient); setOpen(true); }}><Zap className={cn("size-4", iconClassName)} /></Button></TooltipTrigger><TooltipContent>Zap {recipient.role.toLowerCase()}</TooltipContent></Tooltip>
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-sm">
+      <DialogContent className={cn("max-h-[90dvh] overflow-y-auto sm:max-w-sm", video && "z-[80]")}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Zap className="size-5 text-primary" /> Support {recipient.role.toLowerCase()}</DialogTitle>
           <DialogDescription>Paying {recipient.role.toLowerCase()}: <strong className="break-words text-foreground">{recipient.name}</strong><br />For “{track.title}”</DialogDescription>
@@ -310,7 +318,7 @@ export function PlayerZapButton({ track, className, iconClassName }: { track: Tr
         </div> : <div className="space-y-4">
           <div className="grid grid-cols-4 gap-2">{AMOUNTS.map((sats) => <Button key={sats} type="button" variant={amount === String(sats) ? "default" : "outline"} onClick={() => setAmount(String(sats))}>{sats}</Button>)}</div>
           <div className="space-y-2"><Label htmlFor="player-zap-amount">Amount in sats</Label><Input id="player-zap-amount" type="number" min="1" step="1" value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="numeric" /></div>
-          <div className="space-y-1"><p className="text-sm font-medium">Message to {recipient.role.toLowerCase()}</p><p className="rounded-lg border bg-muted/30 p-3 text-sm">{ARTIST_ZAP_MESSAGE}</p><p className="text-xs text-muted-foreground">{user && recipient.params.allowsNostr && recipient.params.nostrPubkey && HEX_KEY.test(recipient.params.nostrPubkey) ? "Included in your public Nostr zap request." : recipient.params.commentAllowed >= ARTIST_ZAP_MESSAGE.length ? "Sent to the recipient’s Lightning provider as a payment comment." : "This provider does not advertise support for the full message; the payment can still be made without it."}</p></div>
+          <div className="space-y-1"><p className="text-sm font-medium">Message to {recipient.role.toLowerCase()}</p><p className="rounded-lg border bg-muted/30 p-3 text-sm">{message}</p><p className="text-xs text-muted-foreground">{user && recipient.params.allowsNostr && recipient.params.nostrPubkey && HEX_KEY.test(recipient.params.nostrPubkey) ? "Included in your public Nostr zap request." : recipient.params.commentAllowed >= message.length ? "Sent to the recipient’s Lightning provider as a payment comment." : "This provider does not advertise support for the full message; the payment can still be made without it."}</p></div>
           <Button type="button" className="w-full" onClick={() => void createInvoice()} disabled={isCreating}><Zap className="size-4" /> {isCreating ? "Creating invoice…" : `Continue with ${amount || "0"} sats`}</Button>
           <p className="text-center text-xs text-muted-foreground">{user && recipient.params.allowsNostr && recipient.params.nostrPubkey && HEX_KEY.test(recipient.params.nostrPubkey) ? "A signed Nostr zap request will be sent to the recipient’s provider." : "This will be a Lightning payment, completed in your wallet."}</p>
         </div>}
