@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { usePlayer } from "@/hooks/usePlayer";
+import { useDecember } from "@/hooks/useDecember";
 import { formatDuration, fountainShowGuid, type Track } from "@/lib/music";
 import { TrackArtwork } from "./TrackArtwork";
 import { LikeButton } from "./LikeButton";
@@ -37,7 +38,8 @@ function isThanksgivingPlayIcon() {
   return now.getFullYear() === 2026 && now.getMonth() === 10 && now.getDate() <= 27;
 }
 
-function ThanksgivingPlayIcon() {
+function SeasonalPlayIcon() {
+  const isDecember = useDecember();
   const [showTurkey, setShowTurkey] = useState(isThanksgivingPlayIcon);
 
   useEffect(() => {
@@ -50,6 +52,7 @@ function ThanksgivingPlayIcon() {
     };
   }, []);
 
+  if (isDecember) return <svg viewBox="0 0 24 24" className="size-6 shrink-0 fill-current" aria-hidden="true"><path d="M12 1 7.3 7h2L5.5 12h2L3 17.8h7.2V22h3.6v-4.2H21L16.5 12h2l-3.8-5h2L12 1Z" /></svg>;
   return showTurkey
     ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[3.3] object-contain mix-blend-multiply" />
     : <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
@@ -176,7 +179,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             aria-label={player.isPlaying ? "Pause" : "Play"}
             className="size-10 rounded-full bg-foreground text-background hover:bg-foreground motion-safe:transition-transform motion-safe:hover:scale-105 disabled:opacity-40 sm:size-10"
           >
-            {player.isPlaying ? <Pause className="size-5 fill-current" /> : <ThanksgivingPlayIcon />}
+            {player.isPlaying ? <Pause className="size-5 fill-current" /> : <SeasonalPlayIcon />}
           </Button>
           <Button
             variant="ghost"

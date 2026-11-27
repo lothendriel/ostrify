@@ -268,6 +268,74 @@
   }
 }
 
+/* A small holiday garland, with a static treatment for reduced-motion users. */
+.christmas-garland {
+  position: relative;
+  height: 52px;
+  pointer-events: none;
+}
+
+.christmas-garland-string {
+  position: absolute;
+  top: 13px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  border-top: 2px solid #36543c;
+}
+
+.christmas-light {
+  --bulb: #fb5360;
+  position: relative;
+  width: 8px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50% 50% 45% 45%;
+  background: var(--bulb);
+  box-shadow: 0 0 7px 2px var(--bulb);
+}
+
+.christmas-light::before {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 5px;
+  left: 2px;
+  top: -5px;
+  background: #36543c;
+  border-radius: 1px;
+}
+
+.christmas-light:nth-child(4n + 2) { --bulb: #ffe07d; }
+.christmas-light:nth-child(4n + 3) { --bulb: #57e59c; }
+.christmas-light:nth-child(4n + 4) { --bulb: #8eabff; }
+.christmas-wreath {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 50%;
+  width: 52px;
+  height: 52px;
+  transform: translateX(-50%);
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.35));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .christmas-light { animation: christmas-twinkle 2.8s ease-in-out infinite alternate; }
+  .christmas-light:nth-child(3n + 2) { animation-delay: -1s; }
+  .christmas-light:nth-child(3n) { animation-delay: -2s; }
+  @keyframes christmas-twinkle {
+    from { opacity: 0.5; box-shadow: 0 0 2px var(--bulb); }
+    to { opacity: 1; box-shadow: 0 0 9px 3px var(--bulb); }
+  }
+}
+
+@media (max-width: 480px) {
+  .christmas-light:nth-child(even) { display: none; }
+}
+
 @layer base {
   /* Radix uses a table wrapper to measure scrollable content. Keep vertically
      scrolling app panes constrained to their viewport so wide children cannot

@@ -19,6 +19,7 @@ import { MusicNewsSection } from "@/components/music/MusicNewsSection";
 import { DeferredHomeSection } from "@/components/music/DeferredHomeSection";
 import { HomePodcastsSection } from "@/components/music/HomePodcastsSection";
 import { FeaturedAudiobooks } from "@/components/music/FeaturedAudiobooks";
+import { ChristmasLights } from "@/components/music/ChristmasLights";
 import { CATEGORIES, categoriesForTrack, groupTracksByCategory } from "@/lib/categories";
 import { buildVariedHomeShelf } from "@/lib/homeRecommendations";
 import { readHomeShelfHistory, writeHomeShelfHistory } from "@/lib/homeShelfHistory";
@@ -246,6 +247,7 @@ const Index = () => {
         <nav aria-label="Browse music genres" className="flex flex-wrap justify-center gap-2 pb-1">
           {CATEGORIES.map(category => <Link key={category.id} to={`/category/${category.id}`} className="rounded-full border border-[#00ed69] bg-[#00ed69] px-3 py-1.5 text-xs font-semibold text-black transition-colors hover:border-[#00d95f] hover:bg-[#00d95f] focus-visible:outline-2 focus-visible:outline-primary">{category.label}</Link>)}
         </nav>
+        <ChristmasLights />
       </section>
 
       <div ref={discoveryTriggerRef} aria-hidden="true" className="h-px" />
