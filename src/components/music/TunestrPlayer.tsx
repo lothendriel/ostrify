@@ -12,6 +12,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useVideoVolume } from '@/hooks/useVideoVolume';
 import { PlayerContext } from '@/contexts/PlayerContext';
 import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
+import { recordVideoSeconds, recordVideoStart } from '@/lib/listeningAnalytics';
 
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
 
@@ -153,6 +154,38 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
   const playbackRef = useRef({ position: saved?.position ?? 0, playing: saved?.playing ?? true });
   const restoredRef = useRef(!!saved);
   const lastPlaybackWrite = useRef(0);
+  const videoAnalyticsRef = useRef<{ onPlaying: () => void; onStopped: () => void } | null>(null);
+
+  // Count a viewing session on the first actual playing event after opening a
+  // native player. Pauses, buffering and layout changes do not start new sessions.
+  useEffect(() => {
+    if (!stream || stream.format === 'odysee' || (stream.format !== 'n94' && !['video', 'hls'].includes(classifyStreamPlayback(stream.url).type))) return;
+    const item = { id: stream.id, title: stream.title, kind: stream.isLive ? 'live' as const : 'recording' as const };
+    let started = false;
+    let active = false;
+    let previous = 0;
+    const flush = () => {
+      if (!active) return;
+      const now = Date.now();
+      recordVideoSeconds(item, Math.max(0, (now - previous) / 1000), owner);
+      previous = now;
+    };
+    const onPlaying = () => {
+      if (!started) { recordVideoStart(item, owner); started = true; }
+      if (!active) { active = true; previous = Date.now(); }
+    };
+    const onStopped = () => { flush(); active = false; };
+    const timer = window.setInterval(flush, 5000);
+    const onPageHide = () => onStopped();
+    window.addEventListener('pagehide', onPageHide);
+    videoAnalyticsRef.current = { onPlaying, onStopped };
+    return () => {
+      onStopped();
+      window.clearInterval(timer);
+      window.removeEventListener('pagehide', onPageHide);
+      videoAnalyticsRef.current = null;
+    };
+  }, [stream, owner]);
 
   const hasVideo = !!stream;
   useEffect(() => {
@@ -200,6 +233,7 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
     initialPosition={saved?.stream.id === stream.id && restoredRef.current ? saved.position : 0}
     initialPlaying={saved?.stream.id === stream.id && restoredRef.current ? saved.playing : true}
     onPlaybackChange={savePlayback}
+    onAnalyticsState={playing => playing ? videoAnalyticsRef.current?.onPlaying() : videoAnalyticsRef.current?.onStopped()}
     onSizeChange={setSize}
     onDock={() => setDocked(true)}
     onRestore={() => setDocked(false)}
@@ -229,7 +263,7 @@ export function useTunestrPlayer() {
   return context;
 }
 
-function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlaybackChange }: { stream: TunestrStream; initialPosition: number; initialPlaying: boolean; onPlaybackChange: (position: number, playing: boolean) => void }) {
+function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlaybackChange, onAnalyticsState }: { stream: TunestrStream; initialPosition: number; initialPlaying: boolean; onPlaybackChange: (position: number, playing: boolean) => void; onAnalyticsState: (playing: boolean) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
@@ -324,20 +358,25 @@ function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlayba
       }}
       onTimeUpdate={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, !event.currentTarget.paused)}
       onPlay={event => { setAutoplayBlocked(false); onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, true); }}
-      onPause={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false)}
-      onEnded={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false)}
-      onError={event => { onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false); setError('This video could not be loaded. Check the source or try again.'); }} />
+      onPlaying={() => onAnalyticsState(true)}
+      onWaiting={() => onAnalyticsState(false)}
+      onSeeking={() => onAnalyticsState(false)}
+      onSeeked={event => { if (!event.currentTarget.paused && event.currentTarget.readyState >= 3) onAnalyticsState(true); }}
+      onPause={event => { onAnalyticsState(false); onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false); }}
+      onEnded={event => { onAnalyticsState(false); onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false); }}
+      onError={event => { onAnalyticsState(false); onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false); setError('This video could not be loaded. Check the source or try again.'); }} />
     {(error || autoplayBlocked) && <div role="status" className="absolute inset-x-3 bottom-14 rounded-lg bg-black/80 p-3 text-sm text-white">{error || 'Press play to resume this video.'}</div>}
   </div>;
 }
 
-function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlaying, onPlaybackChange, onSizeChange, onDock, onRestore, onClose }: {
+function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlaying, onPlaybackChange, onAnalyticsState, onSizeChange, onDock, onRestore, onClose }: {
   stream: VideoStream;
   docked: boolean;
   size: PlayerSize;
   initialPosition: number;
   initialPlaying: boolean;
   onPlaybackChange: (position: number, playing: boolean) => void;
+  onAnalyticsState: (playing: boolean) => void;
   onSizeChange: (size: PlayerSize) => void;
   onDock: () => void;
   onRestore: () => void;
@@ -405,8 +444,8 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
           {stream.format === 'odysee' && odysee
             ? <iframe src={odysee.embed} title={`${stream.title} — Odysee player`} sandbox="allow-scripts allow-same-origin allow-presentation" referrerPolicy="no-referrer" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="aspect-video w-full border-0 bg-black" />
             : stream.format === 'n94' && stream.event && stream.variant
-              ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /></Suspense>
-              : stream.format !== 'odysee' ? <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /> : null}
+              ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} onAnalyticsState={onAnalyticsState} /></Suspense>
+              : stream.format !== 'odysee' ? <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} onAnalyticsState={onAnalyticsState} /> : null}
         </div>
         {usesExternalEmbed && <p className="shrink-0 px-4 py-2 text-xs text-muted-foreground">This embedded video has its own volume controls. Ostrify’s global volume cannot adjust or mute it.</p>}
         {hasEmbeddedPlayer && sourceUrl && (!docked || stream.format === 'odysee') && <div className="shrink-0 px-4 py-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">{stream.format === 'odysee' ? 'Open on Odysee' : 'Open stream source'}</a></div>}

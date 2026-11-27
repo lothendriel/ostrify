@@ -194,7 +194,7 @@ class N94SegmentLoader implements mpegts.BaseLoader {
   }
 }
 
-export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlaybackChange }: { event: NostrEvent; variant: string; initialPlaying?: boolean; onPlaybackChange?: (position: number, playing: boolean) => void }) {
+export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlaybackChange, onAnalyticsState }: { event: NostrEvent; variant: string; initialPlaying?: boolean; onPlaybackChange?: (position: number, playing: boolean) => void; onAnalyticsState?: (playing: boolean) => void }) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -243,7 +243,7 @@ export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlayb
   }, [nostr, relayKey, event, variant, initialPlaying]);
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onVolumeChange={onVolumeChange} onPlay={() => onPlaybackChange?.(0, true)} onPause={() => onPlaybackChange?.(0, false)} onEnded={() => onPlaybackChange?.(0, false)} onError={() => onPlaybackChange?.(0, false)} />
+    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onVolumeChange={onVolumeChange} onPlay={() => onPlaybackChange?.(0, true)} onPlaying={() => onAnalyticsState?.(true)} onWaiting={() => onAnalyticsState?.(false)} onSeeking={() => onAnalyticsState?.(false)} onSeeked={event => { if (!event.currentTarget.paused && event.currentTarget.readyState >= 3) onAnalyticsState?.(true); }} onPause={() => { onAnalyticsState?.(false); onPlaybackChange?.(0, false); }} onEnded={() => { onAnalyticsState?.(false); onPlaybackChange?.(0, false); }} onError={() => { onAnalyticsState?.(false); onPlaybackChange?.(0, false); }} />
     {error && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
   </div>;
 }

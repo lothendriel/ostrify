@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { Activity, BookOpen, Clock3, Headphones, Heart, Library, Mic2, Music2, Radio, RotateCcw, Users } from "lucide-react";
+import { Activity, BookOpen, Clock3, Headphones, Heart, Library, Mic2, Music2, Radio, RotateCcw, Users, Video, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,7 +11,7 @@ import { useFollowedArtists } from "@/hooks/useFollowedArtists";
 import { usePodcastFavorites } from "@/hooks/usePodcasts";
 import { useAudiobookLibrary } from "@/hooks/useAudiobookLibrary";
 import { useNetworkPulse } from "@/hooks/useNetworkPulse";
-import { clearListeningRecords, readListeningRecords, type ListeningRecord } from "@/lib/listeningAnalytics";
+import { clearListeningRecords, clearVideoRecords, readListeningRecords, readVideoRecords, type ListeningRecord } from "@/lib/listeningAnalytics";
 import { AudioCatalogCapturePanel } from "@/components/AudioCatalogCapturePanel";
 import { isAllowedAudioCatalogCaptureUser } from "@/lib/audioCatalogCapture";
 
@@ -49,7 +49,7 @@ function recordTotals(records: ListeningRecord[]) {
 }
 
 export default function AnalyticsPage() {
-  useSeoMeta({ title: "Analytics — Ostrify", description: "Personal listening insights and live Nostr audio discovery stats." });
+  useSeoMeta({ title: "Analytics — Ostrify", description: "Private listening and video viewing insights, plus Nostr audio discovery stats." });
   const { user } = useCurrentUser();
   const canViewCatalogStats = isAllowedAudioCatalogCaptureUser(user?.pubkey);
   const player = usePlayer();
@@ -59,9 +59,11 @@ export default function AnalyticsPage() {
   const audiobookLibrary = useAudiobookLibrary();
   const network = useNetworkPulse();
   const owner = user?.pubkey ?? 'anonymous';
-  const [records, setRecords] = useState(() => readListeningRecords(owner));
+  const [analytics, setAnalytics] = useState(() => ({ owner, records: readListeningRecords(owner), videos: readVideoRecords(owner) }));
+  const records = analytics.owner === owner ? analytics.records : readListeningRecords(owner);
+  const videoRecords = analytics.owner === owner ? analytics.videos : readVideoRecords(owner);
   useEffect(() => {
-    const refresh = () => setRecords(readListeningRecords(owner));
+    const refresh = () => setAnalytics({ owner, records: readListeningRecords(owner), videos: readVideoRecords(owner) });
     window.addEventListener("ostrify-analytics-update", refresh);
     window.addEventListener("storage", refresh);
     return () => {
@@ -99,6 +101,28 @@ export default function AnalyticsPage() {
     }
     return [...aggregate.values()].sort((a, b) => b.seconds - a.seconds || b.plays - a.plays).slice(0, 5);
   }, [records]);
+  const videoStats = useMemo(() => {
+    const totals = { seconds: 0, sessions: 0, live: 0, recording: 0 };
+    const videos = new Map<string, { title: string; seconds: number; sessions: number; kind: 'live' | 'recording' }>();
+    const byDate = new Map<string, number>();
+    for (const record of videoRecords) {
+      totals.seconds += record.seconds;
+      totals.sessions += record.sessions;
+      totals[record.kind] += record.seconds;
+      byDate.set(record.date, (byDate.get(record.date) ?? 0) + record.seconds);
+      const current = videos.get(record.id) ?? { title: record.title, seconds: 0, sessions: 0, kind: record.kind };
+      current.seconds += record.seconds;
+      current.sessions += record.sessions;
+      videos.set(record.id, current);
+    }
+    const days = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - index));
+      const key = date.toISOString().slice(0, 10);
+      return { key, label: date.toLocaleDateString(undefined, { weekday: 'short' }), seconds: byDate.get(key) ?? 0 };
+    });
+    return { ...totals, unique: videos.size, top: [...videos.entries()].sort((a, b) => b[1].seconds - a[1].seconds || b[1].sessions - a[1].sessions).slice(0, 5), days };
+  }, [videoRecords]);
   const libraryCounts = useMemo(() => {
     const all = playlists.data ?? [];
     const liked = all.find(playlist => playlist.isLiked)?.trackIds.length ?? 0;
@@ -112,8 +136,8 @@ export default function AnalyticsPage() {
       <div className="absolute -right-10 -top-16 size-64 rounded-full bg-violet-500/20 blur-3xl" aria-hidden="true" />
       <div className="relative flex flex-wrap items-end justify-between gap-4">
         <div><p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-violet-200"><Activity className="size-4" /> Your Ostrify</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Listening, in perspective.</h1>
-          <p className="mt-2 max-w-xl text-sm text-white/70">A private look at your listening habits, alongside a live pulse of audio appearing across your Nostr relays.</p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Your listening, in perspective.</h1>
+          <p className="mt-2 max-w-xl text-sm text-white/70">A private look at your listening and video viewing, alongside a live pulse of audio appearing across your Nostr relays.</p>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-xs text-white/75"><Radio className="size-4 text-violet-200" /> {network.data ? `Relay snapshot · ${new Date(network.data.sampledAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Relay snapshot"}</div>
       </div>
@@ -121,7 +145,7 @@ export default function AnalyticsPage() {
 
     <section aria-labelledby="personal-analytics-heading" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 id="personal-analytics-heading" className="text-xl font-bold">Your listening</h2><p className="mt-1 text-sm text-muted-foreground">Stored only in this browser. Listening insights are never published to Nostr.</p></div>
-        <Button type="button" variant="ghost" size="sm" onClick={() => { clearListeningRecords(owner); setRecords([]); }} disabled={records.length === 0} className="text-muted-foreground"><RotateCcw className="mr-2 size-4" /> Clear listening data</Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => { clearListeningRecords(owner); }} disabled={records.length === 0} className="text-muted-foreground"><RotateCcw className="mr-2 size-4" /> Clear listening data</Button>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard icon={Clock3} label="Listening time" value={formatListeningTime(totals.seconds)} detail="Across this browser · last 180 days" />
@@ -151,6 +175,32 @@ export default function AnalyticsPage() {
       <article className="rounded-xl border border-border/60 bg-card p-4 sm:p-5"><div className="mb-4 flex items-center justify-between"><div><h3 className="font-semibold">Most listened</h3><p className="text-xs text-muted-foreground">Ranked by time played in this browser</p></div></div>
         {topTracks.length ? <ol className="divide-y divide-border/60">{topTracks.map((track, index) => <li key={`${track.title}-${index}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"><span className="w-5 text-center text-sm font-semibold text-muted-foreground">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-muted-foreground">{track.artist} · {track.plays} {track.plays === 1 ? "play" : "plays"}</p></div><span className="shrink-0 text-sm text-muted-foreground">{formatListeningTime(track.seconds)}</span></li>)}</ol> : <div className="rounded-lg border border-dashed p-6 text-center"><Headphones className="mx-auto size-7 text-muted-foreground" /><p className="mt-2 text-sm text-muted-foreground">Start listening and your personal chart will take shape here.</p></div>}
       </article>
+    </section>
+
+    <section aria-labelledby="video-analytics-heading" className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 id="video-analytics-heading" className="text-xl font-bold">Your video viewing</h2><p className="mt-1 text-sm text-muted-foreground">Private to this browser and account. Estimates cover directly played TuneStr streams and recordings.</p></div>
+        <Button type="button" variant="ghost" size="sm" onClick={() => { clearVideoRecords(owner); }} disabled={videoRecords.length === 0} className="text-muted-foreground"><RotateCcw className="mr-2 size-4" /> Clear video data</Button>
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard icon={Clock3} label="Watch time" value={formatListeningTime(videoStats.seconds)} detail="Direct playback · last 180 days" />
+        <StatCard icon={Video} label="Viewing sessions" value={videoStats.sessions} detail="Direct videos started in Ostrify" />
+        <StatCard icon={Film} label="Unique videos" value={videoStats.unique} detail="Live streams and recordings" />
+        <StatCard icon={Radio} label="Live watch time" value={formatListeningTime(videoStats.live)} detail={`${formatListeningTime(videoStats.recording)} in recordings`} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <article className="rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+          <div className="flex items-center justify-between"><div><h3 className="font-semibold">Video · last 7 days</h3><p className="text-xs text-muted-foreground">Estimated playback time per day</p></div><span className="text-sm font-semibold text-primary">{formatListeningTime(videoStats.days.reduce((sum, day) => sum + day.seconds, 0))}</span></div>
+          <div className="mt-6 grid h-36 grid-cols-7 items-end gap-2" role="img" aria-label={`Video playback time in the last seven days: ${videoStats.days.map(day => `${day.label} ${formatListeningTime(day.seconds)}`).join(', ')}`}>
+            {videoStats.days.map(day => <div key={day.key} className="flex h-full flex-col items-center justify-end gap-2"><span className="text-[10px] text-muted-foreground">{day.seconds >= 60 ? `${Math.round(day.seconds / 60)}m` : ''}</span><div className="flex h-24 w-full items-end rounded-md bg-secondary/60"><div className="w-full rounded-md bg-gradient-to-t from-violet-700 to-fuchsia-400" style={{ height: `${day.seconds ? Math.max(8, day.seconds / Math.max(60, ...videoStats.days.map(item => item.seconds)) * 100) : 0}%` }} /></div><span className="text-[10px] text-muted-foreground">{day.label}</span></div>)}
+          </div>
+        </article>
+        <article className="rounded-xl border border-border/60 bg-card p-4 sm:p-5">
+          <h3 className="font-semibold">Most watched</h3><p className="text-xs text-muted-foreground">Ranked by estimated playback time</p>
+          {videoStats.top.length ? <ol className="mt-4 divide-y divide-border/60">{videoStats.top.map(([id, video], index) => <li key={id} className="flex items-center gap-3 py-3"><span className="w-5 text-center text-sm font-semibold text-muted-foreground">{index + 1}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{video.title}</p><p className="text-xs text-muted-foreground">{video.kind === 'live' ? 'Live stream' : 'Recording'} · {video.sessions} {video.sessions === 1 ? 'session' : 'sessions'}</p></div><span className="shrink-0 text-sm text-muted-foreground">{formatListeningTime(video.seconds)}</span></li>)}</ol> : <div className="mt-4 rounded-lg border border-dashed p-6 text-center"><Video className="mx-auto size-7 text-muted-foreground" /><p className="mt-2 text-sm text-muted-foreground">Play a TuneStr video directly in Ostrify to start building your viewing stats.</p></div>}
+        </article>
+      </div>
+      <p className="text-xs text-muted-foreground">Playback time is estimated while a direct video is playing, including in the background; it does not prove you were watching. Pauses and buffering are excluded. Odysee and other embedded players, external sites and other devices are not included because playback cannot be reliably detected. Tracking begins with this update.</p>
     </section>
 
     <section aria-labelledby="network-analytics-heading" className="space-y-4">
