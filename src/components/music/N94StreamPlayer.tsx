@@ -4,6 +4,7 @@ import type { NPool, NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useNostr } from '@nostrify/react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useVideoVolume } from '@/hooks/useVideoVolume';
 import { getUserRelayUrls } from '@/lib/appRelays';
 import { sanitizeUrl } from '@/lib/sanitize';
 import { TUNESTR_RELAYS } from '@/hooks/useTunestrStreams';
@@ -214,6 +215,7 @@ export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlayb
   ])].sort();
   const relayKey = relays.join('|');
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const { onVolumeChange } = useVideoVolume(videoRef, event.id);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -241,7 +243,7 @@ export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlayb
   }, [nostr, relayKey, event, variant, initialPlaying]);
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onPlay={() => onPlaybackChange?.(0, true)} onPause={() => onPlaybackChange?.(0, false)} onEnded={() => onPlaybackChange?.(0, false)} onError={() => onPlaybackChange?.(0, false)} />
+    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onVolumeChange={onVolumeChange} onPlay={() => onPlaybackChange?.(0, true)} onPause={() => onPlaybackChange?.(0, false)} onEnded={() => onPlaybackChange?.(0, false)} onError={() => onPlaybackChange?.(0, false)} />
     {error && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
   </div>;
 }

@@ -239,6 +239,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             size="icon"
             onClick={player.toggleMute}
             aria-label={player.muted ? "Unmute" : "Mute"}
+            title="Mute or unmute Ostrify audio and supported video"
             className="rounded-full size-8 text-muted-foreground hover:text-foreground"
           >
             <VolumeIcon className="size-4" />
@@ -247,7 +248,7 @@ export function PlayerBar({ onQueueToggle, queueOpen = false }: { onQueueToggle:
             value={[player.muted ? 0 : player.volume * 100]}
             max={100}
             onValueChange={([v]) => player.setVolume(v / 100)}
-            aria-label="Volume"
+            aria-label="Global volume"
             className="w-24"
           />
         </div>

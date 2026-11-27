@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { accountStorageKey, cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useVideoVolume } from '@/hooks/useVideoVolume';
 import { PlayerContext } from '@/contexts/PlayerContext';
 import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 
@@ -231,6 +232,7 @@ function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlayba
   const autoplayAttempted = useRef(false);
   const source = classifyStreamPlayback(stream.url);
   const sourceType = source.type;
+  const { onVolumeChange } = useVideoVolume(videoRef, `${stream.id}:${sourceType}`);
   const sourceUrl = source.type === 'unsupported' ? undefined : source.url;
   const externalUrl = sanitizeUrl(stream.externalUrl);
 
@@ -302,7 +304,7 @@ function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlayba
   </div>;
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} src={source.type === 'video' ? source.url : undefined} controls playsInline crossOrigin="anonymous" className="size-full" aria-label={stream.title}
+    <video ref={videoRef} src={source.type === 'video' ? source.url : undefined} controls playsInline crossOrigin="anonymous" className="size-full" aria-label={stream.title} onVolumeChange={onVolumeChange}
       onCanPlay={event => {
         if (!initialPlaying || autoplayAttempted.current) return;
         autoplayAttempted.current = true;
@@ -339,6 +341,7 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
   const odysee = stream.format === 'odysee' ? odyseeUrls(stream) : null;
   const sourceUrl = stream.format === 'odysee' ? odysee?.external : sanitizeUrl(stream.externalUrl);
   const hasEmbeddedPlayer = stream.format === 'odysee' ? !!odysee : stream.format === 'n94' && !!stream.event && !!stream.variant || classifyStreamPlayback(stream.url).type !== 'unsupported';
+  const usesExternalEmbed = stream.format === 'odysee' ? !!odysee : stream.format !== 'n94' && classifyStreamPlayback(stream.url).type === 'embed';
   const widths = {
     small: '!w-[min(320px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
     medium: '!w-[min(420px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
@@ -399,6 +402,7 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
               ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /></Suspense>
               : stream.format !== 'odysee' ? <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /> : null}
         </div>
+        {usesExternalEmbed && <p className="shrink-0 px-4 py-2 text-xs text-muted-foreground">This embedded video has its own volume controls. Ostrify’s global volume cannot adjust or mute it.</p>}
         {hasEmbeddedPlayer && sourceUrl && (!docked || stream.format === 'odysee') && <div className="shrink-0 px-4 py-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">{stream.format === 'odysee' ? 'Open on Odysee' : 'Open stream source'}</a></div>}
       </div>
     </DialogContent>
