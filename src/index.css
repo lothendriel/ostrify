@@ -690,6 +690,14 @@
   border-radius: 50%;
 }
 
+/* The standard theme keeps a violet edge inside the green playback chaser. */
+:root:not(.october):not(.december):not(.valentines) .player-play-ring {
+  box-shadow: 0 0 0 3px #9553d7;
+}
+:root:not(.october):not(.december):not(.valentines) .player-play-ring-active::before {
+  inset: -8px;
+}
+
 .player-play-ring-active::before {
   content: '';
   position: absolute;
