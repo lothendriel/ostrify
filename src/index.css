@@ -690,12 +690,21 @@
   border-radius: 50%;
 }
 
-/* The standard theme keeps a violet edge inside the green playback chaser. */
-:root:not(.october):not(.december):not(.valentines) .player-play-ring {
-  box-shadow: 0 0 0 3px #9553d7;
+/* The standard player has a beveled violet rim; the green arc runs within it. */
+:root:not(.october):not(.december):not(.valentines) .player-play-ring::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #ecd2ff 0%, #a85ced 24%, #6421a1 52%, #bb77f2 76%, #4f1685 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  filter: drop-shadow(0 1px 2px rgb(47 7 80 / 65%));
+  pointer-events: none;
 }
 :root:not(.october):not(.december):not(.valentines) .player-play-ring-active::before {
-  inset: -8px;
+  inset: -5px;
+  z-index: 11;
 }
 
 .player-play-ring-active::before {
