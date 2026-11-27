@@ -4,6 +4,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata, type BlossomServerMetadata } from '@/contexts/AppContext';
 import { APP_RELAYS, isRequiredAppRelay } from '@/lib/appRelays';
 import { useOctober } from '@/hooks/useOctober';
+import { useDecember } from '@/hooks/useDecember';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -171,6 +172,7 @@ export function AppProvider(props: AppProviderProps) {
 
   // The seasonal palette is temporary and never modifies the saved preference.
   const isOctober = useOctober();
+  const isDecember = useDecember();
   useApplyTheme(config.theme);
   useEffect(() => {
     const root = document.documentElement;
@@ -182,6 +184,22 @@ export function AppProvider(props: AppProviderProps) {
       root.style.removeProperty('--october-art');
     };
   }, [isOctober]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('december', isDecember);
+    if (isDecember) {
+      root.style.setProperty('--december-art', 'url("/images/december-night.webp")');
+      root.style.setProperty('--december-garland', 'url("/images/december-garland.webp")');
+      root.style.setProperty('--december-bow', 'url("/images/december-bow.webp")');
+      root.style.setProperty('--december-hat', 'url("/images/december-hat.webp")');
+    } else {
+      for (const name of ['--december-art', '--december-garland', '--december-bow', '--december-hat']) root.style.removeProperty(name);
+    }
+    return () => {
+      root.classList.remove('december');
+      for (const name of ['--december-art', '--december-garland', '--december-bow', '--december-hat']) root.style.removeProperty(name);
+    };
+  }, [isDecember]);
 
   return (
     <AppContext.Provider value={appContextValue}>

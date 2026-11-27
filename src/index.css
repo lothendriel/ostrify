@@ -231,6 +231,42 @@
   --sidebar-ring: #ff9d25;
 }
 
+/* December temporarily dresses the app in evergreen without changing settings. */
+:root.december {
+  color-scheme: dark;
+  --background: #061410;
+  --foreground: #f9fff9;
+  --card: #09231d;
+  --card-foreground: #f9fff9;
+  --popover: #0a211b;
+  --popover-foreground: #f9fff9;
+  --primary: #55ed85;
+  --primary-foreground: #06200e;
+  --secondary: #123c2e;
+  --secondary-foreground: #f9fff9;
+  --muted: #173b30;
+  --muted-foreground: #d1e4d9;
+  --accent: #235541;
+  --accent-foreground: #f9fff9;
+  --border: #537461;
+  --input: #608572;
+  --ring: #ffcf6a;
+  --brand-violet: #ffcf71;
+  --brand-surface: #174531;
+  --shell-glow: rgb(16 111 65 / 35%);
+  --shell-glow-green: rgb(17 120 68 / 24%);
+  --shell-panel: #0b2c21;
+  --shell-edge: rgb(199 227 211 / 45%);
+  --sidebar: #061b14;
+  --sidebar-foreground: #f1fff5;
+  --sidebar-primary: #55ed85;
+  --sidebar-primary-foreground: #06200e;
+  --sidebar-accent: #174531;
+  --sidebar-accent-foreground: #f9fff9;
+  --sidebar-border: #537461;
+  --sidebar-ring: #ffcf6a;
+}
+
 @layer components {
   .ostrify-shell {
     background: radial-gradient(ellipse at 5% 0%, var(--shell-glow), transparent 42%), var(--background);
@@ -368,6 +404,104 @@
 .october .ostrify-audio-card:hover { border-color: #ffb84f; }
 @media (max-width: 640px) {
   .october .ostrify-atmosphere { height: 380px; background-position: center, 68% top; }
+}
+
+/* Snow, fir and lights frame the December interface without blocking controls. */
+.december .ostrify-atmosphere {
+  height: 480px;
+  background: linear-gradient(180deg, rgb(3 18 19 / 20%), rgb(4 24 20 / 12%) 55%, var(--card) 100%),
+    var(--december-art) center 46% / cover no-repeat;
+}
+.december .ostrify-header {
+  background: linear-gradient(180deg, rgb(3 25 20 / 92%), rgb(3 23 19 / 82%));
+  border-color: rgb(236 245 240 / 35%);
+}
+.december .ostrify-header::before,
+.december .ostrify-player::before,
+.december .made-for-you-section::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 20px;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--december-garland) center 16% / 360px auto repeat-x;
+}
+.december .ostrify-header::before { height: 12px; opacity: .9; }
+.december .ostrify-header { padding-top: 12px; }
+.december .ostrify-sidebar-panel {
+  background: linear-gradient(160deg, #103b29, #061a14 75%);
+  border-color: #8ea999;
+  border-top: 3px solid #e8f4f6;
+  box-shadow: inset 0 3px 7px rgb(255 255 255 / 10%);
+}
+.december .ostrify-logo-link::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  width: 35px;
+  height: 35px;
+  left: 7px;
+  top: 0;
+  transform: rotate(-18deg);
+  background: var(--december-hat) center / contain no-repeat;
+  pointer-events: none;
+}
+.december .ostrify-player {
+  background: radial-gradient(ellipse at 50% 0%, #51141b 0%, transparent 48%), linear-gradient(90deg, #071a15, #251014 50%, #071a15);
+  border-color: #f2fcff;
+  box-shadow: 0 -2px 12px rgb(244 252 255 / 30%);
+}
+.december .ostrify-player::before { height: 20px; }
+.december .player-play-button {
+  color: #fff;
+  background: radial-gradient(circle at 35% 25%, #ff6d54, #bc0918 65%, #700512);
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px #b90e21, 0 0 18px rgb(255 65 38 / 80%);
+}
+.december .player-play-button:hover { background: #f03932; }
+.december .home-greeting,
+.december .home-page h2,
+.december .home-page h3 { font-family: Georgia, 'Times New Roman', serif; }
+.december .home-greeting { text-shadow: 0 2px 12px #00130e; }
+.december .home-genres { text-shadow: 0 1px 8px #00130e; }
+.december .genre-pill {
+  border-color: #f4e8dc;
+  background: linear-gradient(#bb1d27, #900710);
+  color: #fff;
+  text-shadow: 0 1px 2px #51030a;
+  box-shadow: 0 1px 5px rgb(0 0 0 / 60%);
+}
+.december .genre-pill:nth-child(even) {
+  background: linear-gradient(#147b31, #00551c);
+  text-shadow: 0 1px 2px #003c12;
+}
+.december .genre-pill:hover { filter: brightness(1.2); }
+.december .made-for-you-section {
+  position: relative;
+  padding-top: 16px;
+  background: linear-gradient(125deg, #0a2c20, #0a201a 70%, #461219);
+  border-color: #b8d2c1;
+  border-top: 3px solid #ecf9fb;
+  box-shadow: inset 0 -8px 24px rgb(129 13 23 / 25%);
+}
+.december .made-for-you-section::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 50%;
+  width: 46px;
+  height: 38px;
+  transform: translateX(-50%);
+  background: var(--december-bow) center / contain no-repeat;
+  pointer-events: none;
+}
+.december .ostrify-audio-card { border-color: #d6a95f; }
+.december .ostrify-audio-card:hover { border-color: #ffe098; }
+@media (max-width: 640px) {
+  .december .ostrify-atmosphere { height: 400px; background-position: center, 65% top; }
+  .december .ostrify-header { padding-top: 12px; }
+  .december .ostrify-player::before { height: 12px; }
 }
 
 /* A small holiday garland, with a static treatment for reduced-motion users. */
