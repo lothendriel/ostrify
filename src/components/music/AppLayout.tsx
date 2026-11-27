@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide-react";
 import { ConcordClient, KeyValue, Helpers, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity } from '@jsr/applesauce__concord';
@@ -31,6 +31,18 @@ import { getUserRelayUrls } from '@/lib/appRelays';
 
 const ARMADA_INVITE = 'https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw';
 const CONCORD_RELAYS = ['wss://jskitty.com/nostr', 'wss://asia.vectorapp.io/nostr', 'wss://relay.ditto.pub', 'wss://relay.dreamith.to'];
+const CHAT_MEMBERSHIP_PREFIX = 'ostrify-armada-chat-joined-v1:';
+
+function readJoinedCommunity(pubkey: string): string | null {
+  try {
+    const id = localStorage.getItem(`${CHAT_MEMBERSHIP_PREFIX}${pubkey}`);
+    return id && /^[0-9a-f]{64}$/.test(id) ? id : null;
+  } catch { return null; }
+}
+
+function rememberJoinedCommunity(pubkey: string, communityId: string): void {
+  try { localStorage.setItem(`${CHAT_MEMBERSHIP_PREFIX}${pubkey}`, communityId); } catch { /* Chat remains available until the tab closes. */ }
+}
 
 type ChatUser = NonNullable<ReturnType<typeof useCurrentUser>['user']>;
 
@@ -54,7 +66,9 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ConcordChannel | null>(null);
   const alive = useRef(true);
-  const [phase, setPhase] = useState<'intro' | 'joining' | 'connected' | 'error'>('intro');
+  const startedRef = useRef(false);
+  const [savedCommunityId] = useState(() => readJoinedCommunity(user.pubkey));
+  const [phase, setPhase] = useState<'intro' | 'joining' | 'connected' | 'error'>(() => savedCommunityId ? 'joining' : 'intro');
   const [status, setStatus] = useState('');
   const [channel, setChannel] = useState<ConcordChannel | null>(null);
   const [messages, setMessages] = useState<ConcordChannelMessage[]>([]);
@@ -63,6 +77,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
   const [canSend, setCanSend] = useState(false);
   const [live, setLive] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     alive.current = true;
@@ -80,31 +95,31 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [channel, messages.length]);
 
-  const join = async () => {
+  const join = useCallback(async (restore = false) => {
     if (!user.signer.nip44) { setError('Your signer must support NIP-44 encryption to join this chat.'); setPhase('error'); return; }
-    setPhase('joining'); setError(''); setStatus('Connecting to community relays…');
+    setPhase('joining'); setError(''); setNotice(''); setStatus('Connecting to community relays…');
     const userRelays = getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
     const relays = [...new Set([...CONCORD_RELAYS, ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url), ...userRelays])];
+    // The SDK's default browser store contains community keys in plaintext.
+    // Keep it in memory; persist only its signed/encrypted list through Nostr.
     const client = new ConcordClient({ signer: user.signer, relays, storage: KeyValue.memoryStorage(), autoUnlock: true, autoSaveCommunityList: false, watchDirectInvites: false });
     clientRef.current = client;
     try {
-      await client.start();
+      // First-time invite discovery runs alongside the account-list sync rather
+      // than waiting for it and then waiting for a second relay pool timeout.
+      const parsed = Helpers.parseInviteLink(ARMADA_INVITE);
+      const inviteRead = restore ? null : queryLibraryEvents(nostr, parsed.bootstrapRelays, [{ kinds: [33301], authors: [parsed.linkSigner] }], AbortSignal.timeout(8000));
+      const [result] = await Promise.all([inviteRead, client.start()]);
       if (!alive.current) return;
-      setStatus('Checking the invite and joining…');
       let community: ConcordCommunity;
-      try {
-        community = await client.joinByLink(ARMADA_INVITE);
-      } catch (cause) {
-        if (!(cause instanceof Error) || cause.message !== 'invite bundle not found or revoked') throw cause;
-        // The Concord pool can time out when a slow relay never sends EOSE,
-        // discarding events already returned by the other relays. Retry through
-        // independent bounded subscriptions and verify the winning coordinate.
-        setStatus('Checking additional relays for the invite…');
-        const parsed = Helpers.parseInviteLink(ARMADA_INVITE);
-        const result = await queryLibraryEvents(nostr, parsed.bootstrapRelays, [{ kinds: [33301], authors: [parsed.linkSigner] }], AbortSignal.timeout(8000), { waitForAll: true });
-        if (!alive.current) return;
-        // A partial read can never rule out a newer revocation on an unreachable relay.
-        if (!result.complete) setError('Some invite relays did not respond; a newer revocation may not have been seen.');
+      if (restore && savedCommunityId) {
+        const restored = client.getCommunity(savedCommunityId);
+        if (!restored) throw new Error('Your saved community could not be restored from your relays. Check your connection and try again.');
+        community = restored;
+      } else {
+        if (!result) throw new Error('The invite could not be checked.');
+        setStatus('Checking the invite and joining…');
+        if (!result.complete) setNotice('Some invite relays did not respond; a newer revocation may not have been seen.');
         const events = result.events.filter(event => event.kind === 33301 && event.pubkey === parsed.linkSigner && event.tags.some(tag => tag[0] === 'd' && tag[1] === '') && verifyEvent(event))
           .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id));
         const winner = events[0];
@@ -113,6 +128,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
         const bundle = Helpers.validateInviteBundle(Helpers.getInviteBundle(winner, parsed.token));
         if (!bundle) throw new Error('The invite could not be verified.');
         community = await client.joinByBundle(bundle);
+        rememberJoinedCommunity(user.pubkey, community.communityId);
       }
       if (!alive.current) return;
       const updateChannel = () => {
@@ -138,7 +154,14 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
       client.dispose(); if (clientRef.current === client) clientRef.current = null;
       if (alive.current) { setError(cause instanceof Error ? cause.message : 'Unable to connect to Armada.'); setPhase('error'); }
     }
-  };
+  }, [config, nostr, savedCommunityId, user]);
+
+  useEffect(() => {
+    if (savedCommunityId && !startedRef.current) {
+      startedRef.current = true;
+      void join(true);
+    }
+  }, [join, savedCommunityId]);
 
   const send = async () => {
     const body = text.trim();
@@ -158,9 +181,9 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
       <p className="text-sm text-muted-foreground">Join the Ostrify Armada community to chat in #ostrify-site-chat with your Nostr identity.</p>
       <p className="text-sm text-muted-foreground">This invite is public. Anyone with it can join and read messages in the channels it grants. Joining publishes your membership and an encrypted community list using your signer.</p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <Button className="w-full" onClick={() => void join()}>{phase === 'error' ? 'Try again' : 'Join chat'}</Button>
+      <Button className="w-full" onClick={() => void join(Boolean(savedCommunityId))}>{phase === 'error' ? 'Try again' : 'Join chat'}</Button>
     </div> : phase === 'joining' ? <div className="p-4 text-sm text-muted-foreground" role="status">{status}</div> : <>
-      <div role="status" className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">{status}</div>
+      <div role="status" className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">{status}{notice && <p className="mt-1">{notice}</p>}</div>
       <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
         {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #ostrify-site-chat channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...messages].reverse().slice(-100).map(message => <ChatMessage key={message.rumor.id} message={message} />)}
       <div ref={messagesEndRef} /></div></ScrollArea>
@@ -176,7 +199,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [chatOpened, setChatOpened] = useState(false);
+  const [chatOpenedFor, setChatOpenedFor] = useState<string | null>(null);
   const { setContentPane, expanded } = useTunestrPlayer();
   const queryClient = useQueryClient();
   const [homeSessionScope] = useState(() => crypto.randomUUID());
@@ -204,10 +227,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     void statuses.refetch();
   }, [friendsPageOpen, activePanel, user, followedPeople.hasReadRelays, friendKey, statuses.refetch]);
   const togglePanel = (panel: 'friends' | 'queue' | 'notifications' | 'chat') => {
-    if (panel === 'chat') setChatOpened(true);
+    if (panel === 'chat' && user) setChatOpenedFor(user.pubkey);
     setActivePanel(current => current === panel ? null : panel);
   };
   const visiblePanel = activePanel === 'chat' && !user ? null : activePanel;
+  const shouldMountChat = !!user && (chatOpenedFor === user.pubkey || !!readJoinedCommunity(user.pubkey));
 
   return (
     <div className="ostrify-shell fixed inset-x-0 top-0 flex h-svh flex-col overflow-hidden text-foreground">
@@ -296,7 +320,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           </div>
         </div>}
-        {chatOpened && user && <div
+        {shouldMountChat && user && <div
           aria-hidden={visiblePanel !== 'chat'}
           inert={visiblePanel !== 'chat'}
           className={isMobile
