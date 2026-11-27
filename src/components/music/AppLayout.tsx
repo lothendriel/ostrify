@@ -4,8 +4,9 @@ import { ArrowLeft, Home, Menu, RefreshCw, MessageCircle, Send, X } from "lucide
 import { ConcordClient, KeyValue, Helpers, type ConcordChannel, type ConcordChannelMessage, type ConcordCommunity, type ConcordStorage } from '@jsr/applesauce__concord';
 import { useNostr } from '@nostrify/react';
 import { verifyEvent } from 'nostr-tools';
-import { queryLibraryEvents } from '@/lib/libraryQuery';
-import { useAuthor } from '@/hooks/useAuthor';
+import { useQuery } from '@tanstack/react-query';
+import { NSchema } from '@nostrify/nostrify';
+import { isNewerReplaceableEvent, queryLibraryEvents } from '@/lib/libraryQuery';
 import { genUserName } from '@/lib/sanitize';
 import { Textarea } from '@/components/ui/textarea';
 import { usePreviousLocation } from "@/components/NavigationHistory";
@@ -78,13 +79,12 @@ function rememberJoinedCommunity(pubkey: string, communityId: string): void {
 
 type ChatUser = NonNullable<ReturnType<typeof useCurrentUser>['user']>;
 
-function ChatMessage({ message }: { message: ConcordChannelMessage }) {
-  const { data } = useAuthor(message.rumor.pubkey);
-  const name = data?.metadata?.display_name || data?.metadata?.name || genUserName(message.rumor.pubkey);
+function ChatMessage({ message, name }: { message: ConcordChannelMessage; name?: string }) {
+  const displayName = name || genUserName(message.rumor.pubkey);
   const date = new Date(message.rumor.created_at * 1000);
   const validDate = Number.isFinite(date.getTime());
   return <article className="min-w-0 rounded-lg bg-secondary/40 p-3">
-    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-semibold">{name}</span>{validDate && <time className="shrink-0 text-xs text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}</div>
+    <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-semibold">{displayName}</span>{validDate && <time className="shrink-0 text-xs text-muted-foreground" dateTime={date.toISOString()}>{date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>}</div>
     <p className="mt-1 whitespace-pre-wrap break-words text-sm">{message.content}</p>
     {message.edit && <span className="text-xs text-muted-foreground">Edited</span>}
   </article>;
@@ -111,6 +111,34 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
   const [live, setLive] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const visibleMessages = messages.slice(0, 100);
+  const authors = [...new Set(visibleMessages.map(message => message.rumor.pubkey))].sort();
+  const authorKey = authors.join('|');
+  const authorProfiles = useQuery({
+    queryKey: ['armada-chat-authors', authorKey],
+    enabled: authors.length > 0,
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const requested = new Set(authorKey.split('|').filter(Boolean));
+      const events = await nostr.query([{ kinds: [0], authors: [...requested], limit: Math.max(100, requested.size * 3) }], { signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]) });
+      const latest = new Map<string, typeof events[number]>();
+      for (const event of events) {
+        if (event.kind !== 0 || !requested.has(event.pubkey)) continue;
+        const prior = latest.get(event.pubkey);
+        if (!prior || isNewerReplaceableEvent(event, prior)) latest.set(event.pubkey, event);
+      }
+      const names: Record<string, string> = {};
+      for (const [pubkey, event] of latest) {
+        try {
+          const metadata = NSchema.json().pipe(NSchema.metadata()).parse(event.content);
+          const name = metadata.display_name || metadata.name;
+          if (name) names[pubkey] = name;
+        } catch { /* A missing or malformed profile uses the fallback name. */ }
+      }
+      return names;
+    },
+  });
 
   useEffect(() => {
     alive.current = true;
@@ -138,9 +166,16 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
   const join = useCallback(async (restore = false) => {
     if (!user.signer.nip44) { setError('Your signer must support NIP-44 encryption to join this chat.'); setPhase('error'); return; }
     setPhase('joining'); setError(''); setNotice(''); setStatus('Connecting to community relays…');
-    const userRelays = getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey);
-    const relays = [...new Set([...CONCORD_RELAYS, ...config.relayMetadata.relays.filter(relay => relay.read || relay.write).map(relay => relay.url), ...userRelays])];
+    const userRelays = [
+      ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'read', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+      ...getUserRelayUrls(config.userRelayMetadata, config.userRelayPubkey, user.pubkey, 'write', config.excludedUserRelayUrls, config.excludedUserRelayPubkey),
+    ];
+    // Avoid querying music-only read relays for the encrypted account list.
+    // Preserve configured write relays (including existing memberships stored
+    // there), NIP-65 read/write relays, and Concord's own defaults.
+    const relays = [...new Set([...CONCORD_RELAYS, ...config.relayMetadata.relays.filter(relay => relay.write).map(relay => relay.url), ...userRelays])];
     const startedAt = performance.now();
+    chatTiming('Account relay targets', startedAt, { count: relays.length });
     syncStartedAt.current = startedAt;
     const client = new ConcordClient({ signer: user.signer, relays, storage: createChatStorage(user.pubkey), autoUnlock: true, autoSaveCommunityList: false, watchDirectInvites: false });
     clientRef.current = client;
@@ -237,7 +272,7 @@ function ArmadaChatPanel({ user, onClose }: { user: ChatUser; onClose: () => voi
     </div> : phase === 'joining' ? <div className="p-4 text-sm text-muted-foreground" role="status">{status}</div> : <>
       <div role="status" className="border-b border-border/50 px-4 py-2 text-xs text-muted-foreground">{status}{notice && <p className="mt-1">{notice}</p>}</div>
       <ScrollArea type="always" className="min-h-0 flex-1 px-4 py-3"><div className="space-y-2">
-        {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #ostrify-site-chat channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...messages].reverse().slice(-100).map(message => <ChatMessage key={message.rumor.id} message={message} />)}
+        {!channel ? <p className="text-sm text-muted-foreground">Waiting for the #ostrify-site-chat channel. If it doesn’t appear, check the invite and relay connections.</p> : messages.length === 0 ? <p className="text-sm text-muted-foreground">No messages loaded yet. Relay results may take a moment.</p> : [...visibleMessages].reverse().map(message => <ChatMessage key={message.rumor.id} message={message} name={authorProfiles.data?.[message.rumor.pubkey]} />)}
       <div ref={messagesEndRef} /></div></ScrollArea>
       <div className="space-y-2 border-t border-border/70 p-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
