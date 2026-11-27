@@ -193,7 +193,7 @@ class N94SegmentLoader implements mpegts.BaseLoader {
   }
 }
 
-export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant: string }) {
+export function N94StreamPlayer({ event, variant, initialPlaying = true, onPlaybackChange }: { event: NostrEvent; variant: string; initialPlaying?: boolean; onPlaybackChange?: (position: number, playing: boolean) => void }) {
   const { nostr } = useNostr();
   const { config } = useAppContext();
   const { user } = useCurrentUser();
@@ -233,13 +233,15 @@ export function N94StreamPlayer({ event, variant }: { event: NostrEvent; variant
     });
     player.attachMediaElement(video);
     player.load();
-    const playback = player.play();
-    if (playback instanceof Promise) void playback.catch(() => setError('Press play to start this TuneStr stream.'));
+    if (initialPlaying) {
+      const playback = player.play();
+      if (playback instanceof Promise) void playback.catch(() => setError('Press play to start this TuneStr stream.'));
+    }
     return () => player.destroy();
-  }, [nostr, relayKey, event, variant]);
+  }, [nostr, relayKey, event, variant, initialPlaying]);
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" />
+    <video ref={videoRef} controls playsInline disablePictureInPicture className="size-full" aria-label="TuneStr live stream" onPlay={() => onPlaybackChange?.(0, true)} onPause={() => onPlaybackChange?.(0, false)} />
     {error && <div role="status" className="absolute inset-x-0 bottom-12 mx-3 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
   </div>;
 }

@@ -1,7 +1,8 @@
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ExternalLink, Maximize2, PictureInPicture2, ShieldAlert, X } from 'lucide-react';
-import type { TunestrStream } from '@/hooks/useTunestrStreams';
+import { verifyEvent, type Event as NostrEvent } from 'nostr-tools';
+import { parseN94Stream, type TunestrStream } from '@/hooks/useTunestrStreams';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
@@ -10,6 +11,77 @@ import { classifyStreamPlayback, sanitizeUrl } from '@/lib/sanitize';
 const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').then(module => ({ default: module.N94StreamPlayer })));
 
 type PlayerSize = 'small' | 'medium' | 'large';
+
+const VIDEO_SESSION_KEY = 'ostrify:tunestr-player:v1';
+
+type SavedVideoPlayer = {
+  stream: TunestrStream;
+  docked: boolean;
+  size: PlayerSize;
+  position: number;
+  playing: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function restoreVideoPlayer(): SavedVideoPlayer | null {
+  try {
+    const raw = sessionStorage.getItem(VIDEO_SESSION_KEY);
+    if (!raw || raw.length > 256_000) return null;
+    const saved: unknown = JSON.parse(raw);
+    if (!isRecord(saved) || !isRecord(saved.stream)) return null;
+    const value = saved.stream;
+    let stream: TunestrStream | null = null;
+    if (value.format === 'n94') {
+      const event = value.event;
+      if (!isRecord(event) || event.kind !== 1053 || typeof event.id !== 'string' || typeof event.pubkey !== 'string' || typeof event.sig !== 'string' || typeof event.content !== 'string' || typeof event.created_at !== 'number' || !Array.isArray(event.tags) || !event.tags.every(tag => Array.isArray(tag) && tag.every(part => typeof part === 'string'))) return null;
+      const signed = event as unknown as NostrEvent;
+      if (!verifyEvent(signed)) return null;
+      stream = parseN94Stream(signed);
+    } else if (value.format === 'nip53') {
+      const url = typeof value.url === 'string' ? sanitizeUrl(value.url) : undefined;
+      if (typeof value.id !== 'string' || !value.id || typeof value.title !== 'string' || !value.title.trim() || !url || typeof value.isLive !== 'boolean') return null;
+      const externalUrl = typeof value.externalUrl === 'string' ? sanitizeUrl(value.externalUrl) : undefined;
+      const createdAt = typeof value.createdAt === 'number' && Number.isFinite(value.createdAt) ? value.createdAt : 0;
+      stream = {
+        id: value.id, title: value.title, summary: typeof value.summary === 'string' ? value.summary : undefined,
+        url, externalUrl: externalUrl ?? url, createdAt, status: value.isLive ? 'live' : 'ended', isLive: value.isLive, format: 'nip53',
+        track: { id: value.id, title: value.title, url, pubkey: '', kind: 'music', source: 'tunestr', topics: [], createdAt },
+      };
+    }
+    if (!stream) return null;
+    return {
+      stream,
+      docked: saved.docked !== false,
+      size: saved.size === 'medium' || saved.size === 'large' ? saved.size : 'small',
+      position: typeof saved.position === 'number' && Number.isFinite(saved.position) && saved.position >= 0 ? saved.position : 0,
+      playing: saved.playing === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveVideoPlayer(value: SavedVideoPlayer | null) {
+  try {
+    if (!value) sessionStorage.removeItem(VIDEO_SESSION_KEY);
+    else {
+      const { stream } = value;
+      sessionStorage.setItem(VIDEO_SESSION_KEY, JSON.stringify({
+        ...value,
+        stream: {
+          id: stream.id, title: stream.title, summary: stream.summary, url: stream.url, externalUrl: stream.externalUrl,
+          createdAt: stream.createdAt, isLive: stream.isLive, format: stream.format,
+          ...(stream.format === 'n94' ? { event: stream.event } : {}),
+        },
+      }));
+    }
+  } catch {
+    // Playback remains available even if browser storage is disabled.
+  }
+}
 
 interface TunestrPlayerContextValue {
   openStream: (stream: TunestrStream) => void;
@@ -20,23 +92,52 @@ interface TunestrPlayerContextValue {
 const TunestrPlayerContext = createContext<TunestrPlayerContextValue | null>(null);
 
 export function TunestrPlayerProvider({ children }: { children: ReactNode }) {
-  const [stream, setStream] = useState<TunestrStream | null>(null);
-  const [docked, setDocked] = useState(true);
-  const [size, setSize] = useState<PlayerSize>('small');
+  const [saved] = useState(restoreVideoPlayer);
+  const [stream, setStream] = useState<TunestrStream | null>(saved?.stream ?? null);
+  const [docked, setDocked] = useState(saved?.docked ?? true);
+  const [size, setSize] = useState<PlayerSize>(saved?.size ?? 'small');
   const [contentPane, setContentPane] = useState<HTMLDivElement | null>(null);
+  const playbackRef = useRef({ position: saved?.position ?? 0, playing: saved?.playing ?? true });
+  const restoredRef = useRef(!!saved);
+  const lastPlaybackWrite = useRef(0);
+
+  useEffect(() => {
+    saveVideoPlayer(stream ? { stream, docked, size, ...playbackRef.current } : null);
+  }, [stream, docked, size]);
+
+  const savePlayback = (position: number, playing: boolean) => {
+    const changedPlaying = playbackRef.current.playing !== playing;
+    playbackRef.current = { position, playing };
+    const now = Date.now();
+    if (stream && (changedPlaying || now - lastPlaybackWrite.current >= 5_000)) {
+      lastPlaybackWrite.current = now;
+      saveVideoPlayer({ stream, docked, size, position, playing });
+    }
+  };
+
+  useEffect(() => {
+    const saveOnPageHide = () => {
+      if (stream) saveVideoPlayer({ stream, docked, size, ...playbackRef.current });
+    };
+    window.addEventListener('pagehide', saveOnPageHide);
+    return () => window.removeEventListener('pagehide', saveOnPageHide);
+  }, [stream, docked, size]);
 
   const player = stream && <TunestrVideoPlayer
     key={stream.id}
     stream={stream}
     docked={docked}
     size={size}
+    initialPosition={saved?.stream.id === stream.id && restoredRef.current ? saved.position : 0}
+    initialPlaying={saved?.stream.id === stream.id && restoredRef.current ? saved.playing : true}
+    onPlaybackChange={savePlayback}
     onSizeChange={setSize}
     onDock={() => setDocked(true)}
     onRestore={() => setDocked(false)}
-    onClose={() => { setDocked(true); setStream(null); }}
+    onClose={() => { saveVideoPlayer(null); setDocked(true); setStream(null); }}
   />;
 
-  return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { setStream(nextStream); setSize('small'); setDocked(true); }, setContentPane, expanded: !!stream && !docked }}>
+  return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { restoredRef.current = false; playbackRef.current = { position: 0, playing: true }; setStream(nextStream); setSize('small'); setDocked(true); }, setContentPane, expanded: !!stream && !docked }}>
     {children}
     {contentPane ? createPortal(player, contentPane) : player}
   </TunestrPlayerContext.Provider>;
@@ -48,9 +149,12 @@ export function useTunestrPlayer() {
   return context;
 }
 
-function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
+function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlaybackChange }: { stream: TunestrStream; initialPosition: number; initialPlaying: boolean; onPlaybackChange: (position: number, playing: boolean) => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const positionRestored = useRef(false);
+  const autoplayAttempted = useRef(false);
   const source = classifyStreamPlayback(stream.url);
   const sourceType = source.type;
   const sourceUrl = source.type === 'unsupported' ? undefined : source.url;
@@ -124,15 +228,34 @@ function TunestrVideoSurface({ stream }: { stream: TunestrStream }) {
   </div>;
 
   return <div className="relative aspect-video w-full bg-black">
-    <video ref={videoRef} src={source.type === 'video' ? source.url : undefined} controls autoPlay playsInline crossOrigin="anonymous" className="size-full" aria-label={stream.title} onError={() => setError('This video could not be loaded. Check the source or try again.')} />
-    {error && <div role="status" className="absolute inset-x-3 bottom-14 rounded-lg bg-black/80 p-3 text-sm text-white">{error}</div>}
+    <video ref={videoRef} src={source.type === 'video' ? source.url : undefined} controls playsInline crossOrigin="anonymous" className="size-full" aria-label={stream.title}
+      onCanPlay={event => {
+        if (!initialPlaying || autoplayAttempted.current) return;
+        autoplayAttempted.current = true;
+        void event.currentTarget.play().catch(() => setAutoplayBlocked(true));
+      }}
+      onLoadedMetadata={event => {
+        const video = event.currentTarget;
+        if (!positionRestored.current && !stream.isLive && initialPosition > 0 && Number.isFinite(video.duration)) {
+          video.currentTime = Math.min(initialPosition, Math.max(0, video.duration - 0.1));
+          positionRestored.current = true;
+        }
+      }}
+      onTimeUpdate={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, !event.currentTarget.paused)}
+      onPlay={event => { setAutoplayBlocked(false); onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, true); }}
+      onPause={event => onPlaybackChange(stream.isLive ? 0 : event.currentTarget.currentTime, false)}
+      onError={() => setError('This video could not be loaded. Check the source or try again.')} />
+    {(error || autoplayBlocked) && <div role="status" className="absolute inset-x-3 bottom-14 rounded-lg bg-black/80 p-3 text-sm text-white">{error || 'Press play to resume this video.'}</div>}
   </div>;
 }
 
-function TunestrVideoPlayer({ stream, docked, size, onSizeChange, onDock, onRestore, onClose }: {
+function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlaying, onPlaybackChange, onSizeChange, onDock, onRestore, onClose }: {
   stream: TunestrStream;
   docked: boolean;
   size: PlayerSize;
+  initialPosition: number;
+  initialPlaying: boolean;
+  onPlaybackChange: (position: number, playing: boolean) => void;
   onSizeChange: (size: PlayerSize) => void;
   onDock: () => void;
   onRestore: () => void;
@@ -195,8 +318,8 @@ function TunestrVideoPlayer({ stream, docked, size, onSizeChange, onDock, onRest
         </div>
         <div className={cn(!docked && 'flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black [&>div]:!h-full [&>div]:!w-full [&>div]:!aspect-auto [&>iframe]:!h-full [&>iframe]:!w-full [&>iframe]:!aspect-auto')}>
           {stream.format === 'n94' && stream.event && stream.variant
-            ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} /></Suspense>
-            : <TunestrVideoSurface stream={stream} />}
+            ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /></Suspense>
+            : <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} />}
         </div>
         {!docked && hasEmbeddedPlayer && sourceUrl && <div className="shrink-0 px-4 py-3"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a></div>}
       </div>
