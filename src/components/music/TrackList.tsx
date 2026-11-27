@@ -26,10 +26,11 @@ interface TrackListProps {
   page?: number;
   onPageChange?: (page: number) => void;
   pageSize?: number;
+  alwaysShowPagination?: boolean;
   renderTrailingAction?: (track: Track) => ReactNode;
 }
 
-export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, onReorder, bulkSelect = true, selectionLabel = 'tracks', hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange, pageSize = TRACKS_PER_PAGE, renderTrailingAction }: TrackListProps) {
+export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, emptyMessage, onReorder, bulkSelect = true, selectionLabel = 'tracks', hasMore = false, isLoadingMore = false, onLoadMore, page: controlledPage, onPageChange, pageSize = TRACKS_PER_PAGE, alwaysShowPagination = false, renderTrailingAction }: TrackListProps) {
   const player = usePlayer();
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -88,7 +89,7 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
     );
   }
 
-  const pagination = (position: 'top' | 'bottom') => tracks.length > pageSize || page < pageCount || hasMore && !!onLoadMore ? <nav aria-label={`Track pagination (${position})`} className={`${position === 'top' ? 'mb-4' : 'mt-4'} flex flex-wrap items-center justify-between gap-3 border-y py-3`}>
+  const pagination = (position: 'top' | 'bottom') => alwaysShowPagination || tracks.length > pageSize || page < pageCount || hasMore && !!onLoadMore ? <nav aria-label={`Track pagination (${position})`} className={`${position === 'top' ? 'mb-4' : 'mt-4'} flex flex-wrap items-center justify-between gap-3 border-y py-3`}>
     <Button type="button" variant="outline" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={displayedPage <= 1 || isLoadingMore}><ChevronLeft className="size-4" /> Previous</Button>
     <p aria-live="polite" className="text-sm text-muted-foreground">Page {displayedPage}{!hasMore && <span> of {pageCount}</span>} <span className="hidden sm:inline">· {tracks.length} tracks {canLoadMore ? 'loaded' : 'total'}</span></p>
     <Button type="button" variant="outline" onClick={() => void next()} disabled={isLoadingMore || !nextPageAvailable}>{isLoadingMore ? 'Loading…' : 'Next'} <ChevronRight className="size-4" /></Button>
@@ -97,12 +98,13 @@ export function TrackList({ tracks, isLoading, onCreatePlaylist, onRemove, empty
   if (tracks.length === 0) {
     return (
       <div className="space-y-4">
-        {canLoadMore && pagination('top')}
+        {(canLoadMore || alwaysShowPagination) && pagination('top')}
         <div className="border border-dashed border-border rounded-lg py-12 px-8 text-center">
           <p className="text-muted-foreground max-w-sm mx-auto">
             {emptyMessage ?? "No tracks here yet."}
           </p>
         </div>
+        {alwaysShowPagination && pagination('bottom')}
       </div>
     );
   }

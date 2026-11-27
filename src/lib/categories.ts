@@ -66,6 +66,100 @@ export const CATEGORIES: { id: string; label: string; match: string[]; wavlakeGe
   },
 ];
 
+export interface Subgenre {
+  id: string;
+  label: string;
+  match: string[];
+}
+
+/** Explicit tag groups for browsing within the existing broad genre categories. */
+export const SUBGENRES: Record<string, Subgenre[]> = {
+  rock: [
+    { id: 'alternative', label: 'Alternative & Indie', match: ['alternative', 'alternative rock', 'altrock', 'indie', 'indie rock', 'britpop', 'artrock'] },
+    { id: 'classic-rock', label: 'Classic Rock', match: ['classicrock', 'rocknroll', 'rockandroll', 'arenarock', 'glamrock'] },
+    { id: 'hard-rock', label: 'Hard Rock', match: ['hardrock', 'stonerrock', 'southernrock', 'garagerock', 'spacerock'] },
+    { id: 'punk', label: 'Punk', match: ['punk', 'punkrock', 'poppunk', 'hardcore', 'hardcorepunk', 'posthardcore', 'skatepunk', 'skapunk', 'metalpunk'] },
+    { id: 'metal', label: 'Metal', match: ['metal', 'heavymetal', 'metalcore', 'deathcore', 'deathmetal', 'blackmetal', 'thrashmetal', 'doommetal', 'stonermetal', 'numetal', 'industrialmetal', 'gothicmetal', 'christianmetal', 'grindcore', 'powermetal', 'symphonicmetal', 'folkmetal', 'vikingmetal', 'sludgemetal', 'postmetal', 'progressivemetal'] },
+    { id: 'grunge', label: 'Grunge', match: ['grunge', 'postgrunge'] },
+    { id: 'progressive', label: 'Progressive & Post-Rock', match: ['progressiverock', 'progrock', 'postrock', 'mathrock'] },
+    { id: 'psychedelic', label: 'Psychedelic Rock', match: ['psychedelicrock', 'psychrock'] },
+    { id: 'gothic', label: 'Gothic & Post-Punk', match: ['gothicrock', 'postpunk', 'coldwave', 'darkwave', 'newwave'] },
+    { id: 'shoegaze', label: 'Shoegaze & Dream Pop', match: ['shoegaze', 'dreampop', 'noiserock'] },
+    { id: 'roots-rock', label: 'Roots & Acoustic Rock', match: ['bluesrock', 'countryrock', 'folkrock', 'acousticrock', 'softrock', 'surfrock'] },
+    { id: 'industrial', label: 'Industrial', match: ['industrial', 'industrialmusic', 'industrialrock'] },
+    { id: 'emo', label: 'Emo & Screamo', match: ['emo', 'screamo'] },
+    { id: 'christian-rock', label: 'Christian Rock', match: ['christianrock'] },
+  ],
+  electronic: [
+    { id: 'house', label: 'House', match: ['house', 'deephouse', 'techhouse', 'progressivehouse', 'electrohouse', 'garagehouse', 'technohouse'] },
+    { id: 'techno', label: 'Techno', match: ['techno', 'minimaltechno', 'hardcoretechno'] },
+    { id: 'trance', label: 'Trance', match: ['trance', 'trancemusic', 'psytrance', 'progressivetrance', 'vocaltrance', 'hardtrance'] },
+    { id: 'drum-and-bass', label: 'Drum & Bass / Jungle', match: ['dnb', 'drumandbass', 'jungle', 'junglemusic', 'liquiddnb', 'neurofunk'] },
+    { id: 'dubstep', label: 'Dubstep & Bass', match: ['dubstep', 'brostep', 'futurebass', 'bassmusic', 'ukbass', 'bassline'] },
+    { id: 'garage', label: 'UK Garage', match: ['garage', 'ukgarage', 'ukg', 'speedgarage', '2step'] },
+    { id: 'synthwave', label: 'Synthwave & Retrowave', match: ['synthwave', 'retrowave', 'vaporwave', 'vaporwavemusic'] },
+    { id: 'synthpop', label: 'Synthpop & Electropop', match: ['synthpop', 'electropop', 'electroclash', 'italodisco'] },
+    { id: 'downtempo', label: 'Downtempo & Trip-Hop', match: ['downtempo', 'triphop'] },
+    { id: 'experimental', label: 'Experimental & IDM', match: ['idm', 'glitch', 'leftfield', 'experimentalelectronic', 'chiptune'] },
+    { id: 'dance', label: 'Dance & EDM', match: ['edm', 'dance', 'dancemusic', 'danceedm', 'electronicdancemusic', 'rave', 'hardstyle', 'breakbeat', 'bigbeat'] },
+  ],
+  hiphop: [
+    { id: 'trap', label: 'Trap & Drill', match: ['trap', 'drill', 'cloudrap', 'mumblerap', 'phonk'] },
+    { id: 'boom-bap', label: 'Boom Bap & Old School', match: ['boombap', 'oldschoolhiphop'] },
+    { id: 'conscious', label: 'Conscious & Underground', match: ['consciousrap', 'undergroundhiphop', 'alternativehiphop'] },
+    { id: 'regional', label: 'Regional Hip-Hop', match: ['southernhiphop', 'latinhiphop', 'gangstarap', 'grime', 'jerseyclub'] },
+    { id: 'jazz-rap', label: 'Jazz Rap & R&B', match: ['jazzrap', 'rnb rap'] },
+    { id: 'spoken-word', label: 'Spoken Word & Freestyle', match: ['spokenword', 'freestyle', 'battlerap'] },
+  ],
+  jazz: [
+    { id: 'jazz', label: 'Jazz', match: ['jazz', 'smoothjazz', 'bebop', 'swing', 'bigband', 'fusion', 'jazzfusion', 'freejazz', 'acidjazz'] },
+    { id: 'blues', label: 'Blues', match: ['blues', 'deltablues', 'chicagoblues', 'countryblues', 'electricblues', 'bluesrock', 'jazzblues'] },
+    { id: 'soul', label: 'Soul & R&B', match: ['soul', 'rnb', 'r&b', 'rhythmandblues', 'neosoul', 'motown'] },
+    { id: 'funk', label: 'Funk & Afrobeat', match: ['funk', 'afrobeat', 'afrobeats'] },
+    { id: 'gospel', label: 'Gospel', match: ['gospel'] },
+  ],
+  classical: [
+    { id: 'orchestral', label: 'Orchestral & Symphony', match: ['orchestra', 'orchestral', 'symphony'] },
+    { id: 'chamber', label: 'Chamber Music', match: ['chambermusic'] },
+    { id: 'opera', label: 'Opera & Choral', match: ['opera', 'operatic', 'choral', 'choralmusic', 'sacredclassical'] },
+    { id: 'baroque', label: 'Baroque', match: ['baroque'] },
+    { id: 'romantic', label: 'Romantic', match: ['romanticclassical'] },
+    { id: 'contemporary', label: 'Contemporary & Neoclassical', match: ['contemporaryclassical', 'neoclassical', 'minimalism'] },
+    { id: 'piano', label: 'Classical Piano', match: ['pianoclassical', 'classicalpiano'] },
+    { id: 'soundtrack', label: 'Classical Soundtrack', match: ['soundtrackclassical'] },
+  ],
+  folk: [
+    { id: 'folk', label: 'Folk', match: ['folk', 'folkmusic', 'indiefolk', 'contemporaryfolk', 'freakfolk', 'countryfolk', 'protestsong'] },
+    { id: 'acoustic', label: 'Acoustic', match: ['acoustic', 'acousticmusic', 'unplugged'] },
+    { id: 'country', label: 'Country', match: ['country', 'countrymusic', 'altcountry', 'outlawcountry', 'western'] },
+    { id: 'bluegrass', label: 'Bluegrass & Americana', match: ['bluegrass', 'americana', 'rootsmusic', 'oldtime', 'oldtimemusic'] },
+    { id: 'singer-songwriter', label: 'Singer-Songwriter', match: ['singer-songwriter', 'singersongwriter'] },
+    { id: 'celtic', label: 'Celtic & Traditional', match: ['celtic', 'irishfolk', 'traditionalmusic'] },
+  ],
+  pop: [
+    { id: 'indie-pop', label: 'Indie & Alternative Pop', match: ['indiepop', 'altpop', 'bedroompop', 'artpop', 'chamberpop', 'baroquepop', 'dreampop'] },
+    { id: 'synthpop', label: 'Synthpop & Electropop', match: ['synthpop', 'electropop'] },
+    { id: 'dance-pop', label: 'Dance Pop', match: ['dancepop', 'europop', 'hyperpop'] },
+    { id: 'pop-rock', label: 'Pop Rock & Punk', match: ['poprock', 'poppunk', 'punkpop', 'powerpop'] },
+    { id: 'asian-pop', label: 'Asian Pop', match: ['kpop', 'jpop', 'mandopop', 'cantopop'] },
+    { id: 'latin-pop', label: 'Latin Pop', match: ['latinpop'] },
+    { id: 'vocal-pop', label: 'Vocal & Contemporary Pop', match: ['teenpop', 'adultcontemporary', 'vocalpop'] },
+  ],
+  ambient: [
+    { id: 'ambient', label: 'Ambient', match: ['ambient', 'ambientmusic', 'drone', 'droneambient', 'darkambient', 'spaceambient', 'soundscape', 'soundscapes'] },
+    { id: 'lofi', label: 'Lo-Fi & Chillhop', match: ['lofi', 'lofimusic', 'chillhop', 'studybeats', 'studymusic'] },
+    { id: 'chillout', label: 'Chillout & Downtempo', match: ['chill', 'chillout', 'downtempo'] },
+    { id: 'meditation', label: 'Meditation & Relaxation', match: ['meditation', 'relaxation', 'relaxingmusic', 'healingmusic', 'sleepmusic', 'naturesounds'] },
+    { id: 'new-age', label: 'New Age', match: ['newage'] },
+  ],
+};
+
+/** Match only explicit tags, never infer a subgenre from titles or artist names. */
+export function trackMatchesSubgenre(track: Track, subgenre: Subgenre): boolean {
+  const tags = new Set(subgenre.match.map(normalizeGenreTag));
+  return track.topics.some(topic => tags.has(normalizeGenreTag(topic)));
+}
+
 /** Normalize hashtags and genre values so punctuation/case variants share a mapping. */
 function normalizeGenreTag(value: string): string {
   const normalized = value.trim().replace(/^#+/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
