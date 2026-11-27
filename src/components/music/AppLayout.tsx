@@ -69,13 +69,13 @@ function ChatMessage({ message, name, picture, own, reactions, userPubkey, onRea
           return count > 0 ? <button key={emoji} type="button" disabled={pending || reacted} aria-label={`${reactionName}: ${count} ${count === 1 ? 'reaction' : 'reactions'}${reacted ? ', you reacted' : ', react'}`} className={`rounded-full border px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${reacted ? 'border-primary bg-primary/10' : 'border-border bg-secondary hover:bg-accent'}`} onClick={() => onReact(message, emoji)}>{emoji} {count}</button> : null;
         })}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-muted-foreground" aria-label={`React to ${own ? 'your' : displayName + "'s"} message`}><SmilePlus className="size-4" /></Button></PopoverTrigger>
+          <PopoverTrigger asChild><Button type="button" variant="ghost" size="icon" className="size-8 rounded-full text-muted-foreground" aria-label={`React to ${own ? 'your' : displayName + "'s"} message`}><SmilePlus className="size-3" /></Button></PopoverTrigger>
           <PopoverContent align={own ? 'end' : 'start'} className="w-auto p-1" aria-label="Choose a reaction"><div className="flex gap-1">{CHAT_REACTIONS.map(({ emoji, name: reactionName }) => {
             const reacted = reactions.some(reaction => reaction.content === emoji && reaction.pubkey === userPubkey);
             return <Button key={emoji} type="button" variant="ghost" size="icon" className="size-9 text-lg" aria-label={reacted ? `${reactionName}, already reacted` : `React with ${reactionName}`} disabled={pending || reacted} onClick={() => { setPickerOpen(false); onReact(message, emoji); }}>{emoji}</Button>;
           })}</div></PopoverContent>
         </Popover>
-        {!own && <PlayerZapButton chatEvent={message} chatRelays={CHAT_RELAYS} />}
+        {!own && <PlayerZapButton chatEvent={message} chatRelays={CHAT_RELAYS} iconClassName="size-3" />}
       </div>
     </div>
   </article>;
