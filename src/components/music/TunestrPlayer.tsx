@@ -14,10 +14,31 @@ const N94StreamPlayer = lazy(() => import('@/components/music/N94StreamPlayer').
 
 type PlayerSize = 'small' | 'medium' | 'large';
 
+export interface OdyseeVideo {
+  format: 'odysee';
+  id: string;
+  name: string;
+  claimId: string;
+  title: string;
+  creator: string;
+  image?: string;
+  duration?: number;
+}
+
+type VideoStream = TunestrStream | OdyseeVideo;
+
+/** Construct player URLs only from validated Odysee claim identifiers. */
+function odyseeUrls(video: OdyseeVideo): { embed: string; external: string } | null {
+  if (!/^[a-f0-9]{40}$/i.test(video.claimId) || !video.name || video.name === '.' || video.name === '..' || video.name.length > 255 || /[\u0000-\u001f/\\]/.test(video.name)) return null;
+  const name = encodeURIComponent(video.name);
+  const id = video.claimId.toLowerCase();
+  return { embed: `https://odysee.com/$/embed/${name}/${id}`, external: `https://odysee.com/${name}:${id}` };
+}
+
 const VIDEO_SESSION_KEY = 'ostrify:tunestr-player:v1';
 
 type SavedVideoPlayer = {
-  stream: TunestrStream;
+  stream: VideoStream;
   docked: boolean;
   size: PlayerSize;
   position: number;
@@ -35,8 +56,13 @@ function restoreVideoPlayer(owner: string): SavedVideoPlayer | null {
     const saved: unknown = JSON.parse(raw);
     if (!isRecord(saved) || !isRecord(saved.stream)) return null;
     const value = saved.stream;
-    let stream: TunestrStream | null = null;
-    if (value.format === 'n94') {
+    let stream: VideoStream | null = null;
+    if (value.format === 'odysee') {
+      if (typeof value.name !== 'string' || typeof value.claimId !== 'string' || typeof value.title !== 'string' || !value.title.trim()) return null;
+      const candidate: OdyseeVideo = { format: 'odysee', id: `odysee:${value.claimId}`, name: value.name, claimId: value.claimId, title: value.title, creator: typeof value.creator === 'string' ? value.creator : 'Odysee' };
+      if (!odyseeUrls(candidate)) return null;
+      stream = candidate;
+    } else if (value.format === 'n94') {
       const event = value.event;
       if (!isRecord(event) || event.kind !== 1053 || typeof event.id !== 'string' || typeof event.pubkey !== 'string' || typeof event.sig !== 'string' || typeof event.content !== 'string' || typeof event.created_at !== 'number' || !Array.isArray(event.tags) || !event.tags.every(tag => Array.isArray(tag) && tag.every(part => typeof part === 'string'))) return null;
       const signed = event as unknown as NostrEvent;
@@ -74,7 +100,9 @@ function saveVideoPlayer(owner: string, value: SavedVideoPlayer | null) {
       const { stream } = value;
       sessionStorage.setItem(key, JSON.stringify({
         ...value,
-        stream: {
+        stream: stream.format === 'odysee' ? {
+          format: stream.format, id: stream.id, title: stream.title, creator: stream.creator, name: stream.name, claimId: stream.claimId,
+        } : {
           id: stream.id, title: stream.title, summary: stream.summary, url: stream.url, externalUrl: stream.externalUrl,
           createdAt: stream.createdAt, isLive: stream.isLive, format: stream.format,
           ...(stream.format === 'n94' ? { event: stream.event } : {}),
@@ -88,6 +116,7 @@ function saveVideoPlayer(owner: string, value: SavedVideoPlayer | null) {
 
 interface TunestrPlayerContextValue {
   openStream: (stream: TunestrStream) => void;
+  openOdysee: (video: OdyseeVideo) => void;
   setContentPane: (element: HTMLDivElement | null) => void;
   expanded: boolean;
 }
@@ -105,7 +134,7 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
   const location = `${pathname}${search}`;
   const previousLocation = useRef(location);
   const [saved] = useState(() => restoreVideoPlayer(owner));
-  const [stream, setStream] = useState<TunestrStream | null>(saved?.stream ?? null);
+  const [stream, setStream] = useState<VideoStream | null>(saved?.stream ?? null);
   const [docked, setDocked] = useState(saved?.docked ?? true);
   const [size, setSize] = useState<PlayerSize>(saved?.size ?? 'small');
   const [contentPane, setContentPane] = useState<HTMLDivElement | null>(null);
@@ -158,7 +187,16 @@ function TunestrPlayerSession({ children, owner }: { children: ReactNode; owner:
     onClose={() => { saveVideoPlayer(owner, null); setDocked(true); setStream(null); }}
   />;
 
-  return <TunestrPlayerContext.Provider value={{ openStream: nextStream => { restoredRef.current = false; playbackRef.current = { position: 0, playing: true }; setStream(nextStream); setSize('small'); setDocked(true); }, setContentPane, expanded: !!stream && !docked }}>
+  const openVideo = (nextStream: VideoStream) => {
+    if (nextStream.format === 'odysee' && !odyseeUrls(nextStream)) return;
+    restoredRef.current = false;
+    playbackRef.current = { position: 0, playing: true };
+    setStream(nextStream);
+    setSize('small');
+    setDocked(true);
+  };
+
+  return <TunestrPlayerContext.Provider value={{ openStream: openVideo, openOdysee: openVideo, setContentPane, expanded: !!stream && !docked }}>
     {children}
     {contentPane ? createPortal(player, contentPane) : player}
   </TunestrPlayerContext.Provider>;
@@ -271,7 +309,7 @@ function TunestrVideoSurface({ stream, initialPosition, initialPlaying, onPlayba
 }
 
 function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlaying, onPlaybackChange, onSizeChange, onDock, onRestore, onClose }: {
-  stream: TunestrStream;
+  stream: VideoStream;
   docked: boolean;
   size: PlayerSize;
   initialPosition: number;
@@ -282,8 +320,9 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
   onRestore: () => void;
   onClose: () => void;
 }) {
-  const sourceUrl = sanitizeUrl(stream.externalUrl);
-  const hasEmbeddedPlayer = stream.format === 'n94' && !!stream.event && !!stream.variant || classifyStreamPlayback(stream.url).type !== 'unsupported';
+  const odysee = stream.format === 'odysee' ? odyseeUrls(stream) : null;
+  const sourceUrl = stream.format === 'odysee' ? odysee?.external : sanitizeUrl(stream.externalUrl);
+  const hasEmbeddedPlayer = stream.format === 'odysee' ? !!odysee : stream.format === 'n94' && !!stream.event && !!stream.variant || classifyStreamPlayback(stream.url).type !== 'unsupported';
   const widths = {
     small: '!w-[min(320px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
     medium: '!w-[min(420px,calc(100vw-1.5rem),calc(177.78dvh-21.34rem))]',
@@ -311,12 +350,12 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
         <div className="flex min-h-14 shrink-0 items-center justify-between gap-1 border-b border-border/60 bg-card px-2 py-2 sm:px-3">
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-sm font-semibold leading-5">{stream.title || 'TuneStr stream'}</DialogTitle>
-            <DialogDescription className="sr-only">{stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription>
+            <DialogDescription className="sr-only">{stream.format === 'odysee' ? `Odysee video by ${stream.creator}` : stream.summary || 'TuneStr video stream on Nostr.'}</DialogDescription>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {stream.isLive && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-red-500" /></span>}
-              <span>{stream.isLive ? 'LIVE' : 'Recording'}</span>
+              {stream.format !== 'odysee' && stream.isLive && <span className="relative flex size-2"><span className="absolute inline-flex size-full animate-ping rounded-full bg-red-500 opacity-60 motion-reduce:animate-none" /><span className="relative inline-flex size-2 rounded-full bg-red-500" /></span>}
+              <span>{stream.format === 'odysee' ? stream.creator : stream.isLive ? 'LIVE' : 'Recording'}</span>
               <span aria-hidden="true">·</span>
-              <span>TuneStr</span>
+              <span>{stream.format === 'odysee' ? 'Odysee' : 'TuneStr'}</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -338,11 +377,13 @@ function TunestrVideoPlayer({ stream, docked, size, initialPosition, initialPlay
           </div>
         </div>
         <div className={cn(!docked && 'flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black [&>div]:!h-full [&>div]:!w-full [&>div]:!aspect-auto [&>iframe]:!h-full [&>iframe]:!w-full [&>iframe]:!aspect-auto')}>
-          {stream.format === 'n94' && stream.event && stream.variant
-            ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /></Suspense>
-            : <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} />}
+          {stream.format === 'odysee' && odysee
+            ? <iframe src={odysee.embed} title={`${stream.title} — Odysee player`} sandbox="allow-scripts allow-same-origin allow-presentation" referrerPolicy="no-referrer" allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="aspect-video w-full border-0 bg-black" />
+            : stream.format === 'n94' && stream.event && stream.variant
+              ? <Suspense fallback={<div role="status" className="aspect-video w-full bg-black" aria-label="Loading TuneStr player" />}><N94StreamPlayer key={stream.id} event={stream.event} variant={stream.variant} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /></Suspense>
+              : stream.format !== 'odysee' ? <TunestrVideoSurface stream={stream} initialPosition={initialPosition} initialPlaying={initialPlaying} onPlaybackChange={onPlaybackChange} /> : null}
         </div>
-        {!docked && hasEmbeddedPlayer && sourceUrl && <div className="shrink-0 px-4 py-3"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">Open stream source</a></div>}
+        {hasEmbeddedPlayer && sourceUrl && (!docked || stream.format === 'odysee') && <div className="shrink-0 px-4 py-2"><a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-primary hover:underline">{stream.format === 'odysee' ? 'Open on Odysee' : 'Open stream source'}</a></div>}
       </div>
     </DialogContent>
   </Dialog>;
