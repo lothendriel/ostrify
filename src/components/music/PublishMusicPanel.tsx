@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ArrowDown, ArrowUp, CheckCircle2, LoaderCircle, Plus, Upload, X } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, AudioLines, CheckCircle2, Disc3, FolderOpen, LoaderCircle, Mic2, Music2, Plus, Radio, ShieldCheck, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -89,12 +89,21 @@ function GenreField({ id, value, onChange, album = false }: { id: string; value:
 }
 
 function VisibilityOptions({ name, value, onChange }: { name: string; value: MusicVisibility; onChange: (value: MusicVisibility) => void }) {
-  return <fieldset className="space-y-2 sm:col-span-2"><legend className="text-sm font-medium">Ostrify visibility</legend><label className="flex items-start gap-2 text-sm"><input type="radio" name={name} value="public" checked={value === "public"} onChange={() => onChange("public")} className="mt-1 accent-primary" /><span><span className="font-medium">Show on Ostrify</span><span className="block text-xs text-muted-foreground">Visible in Ostrify discovery and sent to DROPS ({DROPS_MUSIC_RELAY}) as well as your configured write relays.</span></span></label><label className="flex items-start gap-2 text-sm"><input type="radio" name={name} value="hidden" checked={value === "hidden"} onChange={() => onChange("hidden")} className="mt-1 accent-primary" /><span><span className="font-medium">Hidden in Ostrify</span><span className="block text-xs text-muted-foreground">Hidden from Ostrify discovery only; the event and audio remain public on your write relays and media host.</span></span></label></fieldset>;
+  return <fieldset className="publish-studio-inset space-y-3 sm:col-span-2"><legend className="px-1 text-sm font-semibold">Ostrify visibility</legend><label className="flex items-start gap-2 text-sm"><input type="radio" name={name} value="public" checked={value === "public"} onChange={() => onChange("public")} className="mt-1 accent-primary" /><span><span className="font-medium">Show on Ostrify</span><span className="block text-xs text-muted-foreground">Visible in Ostrify discovery and sent to DROPS ({DROPS_MUSIC_RELAY}) as well as your configured write relays.</span></span></label><label className="flex items-start gap-2 text-sm"><input type="radio" name={name} value="hidden" checked={value === "hidden"} onChange={() => onChange("hidden")} className="mt-1 accent-primary" /><span><span className="font-medium">Hidden in Ostrify</span><span className="block text-xs text-muted-foreground">Hidden from Ostrify discovery only; the event and audio remain public on your write relays and media host.</span></span></label></fieldset>;
 }
 
 export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; artistPubkey: string }) {
-  return <Tabs defaultValue="music" className="border-b border-white/10 bg-black/20 px-4 py-5 sm:px-6 lg:px-7">
-    <div className="mx-auto w-full max-w-5xl"><h2 className="mb-3 text-xl font-bold">Publish</h2><TabsList className="grid w-full max-w-sm grid-cols-2"><TabsTrigger value="music">Music</TabsTrigger><TabsTrigger value="podcasts">Podcasts</TabsTrigger></TabsList></div>
+  return <Tabs defaultValue="music" className="publish-studio border-b border-border px-4 py-6 sm:px-6 sm:py-8 lg:px-7">
+    <div className="mx-auto w-full max-w-5xl">
+      <div className="publish-studio-hero relative overflow-hidden rounded-2xl border px-5 py-6 sm:px-7 sm:py-7">
+        <div className="relative z-10 flex items-start gap-4">
+          <div className="publish-studio-icon hidden size-12 shrink-0 items-center justify-center rounded-2xl sm:flex"><AudioLines aria-hidden="true" className="size-6" /></div>
+          <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-violet">Your creator space</p><h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Publish on your terms.</h2><p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">Share your sound with the open audio world, powered by your Nostr identity.</p></div>
+        </div>
+        <Disc3 aria-hidden="true" className="pointer-events-none absolute -right-8 -top-10 size-48 rotate-12 text-brand-violet opacity-[0.07] sm:size-56" strokeWidth={0.7} />
+      </div>
+      <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5"><span className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">Choose format</span><TabsList className="publish-studio-tabs grid h-auto w-full max-w-sm grid-cols-2"><TabsTrigger value="music"><Music2 aria-hidden="true" />Music</TabsTrigger><TabsTrigger value="podcasts"><Mic2 aria-hidden="true" />Podcasts</TabsTrigger></TabsList></div>
+    </div>
     <TabsContent value="music" forceMount className="data-[state=inactive]:hidden"><MusicPublishing artist={artist} artistPubkey={artistPubkey} /></TabsContent>
     <TabsContent value="podcasts"><PublishPodcastPanel key={artistPubkey} artist={artist} pubkey={artistPubkey} /></TabsContent>
   </Tabs>;
@@ -278,17 +287,16 @@ function MusicPublishing({ artist, artistPubkey }: { artist: string; artistPubke
     return next.map((track, position) => ({ ...track, trackNumber: position + 1 }));
   });
 
-  return <section aria-label="Publish music" className="py-5">
-    <div className="mx-auto w-full max-w-5xl space-y-4">
-      <div>
-        <h2 className="text-xl font-bold">Publish music</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Publish signed kind 36787 track events to your configured Nostr write relays. Public tracks are additionally sent to DROPS ({DROPS_MUSIC_RELAY}) for Ostrify discovery.</p>
-        <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm leading-relaxed text-muted-foreground"><span className="font-semibold text-foreground">Visibility note</span><br />“Hidden in Ostrify” only hides a track from Ostrify discovery and other Ostrify profiles; it does not make the public Nostr event or audio URL private. Relay copies may persist even after a hidden revision.</p>
-        <aside className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm leading-relaxed text-muted-foreground"><p className="font-semibold text-foreground">For original artists</p><p className="mt-1">If you made the music, you can publish it through Ostrify. Only upload or link audio and artwork that you have the rights to share. Ostrify does not review uploads and is not responsible for copyright infringement or unauthorized material; you are responsible for ensuring your uploads comply with copyright law.</p></aside>
+  return <section aria-label="Publish music" className="pt-6">
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <div className="flex items-start gap-3"><span className="publish-studio-icon flex size-10 shrink-0 items-center justify-center rounded-xl"><Music2 aria-hidden="true" className="size-5" /></span><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-violet">Music studio</p><h3 className="mt-1 text-xl font-bold">Give your music a home</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">Publish signed kind 36787 track events to your configured Nostr write relays. Public tracks are additionally sent to DROPS ({DROPS_MUSIC_RELAY}) for Ostrify discovery.</p></div></div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="publish-studio-note"><Radio aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-brand-violet" /><p><span className="block font-semibold text-foreground">Visibility note</span>“Hidden in Ostrify” only hides a track from Ostrify discovery and other Ostrify profiles; it does not make the public Nostr event or audio URL private. Relay copies may persist even after a hidden revision.</p></div>
+        <aside className="publish-studio-note"><ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-brand-violet" /><p><span className="block font-semibold text-foreground">For original artists</span>If you made the music, you can publish it through Ostrify. Only upload or link audio and artwork that you have the rights to share. Ostrify does not review uploads and is not responsible for copyright infringement or unauthorized material; you are responsible for ensuring your uploads comply with copyright law.</p></aside>
       </div>
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full max-w-sm grid-cols-2"><TabsTrigger value="track">Track</TabsTrigger><TabsTrigger value="album">Album</TabsTrigger></TabsList>
-        <TabsContent value="track" className="pt-4">
+      <Tabs value={tab} onValueChange={setTab} className="publish-studio-card p-4 sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-violet">New release</p><h3 className="mt-1 text-lg font-bold">What are you sharing?</h3></div><TabsList className="publish-studio-tabs grid h-auto w-full max-w-xs grid-cols-2"><TabsTrigger value="track"><Music2 aria-hidden="true" />Track</TabsTrigger><TabsTrigger value="album"><Disc3 aria-hidden="true" />Album</TabsTrigger></TabsList></div>
+        <TabsContent value="track" className="pt-5">
           <form onSubmit={event => void submitTrack(event)} className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2 text-sm font-medium sm:col-span-2">Track title<Input required value={trackTitle} onChange={event => setTrackTitle(event.target.value)} maxLength={200} placeholder="Song title" /></label>
             <div className="sm:col-span-2"><GenreField id="track-genres" value={trackGenre} onChange={setTrackGenre} /></div>
@@ -309,7 +317,7 @@ function MusicPublishing({ artist, artistPubkey }: { artist: string; artistPubke
               <label className="space-y-2 text-sm font-medium">Add audio tracks<Input type="file" multiple accept="audio/*,.mp3,.m4a,.flac,.ogg,.opus,.wav" onChange={event => { onAlbumFiles(event.target.files); event.target.value = ""; }} /></label>
             </div>
             {!selectedAlbum && <VisibilityOptions name="album-visibility" value={albumVisibility} onChange={setAlbumVisibility} />}
-            <section className="space-y-3 rounded-lg border border-white/10 p-3" aria-label="Add existing tracks">
+            <section className="publish-studio-inset space-y-3" aria-label="Add existing tracks">
               <div><h3 className="font-semibold">Add previously published tracks</h3><p className="text-xs text-muted-foreground">Tracks load from your read relays and DROPS. Ostrify updates their existing addressable events, preserving audio and IDs.</p></div>
               <Input aria-label="Search published tracks" placeholder="Search your tracks" value={existingSearch} onChange={event => setExistingSearch(event.target.value)} />
               {hiddenExistingTracks.length > 0 && <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={showHiddenTracks} onChange={event => setShowHiddenTracks(event.target.checked)} className="accent-primary" />Include tracks hidden in Ostrify ({hiddenExistingTracks.length})</label>}
@@ -322,8 +330,8 @@ function MusicPublishing({ artist, artistPubkey }: { artist: string; artistPubke
           </form>
         </TabsContent>
       </Tabs>
-      <section className="space-y-3 rounded-lg border border-white/10 p-4" aria-label="Share existing public tracks to DROPS">
-        <div><h3 className="font-semibold">Share existing public tracks</h3><p className="mt-1 text-sm text-muted-foreground">Review public tracks on your configured read relays that are not yet found on DROPS. Tracks hidden in Ostrify are excluded.</p></div>
+      <section className="publish-studio-card space-y-3 p-4 sm:p-6" aria-label="Share existing public tracks to DROPS">
+        <div className="flex items-start gap-3"><span className="publish-studio-icon flex size-10 shrink-0 items-center justify-center rounded-xl"><Radio aria-hidden="true" className="size-5" /></span><div><h3 className="font-semibold">Share existing public tracks</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">Review public tracks on your configured read relays that are not yet found on DROPS. Tracks hidden in Ostrify are excluded.</p></div></div>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" disabled={busy || republishDrops.tracks.isFetching} onClick={() => { setMessage(undefined); setDropsSentIds([]); setDropsRemovedIds([]); void republishDrops.tracks.refetch(); }}>
             {republishDrops.tracks.isFetching ? <><LoaderCircle className="size-4 animate-spin" /> Loading tracks…</> : "Load my public tracks"}
@@ -344,8 +352,8 @@ function MusicPublishing({ artist, artistPubkey }: { artist: string; artistPubke
           </div>;
         })}</div></div>}
       </section>
-      <div className="rounded-lg border border-white/10 p-4"><h3 className="font-semibold">Manage your uploads</h3><p className="mt-1 text-sm text-muted-foreground">Review uploaded tracks and albums, paginate through your tracks, and manage their Ostrify visibility.</p><Link to="/my-uploads" className="mt-3 inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90">Open My Uploads</Link></div>
-      {message && <p role={message.error ? "alert" : "status"} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${message.error ? "border-destructive/50 text-destructive" : "border-emerald-500/30 text-emerald-300"}`}>{message.error ? <AlertCircle className="mt-0.5 size-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" />}{message.text}</p>}
+      <div className="publish-studio-card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div className="flex items-start gap-3"><span className="publish-studio-icon flex size-10 shrink-0 items-center justify-center rounded-xl"><FolderOpen aria-hidden="true" className="size-5" /></span><div><h3 className="font-semibold">Manage your uploads</h3><p className="mt-1 text-sm leading-6 text-muted-foreground">Review uploaded tracks and albums, paginate through your tracks, and manage their Ostrify visibility.</p></div></div><Link to="/my-uploads" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">Open My Uploads <ArrowRight aria-hidden="true" className="size-4" /></Link></div>
+      {message && <p role={message.error ? "alert" : "status"} className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${message.error ? "border-destructive/50 text-destructive" : "border-primary/30 bg-primary/5 text-foreground"}`}>{message.error ? <AlertCircle className="mt-0.5 size-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0" />}{message.text}</p>}
       {upload.isError && <p role="alert" className="text-sm text-destructive">{upload.error.message}</p>}
     </div>
   </section>;

@@ -304,6 +304,71 @@
 }
 
 @layer components {
+  /* A focused creator workspace that follows Ostrify's light, dark and seasonal palettes. */
+  .publish-studio {
+    background: radial-gradient(ellipse at 94% 0%, var(--shell-glow), transparent 42%), var(--background);
+  }
+
+  .publish-studio-hero {
+    border-color: var(--shell-edge);
+    background: radial-gradient(ellipse at 92% 5%, var(--shell-glow), transparent 44%),
+      linear-gradient(120deg, var(--shell-panel), var(--card) 75%);
+  }
+
+  .publish-studio-icon {
+    color: var(--brand-violet);
+    background: var(--brand-surface);
+  }
+
+  .publish-studio-identity {
+    border-color: var(--shell-edge);
+    background: linear-gradient(115deg, var(--shell-panel), var(--card));
+  }
+
+  .publish-studio-card {
+    border: 1px solid var(--shell-edge);
+    border-radius: 1rem;
+    background: var(--card);
+    box-shadow: 0 8px 32px -24px var(--shell-glow);
+  }
+
+  .publish-studio-note,
+  .publish-studio-inset {
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--background);
+    padding: 1rem;
+  }
+
+  .publish-studio-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+
+  .publish-studio .publish-studio-tabs {
+    height: auto !important;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 0.25rem;
+    background: var(--secondary);
+  }
+
+  .publish-studio-tabs [data-slot="tabs-trigger"] {
+    min-height: 2.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+  }
+
+  .publish-studio-tabs [data-slot="tabs-trigger"][data-state="active"] {
+    color: var(--foreground);
+    background: var(--card);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+  }
+
   .ostrify-shell {
     background: radial-gradient(ellipse at 5% 0%, var(--shell-glow), transparent 42%), var(--background);
   }
