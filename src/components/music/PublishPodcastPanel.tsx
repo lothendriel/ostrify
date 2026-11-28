@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -18,7 +18,45 @@ import { sanitizeUrl } from '@/lib/sanitize';
 type Show = { title: string; description: string; image: string; website: string };
 type Episode = { id: string; title: string; description: string; audio: string; mime: string; image: string };
 type Feed = { url: string; show: Show; episodes: Episode[]; skipped: number };
+const FEED_BYTE_LIMIT = 25_000_000;
+const EPISODES_PER_PAGE = 50;
 const emptyShow: Show = { title: '', description: '', image: '', website: '' };
+
+/** Count decoded response bytes while streaming, even when Content-Length is absent or compressed. */
+async function readFeedResponse(response: Response, onProgress: (bytes: number) => void): Promise<string> {
+  // Content-Length can describe compressed bytes and is not a reliable limit
+  // for the decoded response body, so enforce the limit on streamed chunks.
+  if (!response.body) throw new Error('This browser cannot stream the feed safely. Try a browser with streaming support.');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let lastUpdate = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > FEED_BYTE_LIMIT) {
+        void reader.cancel().catch(() => {});
+        throw new Error('This feed exceeds the 25 MB preview limit.');
+      }
+      chunks.push(value);
+      if (received - lastUpdate >= 500_000) { lastUpdate = received; onProgress(received); }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  // XML feeds may declare a non-UTF-8 encoding. Decode with the declared encoding
+  // (or a UTF-16 BOM), rather than silently corrupting titles and descriptions.
+  const bom = bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le' : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : undefined;
+  const header = new TextDecoder(bom ?? 'utf-8').decode(bytes.subarray(0, Math.min(bytes.length, 512)));
+  const encoding = bom ?? /^\s*<\?xml\s+[^?]*encoding\s*=\s*['"]([^'"]+)['"]/i.exec(header)?.[1] ?? 'utf-8';
+  try { return new TextDecoder(encoding, { fatal: true }).decode(bytes).replace(/^\uFEFF/, ''); }
+  catch { throw new Error('The feed uses an unsupported or invalid text encoding.'); }
+}
 const tag = (event: NostrEvent | undefined, name: string) => event?.tags.find(([key]) => key === name)?.[1] ?? '';
 const showFromEvent = (event?: NostrEvent): Show => ({ title: tag(event, 'title'), description: tag(event, 'description'), image: sanitizeUrl(tag(event, 'image')) ?? '', website: sanitizeUrl(tag(event, 'website')) ?? '' });
 const messageOf = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong.';
@@ -92,7 +130,17 @@ export function PublishPodcastPanel({ artist, pubkey }: { artist: string; pubkey
   const [coverReset, setCoverReset] = useState(0);
   const [feedUrl, setFeedUrl] = useState('');
   const [feed, setFeed] = useState<Feed>();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [episodeSearch, setEpisodeSearch] = useState('');
+  const [episodePage, setEpisodePage] = useState(0);
+  const [previewProgress, setPreviewProgress] = useState('');
+  const filteredEpisodes = useMemo(() => {
+    const search = episodeSearch.trim().toLocaleLowerCase();
+    return search ? (feed?.episodes ?? []).filter(episode => episode.title.toLocaleLowerCase().includes(search)) : feed?.episodes ?? [];
+  }, [feed, episodeSearch]);
+  const pageCount = Math.max(1, Math.ceil(filteredEpisodes.length / EPISODES_PER_PAGE));
+  const currentPage = Math.min(episodePage, pageCount - 1);
+  const pageEpisodes = filteredEpisodes.slice(currentPage * EPISODES_PER_PAGE, (currentPage + 1) * EPISODES_PER_PAGE);
   const [showAction, setShowAction] = useState('none');
   const [results, setResults] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -169,28 +217,29 @@ export function PublishPodcastPanel({ artist, pubkey }: { artist: string; pubkey
     } catch (error) { setNotice({ text: messageOf(error), error: true }); } finally { setBusy(false); }
   }
   async function previewFeed(event: React.FormEvent) {
-    event.preventDefault(); setNotice(undefined); setFeed(undefined); setSelected([]); setResults({}); setBusy(true);
+    event.preventDefault(); setNotice(undefined); setFeed(undefined); setSelected(new Set()); setResults({}); setEpisodeSearch(''); setEpisodePage(0); setPreviewProgress('Connecting to the feed…'); setBusy(true);
     try {
       const url = sanitizeUrl(feedUrl);
       if (!url) throw new Error('Enter a public HTTPS RSS feed URL.');
       const canonical = new URL(url); canonical.hash = '';
-      const response = await fetch(canonical.href, { signal: AbortSignal.timeout(15000), credentials: 'omit' });
+      const response = await fetch(canonical.href, { signal: AbortSignal.timeout(60000), credentials: 'omit' });
       if (!response.ok) throw new Error(`Feed server returned HTTP ${response.status}.`);
-      const length = Number(response.headers.get('content-length'));
-      if (length > 5_000_000) throw new Error('Feed is too large to preview (5 MB limit).');
-      const xml = await response.text();
-      if (xml.length > 5_000_000) throw new Error('Feed is too large to preview (5 MB limit).');
+      const xml = await readFeedResponse(response, bytes => setPreviewProgress(`Downloading feed… ${(bytes / 1_000_000).toFixed(1)} MB received (25 MB limit)`));
+      setPreviewProgress('Preparing episode preview…');
+      // Let the browser display the progress update before XML parsing begins.
+      await new Promise(resolve => setTimeout(resolve, 0));
       const parsed = parseFeed(xml, canonical.href);
-      setFeed(parsed); setSelected(parsed.episodes.map(item => item.id));
+      setFeed(parsed); setSelected(new Set(parsed.episodes.map(item => item.id)));
       setNotice({ text: 'Feed loaded. Review the show and select episodes before publishing.' });
-    } catch (error) { setNotice({ text: `${messageOf(error)} Feed access can fail if the host blocks browser cross-origin requests (CORS), is unavailable, or requires a login. Try a public HTTPS feed that permits browser access.`, error: true }); } finally { setBusy(false); }
+    } catch (error) { setNotice({ text: `${messageOf(error)} Feed access can also fail if the host blocks browser cross-origin requests (CORS), is unavailable, or requires a login. Try a public HTTPS feed that permits browser access.`, error: true }); } finally { setPreviewProgress(''); setBusy(false); }
   }
   async function importEpisodes() {
     if (!feed) return;
     setBusy(true); setNotice(undefined); setProgress('Checking relays…');
     try {
-      const chosen = feed.episodes.filter(item => selected.includes(item.id));
+      const chosen = feed.episodes.filter(item => selected.has(item.id));
       if (!chosen.length && showAction === 'none') throw new Error('Select episodes or choose to publish the show.');
+      if (chosen.length > 100 && !window.confirm(`You selected ${chosen.length} episodes across the whole feed. Importing may take a long time and require many signer approvals. Keep this page open. Continue?`)) throw new Error('Import cancelled. You can select fewer episodes.');
       if (showAction === 'publish' && !window.confirm(`Publish “${feed.show.title}” as the show for the signed-in account using the feed details?`)) throw new Error('Show import cancelled.');
       if (showAction === 'publish') {
         setProgress('Publishing show…');
@@ -201,6 +250,7 @@ export function PublishPodcastPanel({ artist, pubkey }: { artist: string; pubkey
       const found = new Set<string>();
       let incomplete = false;
       for (let start = 0; start < identities.length; start += 50) {
+        setProgress(`Checking for duplicates: ${Math.min(start + 50, identities.length)} of ${identities.length} episodes…`);
         const batch = identities.slice(start, start + 50);
         const result = await queryLibraryEvents(nostr, readRelays, [{ kinds: [54], authors: [pubkey], '#i': batch, limit: 500 }], AbortSignal.timeout(10000), { waitForAll: true });
         if (!result.complete || !result.completedRelays.length || result.events.length >= 500) incomplete = true;
@@ -267,15 +317,19 @@ export function PublishPodcastPanel({ artist, pubkey }: { artist: string; pubkey
       </form></TabsContent>
       <TabsContent value="rss" className="space-y-4 pt-5">
         <div className="publish-studio-inset flex items-start gap-3"><Rss aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-brand-violet" /><p className="text-sm leading-6 text-muted-foreground"><span className="block font-semibold text-foreground">Bring your feed, on your schedule</span>Manual import only: return here and preview the feed again to check for new episodes. Importing does not change your original RSS feed. Audio stays on its existing host and may stop working if that host changes or removes it.</p></div>
-        <p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground"><CircleAlert aria-hidden="true" className="mt-1 size-4 shrink-0" /><span>Your browser fetches the public feed directly. Hosts that block cross-origin requests (CORS), require login, or are offline cannot be imported here.</span></p>
-        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => void previewFeed(event)}><label className="flex-1 text-sm font-medium">Public HTTPS RSS feed<Input type="url" required value={feedUrl} onChange={event => { setFeedUrl(event.target.value); setFeed(undefined); setSelected([]); setResults({}); }} placeholder="https://example.com/feed.xml" /></label><Button className="sm:self-end" disabled={busy} type="submit">Preview feed</Button></form>
+        <p className="flex items-start gap-2 text-sm leading-6 text-muted-foreground"><CircleAlert aria-hidden="true" className="mt-1 size-4 shrink-0" /><span>Your browser fetches the public feed directly. Feeds up to 25 MB are supported; large feeds may take longer to prepare. Hosts that block cross-origin requests (CORS), require login, or are offline cannot be imported here.</span></p>
+        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={event => void previewFeed(event)}><label className="flex-1 text-sm font-medium">Public HTTPS RSS feed<Input type="url" required disabled={busy} value={feedUrl} onChange={event => { setFeedUrl(event.target.value); setFeed(undefined); setSelected(new Set()); setEpisodeSearch(''); setEpisodePage(0); setResults({}); }} placeholder="https://example.com/feed.xml" /></label><Button className="sm:self-end" disabled={busy} type="submit">Preview feed</Button></form>
+        {previewProgress && <p role="status" className="text-sm text-muted-foreground">{previewProgress}</p>}
         {feed && <div className="publish-studio-inset space-y-4">
           <div className="flex gap-4">{feed.show.image && <img src={feed.show.image} alt="" className="size-20 rounded-lg object-cover" />}<div className="min-w-0"><h3 className="font-semibold">{feed.show.title}</h3><p className="mt-1 line-clamp-3 break-words text-sm text-muted-foreground">{feed.show.description || 'No show description'}</p><p className="mt-1 text-xs text-muted-foreground">{feed.episodes.length} importable episodes{feed.skipped ? ` · ${feed.skipped} skipped (missing title, HTTPS audio or duplicate ID)` : ''}</p></div></div>
-          <fieldset className="space-y-2 text-sm"><legend className="font-semibold">Nostr show metadata</legend><label className="flex gap-2"><input type="radio" name="rss-show" checked={showAction === 'none'} onChange={() => setShowAction('none')} />Keep existing show unchanged</label><label className="flex gap-2"><input type="radio" name="rss-show" checked={showAction === 'publish'} onChange={() => setShowAction('publish')} />Create or update show from feed details</label></fieldset>
-          <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setSelected(feed.episodes.map(item => item.id))}>Select all</Button><Button type="button" size="sm" variant="outline" onClick={() => setSelected([])}>Clear selection</Button></div>
-          <div className="max-h-80 space-y-2 overflow-y-auto" aria-label="Feed episodes">{feed.episodes.map(item => <label key={item.id} className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 text-sm"><input className="mt-1 accent-primary" type="checkbox" checked={selected.includes(item.id)} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} /><span className="min-w-0 flex-1 break-words"><span className="font-medium">{item.title}</span>{results[item.id] && <span className="mt-1 block text-xs text-muted-foreground">{results[item.id]}</span>}</span></label>)}</div>
+          <fieldset className="space-y-2 text-sm"><legend className="font-semibold">Nostr show metadata</legend><label className="flex gap-2"><input type="radio" name="rss-show" disabled={busy} checked={showAction === 'none'} onChange={() => setShowAction('none')} />Keep existing show unchanged</label><label className="flex gap-2"><input type="radio" name="rss-show" disabled={busy} checked={showAction === 'publish'} onChange={() => setShowAction('publish')} />Create or update show from feed details</label></fieldset>
+          <label className="block space-y-2 text-sm font-medium">Search episodes<Input type="search" value={episodeSearch} onChange={event => { setEpisodeSearch(event.target.value); setEpisodePage(0); }} placeholder="Search episode titles" /></label>
+          <div className="flex flex-wrap items-center gap-2"><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setSelected(new Set(feed.episodes.map(item => item.id)))}>Select all episodes</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setSelected(new Set())}>Clear selection</Button><span className="text-xs text-muted-foreground">{selected.size} selected across the entire feed</span></div>
+          <div className="max-h-80 space-y-2 overflow-y-auto" aria-label="Feed episodes">{pageEpisodes.map(item => <label key={item.id} className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 text-sm"><input className="mt-1 accent-primary" type="checkbox" disabled={busy} checked={selected.has(item.id)} onChange={event => { const checked = event.target.checked; setSelected(current => { const next = new Set(current); if (checked) next.add(item.id); else next.delete(item.id); return next; }); }} /><span className="min-w-0 flex-1 break-words"><span className="font-medium">{item.title}</span>{results[item.id] && <span className="mt-1 block text-xs text-muted-foreground">{results[item.id]}</span>}</span></label>)}{!pageEpisodes.length && <p className="py-4 text-sm text-muted-foreground">No episodes match your search.</p>}</div>
+          {filteredEpisodes.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground"><span>Showing {currentPage * EPISODES_PER_PAGE + 1}–{Math.min((currentPage + 1) * EPISODES_PER_PAGE, filteredEpisodes.length)} of {filteredEpisodes.length} {episodeSearch.trim() ? 'matching episodes' : 'episodes'}</span><div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={currentPage === 0} onClick={() => setEpisodePage(currentPage - 1)}>Previous</Button><Button type="button" size="sm" variant="outline" disabled={currentPage >= pageCount - 1} onClick={() => setEpisodePage(currentPage + 1)}>Next</Button></div></div>}
+          {Object.keys(results).length > 0 && <p className="text-xs text-muted-foreground">Results are shown beside episodes on their respective pages. {Object.values(results).filter(result => result.startsWith('Not confirmed:')).length} not confirmed.</p>}
           <p className="text-xs text-muted-foreground">Duplicate detection is best effort, based on this feed URL and episode GUID (or audio URL). Changed identifiers, other clients, incomplete relay checks or interrupted imports can cause duplicates. Unconfirmed sends may have succeeded; retries on this device reuse the same signed event.</p>
-          <Button type="button" disabled={busy || (!selected.length && showAction === 'none')} onClick={() => void importEpisodes()}>{busy ? 'Importing…' : `Import selected (${selected.length})`}</Button>
+          <Button type="button" disabled={busy || (!selected.size && showAction === 'none')} onClick={() => void importEpisodes()}>{busy ? 'Importing…' : `Import selected (${selected.size})`}</Button>
           {progress && <p role="status" className="text-sm">{progress}</p>}
         </div>}
       </TabsContent>
