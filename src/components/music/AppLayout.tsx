@@ -233,8 +233,8 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
     <div className="flex items-start justify-between gap-2 border-b border-border/70 px-4 py-4">
       <div>
         <h2 className="flex items-center gap-2 font-semibold"><MessageCircle className="size-5 text-primary" /> Ostrify Chat</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Public Nostr community</p>
-        <a href="https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw" target="_blank" rel="noopener noreferrer" className="mt-2 inline-block rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">Join Ostrify on Armada <span className="sr-only">(opens in a new tab)</span></a>
+        <p className="mt-1 hidden text-sm text-muted-foreground md:block">Public Nostr community</p>
+        <a href="https://armada.buzz/invite/naddr1qvzqqqyzz5pzql6aq5wf4zcwmwwx5t3stdx5f9ap9f02yjxsl6vsxew89wtx7xn7qqqqcz4j64#BAADAQIDgJVjMH_fET-ZLuuQN4DYNw" target="_blank" rel="noopener noreferrer" className="mt-2 hidden rounded-sm text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:inline-block">Join Ostrify on Armada <span className="sr-only">(opens in a new tab)</span></a>
       </div>
       <Button type="button" variant="ghost" size="icon" className="size-8" aria-label="Close chat" onClick={onClose}><X className="size-4" /></Button>
     </div>
@@ -244,7 +244,6 @@ function CommunityChatPanel({ user, onClose }: { user: ChatUser; onClose: () => 
       <div ref={messagesEndRef} />
     </div></ScrollArea>
     <div className="space-y-2 border-t border-border/70 p-4">
-      <p className="text-xs text-muted-foreground">Messages are public, not encrypted. Submissions appear here without moderator approval; other clients may show only approved posts.</p>
       {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
       <Textarea aria-label="Message Ostrify Chat" placeholder="Message Ostrify Chat" value={text} maxLength={4000} onChange={event => setText(event.target.value)} disabled={sending} />
       <Button className="w-full" disabled={!text.trim() || sending} onClick={() => void send()}><Send className="size-4" /> {sending ? 'Sending…' : 'Send message'}</Button>
