@@ -13,6 +13,7 @@ import { sanitizeUrl } from "@/lib/sanitize";
 import { AUDIO_EXT_RE, type Track } from "@/lib/music";
 import { groupIntoAlbums, useArtistTracks } from "@/hooks/useArtistTracks";
 import { CATEGORIES } from "@/lib/categories";
+import { PublishPodcastPanel } from "./PublishPodcastPanel";
 
 type ReleaseTrack = { id: string; file?: File; title: string; url: string; trackNumber?: number; existing?: Track; visibility?: MusicVisibility };
 type AlbumTarget = { id: string; title: string; image?: string };
@@ -92,6 +93,14 @@ function VisibilityOptions({ name, value, onChange }: { name: string; value: Mus
 }
 
 export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; artistPubkey: string }) {
+  return <Tabs defaultValue="music" className="border-b border-white/10 bg-black/20 px-4 py-5 sm:px-6 lg:px-7">
+    <div className="mx-auto w-full max-w-5xl"><h2 className="mb-3 text-xl font-bold">Publish</h2><TabsList className="grid w-full max-w-sm grid-cols-2"><TabsTrigger value="music">Music</TabsTrigger><TabsTrigger value="podcasts">Podcasts</TabsTrigger></TabsList></div>
+    <TabsContent value="music" forceMount className="data-[state=inactive]:hidden"><MusicPublishing artist={artist} artistPubkey={artistPubkey} /></TabsContent>
+    <TabsContent value="podcasts"><PublishPodcastPanel key={artistPubkey} artist={artist} pubkey={artistPubkey} /></TabsContent>
+  </Tabs>;
+}
+
+function MusicPublishing({ artist, artistPubkey }: { artist: string; artistPubkey: string }) {
   const [tab, setTab] = useState("track");
   const [trackTitle, setTrackTitle] = useState("");
   const [trackUrl, setTrackUrl] = useState("");
@@ -269,7 +278,7 @@ export function PublishMusicPanel({ artist, artistPubkey }: { artist: string; ar
     return next.map((track, position) => ({ ...track, trackNumber: position + 1 }));
   });
 
-  return <section aria-label="Publish music" className="border-b border-white/10 bg-black/20 px-4 py-5 sm:px-6 lg:px-7">
+  return <section aria-label="Publish music" className="py-5">
     <div className="mx-auto w-full max-w-5xl space-y-4">
       <div>
         <h2 className="text-xl font-bold">Publish music</h2>

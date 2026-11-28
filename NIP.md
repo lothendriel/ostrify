@@ -53,6 +53,12 @@ Ostrify publishes one addressable kind `36787` event per track with `d`, `title`
 
 Podcast episodes (kind `54`) use the NIP-F4 `audio` tag: `["audio", <url>, <mime?>]`.
 
+### Podcast publishing and manual RSS import
+
+Ostrify publishes NIP-F4 kind `10154` show metadata and kind `54` episodes from the show account to its configured write relays. One replaceable show is associated with each pubkey. Existing unrelated show tags and content are preserved when updating. Ostrify discovery currently requires at least one playable episode to show a Nostr show; RSS and Nostr listings are not automatically merged.
+
+For manually imported episodes, Ostrify adds an `i` tag `ostrify:rss:sha256:<hex>`: SHA-256 of the UTF-8 JSON array `[normalized feed URL, episode GUID or enclosure URL]`. This Ostrify-specific identifier supports best-effort, author-filtered duplicate checks on configured read relays; changing the feed URL or GUID changes the identifier. A signed event is stored locally before delivery so a retry on the same device reuses its event ID, including after an unconfirmed send. Other clients or devices may not use this convention, relay reads can be incomplete, and simultaneous imports can create duplicates. Feed enclosures remain on their existing hosts; no RSS updates, hosting copies, background synchronization, or automatic directory listing is provided.
+
 ## Events published
 
 ### Playlists & Liked Songs — NIP-51 bookmark sets (kind `30003`)
