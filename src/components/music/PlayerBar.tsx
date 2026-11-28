@@ -13,14 +13,12 @@ import {
   AudioLines,
   Heart,
 } from "lucide-react";
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { nip19 } from "nostr-tools";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { usePlayer } from "@/hooks/usePlayer";
-import { useDecember } from "@/hooks/useDecember";
 import { useOctober } from "@/hooks/useOctober";
 import { useValentines } from "@/hooks/useValentines";
 import { formatDuration, fountainShowGuid, type Track } from "@/lib/music";
@@ -34,34 +32,11 @@ import { audioDetailPath } from "@/lib/audioDetail";
 import { PlayerZapButton } from "./PlayerZapButton";
 import { RadioFavoriteButton } from "./NowPlaying";
 
-// This one-time Thanksgiving surprise ends at midnight on November 28, 2026,
-// according to the listener's local clock (including when the app stays open).
-function isThanksgivingPlayIcon() {
-  const now = new Date();
-  return now.getFullYear() === 2026 && now.getMonth() === 10 && now.getDate() <= 27;
-}
-
 function SeasonalPlayIcon() {
-  const isDecember = useDecember();
   const isOctober = useOctober();
-  const isValentines = useValentines();
-  const [showTurkey, setShowTurkey] = useState(isThanksgivingPlayIcon);
-
-  useEffect(() => {
-    const update = () => setShowTurkey(isThanksgivingPlayIcon());
-    const timer = window.setInterval(update, 60_000);
-    document.addEventListener("visibilitychange", update);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", update);
-    };
-  }, []);
 
   if (isOctober) return <img src="/images/october-player-pumpkin.webp" alt="" aria-hidden="true" className="october-player-pumpkin pointer-events-none size-16 shrink-0 object-contain" />;
-  if (isDecember || isValentines) return <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
-  return showTurkey
-    ? <img src="/images/turkey-silhouette.png" alt="" aria-hidden="true" className="size-8 shrink-0 scale-[3.3] object-contain mix-blend-multiply" />
-    : <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
+  return <Play className="size-5 fill-current ml-0.5" aria-hidden="true" />;
 }
 
 function PodcastShowLink({ track }: { track: Track }) {
